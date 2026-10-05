@@ -125,7 +125,7 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
   - `python tool\check_flip.py --run <run>`: lật đáp án hai lần lệch ~0; WFLW 0 và 60 ở nửa trái ảnh cắt 616/616; lệch gốc/lật trung vị
     2,07% IOD trên 20 mặt thẳng F đầu tiên (tiêu chí kế hoạch < 3%: đạt), 2,36% trên mọi mặt thẳng F, **2,80% trên Tdev** (biên mỏng);
     đối chứng quên đổi tên theo cặp: 71%.
-  - Khớp trên 235 mặt F (đã bỏ 7 mặt no_face và 1 mặt dò nhầm người từ 240 khớp ban đầu) thay vì 240/60 như kế hoạch; danh sách mặt
+  - Khớp trên 235 mặt F (đã bỏ 4 mặt no_face và 1 mặt dò nhầm người từ 240 khớp ban đầu; 58 mặt kiểm sau khi bỏ 2 mặt no_face) thay vì 240/60 như kế hoạch; danh sách mặt
     khớp/đo/kiểm ghi trong `meta` của `map_mp50.json`. Mặt tham chiếu Procrustes = mặt đầu theo mã trong tập khớp.
   - `t_flip` để `null` theo kế hoạch (P2 chốt sau họp 12/10); **đề xuất cho P2** 0,0672 (quantile 0,85 lệch gốc/lật trên Tdev, đã tính với
     ánh xạ này). `tmpl` = trung bình đáp án gt98 của các mặt F pose = 0 (không lấy từ meanface.txt của PIPNet vì PIPNet không được vào `tool/`).
