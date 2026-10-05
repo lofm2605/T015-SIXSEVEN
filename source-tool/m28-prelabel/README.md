@@ -75,11 +75,48 @@ python tool\m28.py all     --run thuP1 --list data\f5_list.csv --images D:\WFLW\
 - Mặt Gán tay lên task không có nháp, ở job riêng (`runs\<run>\push\manual_list.txt`); mặt Bỏ ghi `push\rejected.csv`.
   Mặt `no_face` mặc định là Bỏ. Hai mặt cùng một ảnh gốc ở `--box auto` bị từ chối (CVAT cấm tên ảnh trùng).
 
+## Trang rà soát
+Người rà xem nháp 50 điểm trên ảnh chồng và bấm **Nhận / Gán tay / Bỏ ảnh** cho từng mặt, trước khi nhập vào CVAT
+(sửa điểm vẫn làm trong CVAT, trang này không có công cụ kéo điểm).
+```bat
+python -m pip install -r requirements-ui.txt
+python tool\m28.py review --run R1610 --reviewer P5
+rem hoặc chạy thẳng, không qua m28:
+python tool\review_app.py runs\R1610 P5
+```
+- Mở địa chỉ cmd in ra (thường http://127.0.0.1:7860; trình duyệt tự mở). `set M28_NO_BROWSER=1` để không tự mở, `set GRADIO_SERVER_PORT=7861` để đổi cổng.
+- Mặt đáng ngờ (autoqc `nen_gan_tay`/`can_xem`, nhiều cờ `low_conf`) lên đầu. Mặt MediaPipe không thấy mặt (`no_face.csv`) mà còn ảnh cắt
+  cũng vào hàng đợi, **không có nháp**: nút Nhận bị khoá, chỉ Gán tay hoặc Bỏ. Mặt không còn ảnh cắt không vào hàng đợi, `push` tự xếp vào Bỏ.
+- Mỗi lần bấm ghi ngay một dòng vào `runs\<run>\review\triage_<người rà>.csv` (`name,decision,reason,seconds`, tên có đuôi `.png`; `seconds` là
+  khoảng giữa hai lần bấm quyết định, mốc đầu là lúc trang tải) rồi tự sang mặt chưa rà kế tiếp. Bấm ảnh trong lưới để xem lại và đổi quyết định.
+  Đóng ngang chừng (kể cả bị tắt đột ngột) không mất dòng nào đã bấm: gõ lại đúng lệnh thì làm tiếp, bỏ qua mặt đã rà.
+
+| Phím | Việc | Phím | Việc |
+|---|---|---|---|
+| `N` | Nhận (khoá với mặt không có nháp) | `←` / `→` | Mặt trước / sau trong danh sách đang lọc |
+| `G` | Gán tay | `0` | Lý do "(không)" |
+| `B` | Bỏ ảnh | `1`…`8` | Lý do: `LAT_GUONG`, `DON_CUC`, `LECH_VUNG`, `QUAY_CHE`, `NHIEU_MAT`, `KHONG_MAT`, `SAI_MAT`, `MO_NHO` |
+| `Z` | Hoàn tác lần bấm gần nhất | | |
+
+- **Xong** chỉ bật khi hết mặt chưa rà. Bấm Xong thì trang ghi `runs\<run>\review\done.txt` rồi **tự tắt sau 2 giây**, lệnh `m28.py review`/`all` đi tiếp,
+  không cần Ctrl+C. Đóng khi chưa bấm Xong (Ctrl+C, đóng cửa sổ cmd) thì không có `done.txt`, `m28` dừng ở bước review: gõ lại đúng lệnh để rà tiếp.
+- **Hoàn tác** không xoá dòng nào: nó ghi thêm một dòng trả mặt về trạng thái trước (quyết định và lý do cũ, `seconds` để trống). Nếu trước đó mặt
+  chưa rà thì dòng mới có `decision` rỗng. Ai đọc `triage_<Pk>.csv` bằng pandas hay script riêng phải **lấy dòng cuối của mỗi `name`** rồi bỏ dòng
+  `decision` rỗng (`read_triage` của `push` làm đúng như vậy). Ngăn hoàn tác chỉ sống trong một phiên; mở lại muốn đổi thì bấm ảnh rồi chọn lại.
+- **Chỉ chạy ở 127.0.0.1** (`launch(server_name="127.0.0.1", share=False)`): không `share=True`, không tunnel, không Colab/Kaggle/Spaces (trang tự thoát),
+  không gọi mạng. Trên trang có ảnh mặt: không chụp màn hình dán vào chat AI. Trang tự thêm `localhost,127.0.0.1` vào `NO_PROXY` nên máy có proxy công ty
+  không phải gõ `set NO_PROXY`.
+- Excel đang mở `triage_<Pk>.csv` thì Windows khoá file: trang báo "Không ghi được ... đóng Excel rồi bấm lại" và giữ nguyên mặt, đóng Excel rồi bấm lại.
+- Không dùng được trang (không cài được Gradio, trình duyệt lỗi): `--review excel` (xem mục Các lệnh).
+- Ảnh tạm và ảnh nhỏ nằm trong `runs\<run>\_tmp`; dọn bằng `rmdir /s /q runs\R1610\_tmp`.
+
 ## Chạy test
 ```bat
 python -m pytest tests -q
 ```
 Test chỉ dùng dữ liệu giả (ảnh ngẫu nhiên, landmarker/mapping/push/collect giả); không cần mediapipe, CVAT hay mạng.
+`tests\test_review_app.py` thử phần logic của trang rà soát mà không cần gradio hay trình duyệt. Kiểm thử trên trình duyệt thật
+(tuỳ chọn, cần playwright, không nằm trong requirements): `python tests\e2e_review_ui.py --work <thư mục có runs\F5 và runs\ALL616> --shots <thư mục ảnh chụp>`.
 
 ## Giao diện m28 giả định từ P2/P3/P4
 Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nhận**. Ai thấy khác thì sửa bảng này hoặc báo P1.
@@ -95,8 +132,8 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 | P4 | `runs/<run>/autoqc/autoqc.csv` | m28 ghi: `name,suggestion,n_flags,decision,reason,seconds,problems` (`suggestion` = `on`/`can_xem`/`nen_gan_tay`; `name` có đuôi `.png`) | `review` (excel, auto), P2 xếp hàng | chưa ai xác nhận |
 | P4 | `m28core.push.push` | `push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project=, prefix=, label_json=)`; đường ảnh là đường dẫn file đầy đủ; từ chối tên không bắt đầu `demo-`; tự ghi `push.json` | bước `push` | chưa ai xác nhận |
 | P4 | `m28core.collect.collect` | `collect(args)` → `True` nếu xong (`args.task` list, `dry_run`, `skip_export`, `tag`) | lệnh `collect` | chưa ai xác nhận |
-| P2 | `tool/review_app.py` | `python tool\review_app.py <run_dir> <reviewer>`; ghi `runs/<run>/review/triage_<reviewer>.csv` và `done.txt` khi bấm Xong; `launch(server_name="127.0.0.1", share=False)` | `review --review ui` | chưa ai xác nhận |
-| P2/P4 | `triage_<Pk>.csv` | cột `name,decision,reason,seconds` (tên có hay không đuôi ảnh đều được; không tiêu đề thì đọc theo thứ tự cột) | `review`, `push` | chưa ai xác nhận |
+| P2 | `tool/review_app.py` | `python tool\review_app.py <run_dir> <reviewer>`; ghi `runs/<run>/review/triage_<reviewer>.csv` và `done.txt` khi bấm Xong; `launch(server_name="127.0.0.1", share=False)` | `review --review ui` | **bản nháp có sẵn** (`tool/review_app.py`, xem mục Trang rà soát), P2 xác nhận |
+| P2/P4 | `triage_<Pk>.csv` | cột `name,decision,reason,seconds` (tên có hay không đuôi ảnh đều được; không tiêu đề thì đọc theo thứ tự cột). Dòng sau đè dòng trước; `decision` rỗng (dòng Hoàn tác về chưa rà) nghĩa là chưa rà | `review`, `push` | chưa ai xác nhận |
 | P1/P4 | `config/pipeline.json` | khoá `project` (mặc định `m28`), `prefix` (mặc định `demo-`) | `push` | chưa ai xác nhận |
 | P4 | `config/face50_label.json` | label CVAT 50 điểm; m28 chỉ truyền đường dẫn cho `push` | `push` | chưa ai xác nhận |
 
@@ -132,7 +169,12 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
   - Quy ước khoá: `gt98.json`, `gt50.json` có đuôi `.png`; `pred478.json`, `mp50.json` không đuôi. 11 mặt ở các tập khác nằm trên cùng
     một ảnh gốc với một mặt F (WFLW tách theo mặt, không theo ảnh); ghi vào `so-quyet-dinh.md` nếu nhóm muốn tách theo ảnh.
 - Chạy `all --box wflw --review auto --dry-run` trên 5 mặt F thật: ra XML 5 × 50 điểm, toạ độ khớp `mp50.json`.
-- **Chưa chạy**: `autoqc` của P4, `push` thật, `collect`, `review_app.py`, Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả nhập được XML `<skeleton>` không), CSV do Excel lưu.
+- **Trang rà soát** (`tool/review_app.py`, 5/10/2026): Gradio 6.29.1, Python 3.11, Linux cloud, Chromium headless qua Playwright 1.56.0; trên `runs\F5` thật (5 mặt) và
+  lượt 616 mặt WFLW (24 mặt không có nháp). Đã thử: phím tắt, hoàn tác, đóng giữa chừng (kill) rồi mở lại, màn 1440x900 và 800x900, chế độ tối (`?__theme=dark`),
+  lỗi ghi file (giả lập), nút Xong tự tắt trang (mã thoát 0) và đi tiếp trong `m28.py review` rồi `push --dry-run`, không có request ra ngoài 127.0.0.1 dù đặt proxy chết.
+  Số đo trên 616 mặt (CPU cloud, lúc nguội, chưa có ảnh nhỏ nào): từ lệnh chạy đến khi lưới hiện ảnh khoảng 6,5 giây (nạp Gradio chiếm khoảng 4,5 giây), mỗi quyết định
+  trung vị 0,11 giây, đổi trang lần đầu tối đa 0,61 giây. `tests\e2e_review_ui.py` tự đo lại các số này.
+- **Chưa chạy**: `autoqc` của P4, `push` thật, `collect`, trang rà soát trên Windows/Python 3.14/trình duyệt thật có giao diện/máy có proxy công ty/Excel khoá file thật, Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả nhập được XML `<skeleton>` không), CSV do Excel lưu.
 - Cập nhật sau thí nghiệm 14–15/10 và lượt chạy tập R (16–18/10): thời gian trước/sau, số nháp hỏng trang rà soát bắt được.
 
 ## Giới hạn

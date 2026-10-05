@@ -1,0 +1,805 @@
+"""Thử tool/review_app.py (trang rà soát) bằng dữ liệu GIẢ dựng trong tmp_path. Không cần trình duyệt, không cần gradio.
+
+Phần giao diện Gradio (bố cục, phím tắt, nút Xong tự tắt trang) kiểm riêng bằng tests/e2e_review_ui.py (tuỳ chọn).
+"""
+import csv
+import json
+import os
+import subprocess
+import sys
+import time
+import types
+
+import pytest
+
+TOOL = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'tool'))
+sys.path.insert(0, TOOL)
+import review_app as ra  # noqa: E402
+from m28core import steps  # noqa: E402
+
+N_PTS = 50
+
+
+# ---------- dữ liệu giả ----------
+def flags_of(n):
+    return [i < n for i in range(N_PTS)]
+
+
+def make_run(root, faces, run='R1', autoqc=None, no_face=(), crops=(), overlays=()):
+    """faces: {tên: số cờ}. autoqc: {tên: (gợi ý, problems)} hoặc None (không có file). no_face: [(tên, lý do, bước)].
+    crops/overlays: tên có file ảnh (nội dung giả, chỉ cần tồn tại). Trả đường dẫn runs/<run>."""
+    rd = os.path.join(str(root), 'runs', run)
+    os.makedirs(os.path.join(rd, 'flags'))
+    with open(os.path.join(rd, 'flags', 'flags.json'), 'w', encoding='utf-8') as f:
+        json.dump({n: flags_of(k) for n, k in faces.items()}, f)
+    if autoqc is not None:
+        os.makedirs(os.path.join(rd, 'autoqc'))
+        with open(os.path.join(rd, 'autoqc', 'autoqc.csv'), 'w', encoding='utf-8', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['name', 'suggestion', 'n_flags', 'decision', 'reason', 'seconds', 'problems'])
+            for n, (sug, probs) in autoqc.items():
+                w.writerow([n + '.png', sug, faces.get(n, 0), '', '', '', ';'.join(probs)])
+    if no_face:
+        with open(os.path.join(rd, 'no_face.csv'), 'w', encoding='utf-8', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['name', 'reason', 'step'])
+            w.writerows(no_face)
+    for sub, names in (('crop/images', crops), ('overlays', overlays)):
+        for n in names:
+            p = os.path.join(rd, *sub.split('/'), n + '.png')
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            write_png(p)
+    return rd
+
+
+def write_png(path, size=(64, 64), color=(200, 190, 180)):
+    """Ảnh thật nhỏ nếu có PIL (test cần mô hình hiển thị), không thì file giả (test hàng đợi chỉ cần file tồn tại)."""
+    try:
+        from PIL import Image
+    except ImportError:
+        with open(path, 'wb') as f:
+            f.write(b'x')
+        return
+    Image.new('RGB', size, color).save(path)
+
+
+def need_pil():
+    pytest.importorskip('PIL')
+
+
+FIVE = {'F_001': 0, 'F_002': 1, 'F_003': 0, 'F_004': 38, 'F_005': 0}
+FIVE_QC = {'F_001': ('on', []), 'F_002': ('can_xem', []), 'F_003': ('on', []), 'F_004': ('can_xem', []),
+           'F_005': ('on', [])}
+
+
+@pytest.fixture
+def five(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    return make_run(tmp_path, FIVE, autoqc=FIVE_QC, overlays=list(FIVE), crops=list(FIVE))
+
+
+class FakeClock:
+    def __init__(self, t=100.0):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+
+def decide_all(store, decision='nhan'):
+    for f in store.faces:
+        store.decide(f.name, decision if f.has_draft else 'bo', '' if f.has_draft else 'KHONG_MAT', 1.0)
+
+
+# ---------- 1. thứ tự hàng đợi ----------
+def test_queue_order_and_no_face(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    faces = {'A': 0, 'B': 3, 'C': 7, 'D': 1, 'E': 2}
+    qc = {'A': ('on', []), 'B': ('can_xem', []), 'C': ('can_xem', []), 'D': ('nen_gan_tay', ['guong']),
+          'E': ('on', [])}
+    rd = make_run(tmp_path, faces, autoqc=qc, overlays=list(faces),
+                  no_face=[('N1', 'khong_thay_mat', 'mediapipe'), ('N2', 'khong_thay_mat', 'crop')], crops=['N1'])
+    q = ra.load_queue(rd)
+    assert [f.name for f in q] == ['D', 'N1', 'C', 'B', 'E', 'A']
+    n1 = next(f for f in q if f.name == 'N1')
+    assert n1.flags is None and not n1.has_draft and n1.no_face_reason == 'khong_thay_mat' and n1.suspicious
+    assert 'N2' not in [f.name for f in q]                       # không có ảnh cắt: không vào hàng đợi
+    # trùng steps._queue với các mặt có nháp
+    args = types.SimpleNamespace(run='R1')
+    assert [f.name for f in q if f.has_draft] == steps._queue(args)[0]
+    assert next(f for f in q if f.name == 'E').suggestion == 'on' and next(f for f in q if f.name == 'C').n_flags == 7
+    store = ra.Store(rd, 'P2')
+    assert any('1 mặt không dùng được ở bước crop' in n for n in store.notes)
+
+
+def test_queue_without_autoqc_orders_by_flags(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd = make_run(tmp_path, {'A': 0, 'B': 5, 'C': 2, 'D': 5})
+    q = ra.load_queue(rd)
+    assert [f.name for f in q] == ['B', 'D', 'C', 'A']
+    assert all(f.suggestion == '' for f in q)
+    assert [f.name for f in q] == steps._queue(types.SimpleNamespace(run='R1'))[0]
+    assert ra.SUG_VI[''] == 'chưa có autoqc'
+
+
+def test_queue_reads_problems_and_tolerates_bad_autoqc(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd = make_run(tmp_path, {'A': 0, 'B': 1}, autoqc={'A': ('nen_gan_tay', ['diem_ngoai_anh', 'guong']), 'B': ('on', [])})
+    a = next(f for f in ra.load_queue(rd) if f.name == 'A')
+    assert a.problems == ['diem_ngoai_anh', 'guong'] and a.suggestion == 'nen_gan_tay'
+    with open(os.path.join(rd, 'autoqc', 'autoqc.csv'), 'wb') as f:      # file hỏng: coi như chưa có autoqc
+        f.write(b'\xff\xfe\x00garbage')
+    assert [f.suggestion for f in ra.load_queue(rd)] == ['', '']
+
+
+# ---------- 2. lỗi trước khi mở trang ----------
+def test_run_errors_are_helpful(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ra.RunError) as e:
+        ra.load_queue(os.path.join('runs', 'KHONGCO'))
+    assert 'Không thấy thư mục lượt chạy' in str(e.value) and 'KHONGCO' in str(e.value) and str(tmp_path) in str(e.value)
+    os.makedirs(os.path.join('runs', 'R1'))
+    with pytest.raises(ra.RunError) as e:
+        ra.load_queue(os.path.join('runs', 'R1'))
+    assert 'flags.json' in str(e.value) and 'prepare' in str(e.value) and '--run R1' in str(e.value)
+    os.makedirs(os.path.join('runs', 'R1', 'flags'))
+    path = os.path.join('runs', 'R1', 'flags', 'flags.json')
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('{}')
+    with pytest.raises(ra.RunError) as e:
+        ra.load_queue(os.path.join('runs', 'R1'))
+    assert 'Hàng đợi rỗng' in str(e.value) and 'flags.json' in str(e.value)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('{khong phai json')
+    with pytest.raises(ra.RunError) as e:
+        ra.load_queue(os.path.join('runs', 'R1'))
+    assert 'flags.json' in str(e.value) and 'prepare' in str(e.value)
+
+
+def test_check_reviewer():
+    for ok in ('P2', 'P5', 'E2E', 'a_b-c', 'x' * 32):
+        assert ra.check_reviewer(ok) == ok
+    for bad in ('', '../x', 'a b', 'P2\n', 'P/2', 'x' * 33, 'Phạm', None):
+        with pytest.raises(ra.RunError):
+            ra.check_reviewer(bad)
+
+
+# ---------- 3. đọc/ghi CSV, khớp steps.read_triage ----------
+BOM = '﻿'
+HDR4 = 'name,decision,reason,seconds'
+QC7 = 'name,suggestion,n_flags,decision,reason,seconds,problems'
+VARIANTS = {
+    'tieu_de': (HDR4 + '\nA.png,nhan,,1.5\nB.png,bo,MO_NHO,2.0\n', ','),
+    'bom': (BOM + HDR4 + '\r\nA.png,nhan,,1.5\r\nB.png,bo,MO_NHO,2.0\r\n', ','),
+    'cham_phay': ('name;decision;reason;seconds\nA.png;nhan;;1.5\nB.png;bo;MO_NHO;2.0\n', ';'),
+    'khong_tieu_de': ('A.png,nhan,,1.5\nB.png,bo,MO_NHO,2.0\n', ','),
+    'khong_tieu_de_cham_phay': (BOM + 'A.png;nhan;;1.5\nB.png;bo;MO_NHO;2.0\n', ';'),
+    'autoqc_7_cot': (QC7 + '\nA.png,on,0,nhan,,1.5,\nB.png,can_xem,3,bo,MO_NHO,2.0,diem_ngoai_anh\n', ','),
+    'autoqc_7_cot_excel': (BOM + QC7.replace(',', ';') + '\r\nA.png;on;0;nhan;;1.5;\r\nB.png;can_xem;3;bo;MO_NHO;2.0;x\r\n', ';'),
+    'thieu_xuong_dong_cuoi': (HDR4 + '\nA.png,nhan,,1.5\nB.png,bo,MO_NHO,2.0', ','),
+    'chi_co_tieu_de': (HDR4 + '\n', ','),
+    'tieu_de_doi_cot': ('seconds,reason,decision,name\n1.5,,nhan,A.png\n2.0,MO_NHO,bo,B.png\n', ','),
+}
+
+
+def write_variant(path, text):
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        f.write(text)
+
+
+@pytest.mark.parametrize('kind', list(VARIANTS))
+def test_rows_match_read_triage_and_append_keeps_layout(tmp_path, kind):
+    text, delim = VARIANTS[kind]
+    p = str(tmp_path / 'triage_P2.csv')
+    write_variant(p, text)
+    before = ra.read_rows(p)
+    assert ra.latest(before) == steps.read_triage(p)
+    ra.append_row(p, 'C.png', 'gan_tay', 'LECH_VUNG', 3.04)
+    ra.append_row(p, 'A.png', 'bo', 'SAI_MAT', 0.25)            # đổi ý: dòng sau đè dòng trước
+    ra.append_row(p, 'D.png', '', '', '')                       # chưa rà
+    lat = ra.latest(ra.read_rows(p))
+    assert lat == steps.read_triage(p)
+    assert lat['C'] == ('gan_tay', 'LECH_VUNG') and lat['A'] == ('bo', 'SAI_MAT') and lat['D'] == ('', '')
+    if before:
+        assert lat['B'] == ('bo', 'MO_NHO')
+    raw = open(p, encoding='utf-8-sig', newline='').read()
+    assert raw.endswith(('\n', '\r'))                            # file thiếu xuống dòng cuối vẫn không dính dòng
+    lines = [l for l in raw.splitlines() if l.strip()]
+    assert all(delim in l for l in lines)                       # dùng lại dấu phân cách của file
+    assert sum(1 for l in lines if 'decision' in l.lower()) <= 1       # tiêu đề không bị ghi thêm
+    rows = ra.read_rows(p)
+    assert [r['name'] for r in rows][-3:] == ['C', 'A', 'D']
+    assert rows[-3]['seconds'] == '3.0' and rows[-2]['seconds'] == '0.2'    # 3.04 -> 3.0; 0.25 -> 0.2 (làm tròn chẵn)
+    if kind == 'tieu_de_doi_cot':
+        assert lines[-3] == '3.0,LECH_VUNG,gan_tay,C.png'       # mỗi giá trị đúng vị trí cột của nó
+
+
+def test_new_file_gets_header_once_and_last_row_wins(tmp_path):
+    p = str(tmp_path / 'review' / 'triage_P2.csv')                         # thư mục chưa có
+    ra.append_row(p, 'A.png', 'nhan', '', 1.25)
+    ra.append_row(p, 'B.png', 'bo', 'MO_NHO', 2)
+    ra.append_row(p, 'A.png', 'gan_tay', 'DON_CUC', '')
+    lines = open(p, encoding='utf-8', newline='').read().splitlines()
+    assert lines[0] == HDR4 and len(lines) == 4 and sum(l.startswith('name,') for l in lines) == 1
+    assert lines[1] in ('A.png,nhan,,1.2', 'A.png,nhan,,1.3')      # 1.25 làm tròn chẵn hay lẻ tuỳ nền tảng
+    assert lines[2] == 'B.png,bo,MO_NHO,2.0' and lines[3] == 'A.png,gan_tay,DON_CUC,'
+    assert ra.latest(ra.read_rows(p)) == {'A': ('gan_tay', 'DON_CUC'), 'B': ('bo', 'MO_NHO')}
+    assert ra.latest(ra.read_rows(p)) == steps.read_triage(p)
+    assert not open(p, 'rb').read().startswith(b'\xef\xbb\xbf')
+
+
+def test_append_to_empty_file_and_missing_file(tmp_path):
+    assert ra.read_rows(str(tmp_path / 'khongco.csv')) == []
+    p = str(tmp_path / 't.csv')
+    open(p, 'w').close()
+    ra.append_row(p, 'A.png', 'nhan', '', 1)
+    assert open(p, encoding='utf-8').read().splitlines()[0] == HDR4
+
+
+def test_append_into_seven_column_file_writes_each_value_in_its_column(tmp_path):
+    p = str(tmp_path / 't.csv')
+    write_variant(p, BOM + QC7.replace(',', ';') + '\r\nA.png;on;0;;;;\r\n')
+    ra.append_row(p, 'A.png', 'gan_tay', 'MO_NHO', 2.5)
+    last = open(p, encoding='utf-8-sig', newline='').read().splitlines()[-1]
+    assert last == 'A.png;;;gan_tay;MO_NHO;2.5;'
+    assert ra.latest(ra.read_rows(p)) == {'A': ('gan_tay', 'MO_NHO')} == steps.read_triage(p)
+
+
+def test_append_permission_error_bubbles_up(tmp_path, monkeypatch):
+    p = str(tmp_path / 't.csv')
+    ra.append_row(p, 'A.png', 'nhan', '', 1)
+    real = open
+
+    def locked(path, mode='r', *a, **k):
+        if 'a' in mode and str(path) == p:
+            raise PermissionError(13, 'Permission denied')
+        return real(path, mode, *a, **k)
+
+    monkeypatch.setattr('builtins.open', locked)
+    with pytest.raises(PermissionError):
+        ra.append_row(p, 'B.png', 'nhan', '', 1)
+
+
+# ---------- 4. làm tiếp ----------
+def test_resume_from_csv(five):
+    s1 = ra.Store(five, 'P2', clock=FakeClock())
+    first = ra.next_pending(s1.faces, s1.lat)
+    assert first == 'F_004'
+    s1.decide('F_004', 'nhan', '', 1.0)
+    s1.decide('F_002', 'bo', 'MO_NHO', 2.0)
+    s2 = ra.Store(five, 'P2')                                     # mở lại: dựng từ cùng CSV
+    assert s2.progress() == s1.progress() == dict(total=5, done=2, nhan=1, gan_tay=0, bo=1, remaining=3)
+    assert ra.next_pending(s2.faces, s2.lat) == 'F_001'
+    assert s2.resumed == 2 and s2.undo_stack == []                # ngăn hoàn tác chỉ sống trong phiên
+    assert ra.new_session(s2)['cur'] == 'F_001'
+    assert ra.next_pending(s2.faces, s2.lat, 'F_001') == 'F_003'
+    assert ra.next_pending(s2.faces, s2.lat, 'F_005') == 'F_001'  # đi vòng lại đầu
+    assert ra.next_pending(s2.faces, s2.lat, 'khong_co') == 'F_001'
+    for f in s2.faces:
+        if not s2.status(f.name):
+            s2.decide(f.name, 'nhan', '', 0)
+    assert ra.next_pending(s2.faces, s2.lat) is None and ra.next_pending(s2.faces, s2.lat, 'F_001') is None
+
+
+def test_store_other_reviewer_has_own_file(five):
+    ra.Store(five, 'P2').decide('F_004', 'nhan', '', 1)
+    assert ra.Store(five, 'P5').progress()['done'] == 0
+    assert os.path.exists(os.path.join(five, 'review', 'triage_P2.csv'))
+
+
+def test_store_rejects_non_utf8_triage(five):
+    os.makedirs(os.path.join(five, 'review'))
+    with open(os.path.join(five, 'review', 'triage_P2.csv'), 'wb') as f:
+        f.write(b'name,decision\nF_004.png,nh\xe2n\n')                 # byte 0xE2 lẻ: không phải UTF-8
+    with pytest.raises(ra.RunError) as e:
+        ra.Store(five, 'P2')
+    assert 'UTF-8' in str(e.value)
+
+
+# ---------- 5. tiến độ, lọc, phân trang ----------
+def test_progress_ignores_unknown_names(five):
+    s = ra.Store(five, 'P2')
+    s.decide('F_004', 'nhan', '', 1)
+    s.decide('F_002', 'gan_tay', 'DON_CUC', 1)
+    s.decide('F_001', 'bo', 'MO_NHO', 1)
+    lat = dict(s.lat, NGOAI_HANG_DOI=('nhan', ''), F_003=('', ''))     # tên lạ và decision rỗng không được đếm
+    assert ra.progress(s.faces, lat) == dict(total=5, done=3, nhan=1, gan_tay=1, bo=1, remaining=2)
+
+
+def test_filter_modes(five):
+    s = ra.Store(five, 'P2')
+    s.decide('F_004', 'nhan', '', 1)
+    s.decide('F_001', 'bo', 'MO_NHO', 1)
+    names = lambda mode: [f.name for f in ra.filter_faces(s.faces, s.lat, mode)]      # noqa: E731
+    assert names('tat_ca') == ['F_004', 'F_002', 'F_001', 'F_003', 'F_005']
+    assert names('chua_ra') == ['F_002', 'F_003', 'F_005']
+    assert names('dang_ngo') == ['F_004', 'F_002']
+    assert names('da_ra') == ['F_004', 'F_001']
+    assert names('khong_biet') == names('tat_ca')
+
+
+def test_paging():
+    items = [f'F_{i:03d}' for i in range(616)]
+    page, p, n = ra.page_slice(items, 0, 24)
+    assert n == 26 and p == 0 and len(page) == 24 and page[0] == 'F_000'
+    last, p, n = ra.page_slice(items, 25, 24)
+    assert p == 25 and len(last) == 616 - 25 * 24 == 16 and last[-1] == 'F_615'
+    assert ra.page_slice(items, 99, 24)[1] == 25 and ra.page_slice(items, -5, 24)[1] == 0
+    assert ra.page_slice([], 3, 24) == ([], 0, 1)
+    assert ra.page_slice(items[:24], 0, 24)[2] == 1 and ra.page_slice(items[:25], 0, 24)[2] == 2
+    assert ra.page_of(items, 'F_023', 24) == 0 and ra.page_of(items, 'F_024', 24) == 1
+    assert ra.page_of(items, 'F_615', 24) == 25 and ra.page_of(items, 'khong', 24) == 0
+    assert ra.PAGE_SIZE == 24
+
+
+def test_fmt_points():
+    assert ra.fmt_points([False] * 50) == ''
+    assert ra.fmt_points([i + 1 in (1, 2, 3, 4, 7, 9, 10) for i in range(50)]) == '1–4, 7, 9, 10'
+    assert ra.fmt_points([i + 1 in (5, 6) for i in range(50)]) == '5, 6'
+    assert ra.fmt_points(flags_of(50)) == '1–50'
+
+
+# ---------- 6. hoàn tác ----------
+def test_undo_restores_previous_state(five):
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    assert s.undo() is None
+    s.decide('F_004', 'nhan', '', 1.0)
+    s.decide('F_004', 'bo', 'SAI_MAT', 2.0)                       # đổi A sang Bỏ
+    assert s.lat['F_004'] == ('bo', 'SAI_MAT')
+    assert s.undo() == 'F_004' and s.lat['F_004'] == ('nhan', '')      # về Nhận
+    assert steps.read_triage(s.path)['F_004'] == ('nhan', '')
+    assert s.undo() == 'F_004' and s.status('F_004') == ''             # về chưa rà
+    assert steps.read_triage(s.path)['F_004'] == ('', '')              # decision rỗng, push coi là chưa có quyết định
+    assert s.undo() is None and s.undo_stack == []
+    rows = list(csv.reader(open(s.path, encoding='utf-8', newline='')))
+    assert rows == [['name', 'decision', 'reason', 'seconds'], ['F_004.png', 'nhan', '', '1.0'],
+                    ['F_004.png', 'bo', 'SAI_MAT', '2.0'], ['F_004.png', 'nhan', '', ''], ['F_004.png', '', '', '']]
+    assert ra.progress(s.faces, s.lat)['done'] == 0
+    assert ra.Store(five, 'P2').progress()['done'] == 0                # mở lại vẫn chưa rà
+
+
+def test_undo_other_faces_untouched_and_order(five):
+    s = ra.Store(five, 'P2')
+    s.decide('F_004', 'nhan', '', 1)
+    s.decide('F_002', 'gan_tay', 'LECH_VUNG', 1)
+    s.decide('F_001', 'bo', 'MO_NHO', 1)
+    assert s.undo() == 'F_001' and s.undo() == 'F_002'
+    assert s.lat['F_004'] == ('nhan', '') and s.status('F_002') == '' and s.status('F_001') == ''
+    assert ra.next_pending(s.faces, s.lat, 'F_004') == 'F_002'
+
+
+def test_undo_write_failure_keeps_stack(five, monkeypatch):
+    s = ra.Store(five, 'P2')
+    s.decide('F_004', 'nhan', '', 1)
+    monkeypatch.setattr(ra, 'append_row', lambda *a, **k: (_ for _ in ()).throw(PermissionError('khoá')))
+    with pytest.raises(PermissionError):
+        s.undo()
+    assert s.undo_stack and s.lat['F_004'] == ('nhan', '')
+
+
+# ---------- 7. giây, lý do, no_face ----------
+def test_seconds_since():
+    assert ra.seconds_since(10.0, 12.34) == 2.3
+    assert ra.seconds_since(10.0, 10.04) == 0.0
+    assert ra.seconds_since(10.0, 9.0) == 0.0                          # không âm
+    assert ra.seconds_since(0.0, 1234.567) == 1234.6                   # không cắt trần
+    assert ra.seconds_since(None, 5.0) is None
+
+
+def test_seconds_use_fake_clock_and_undo_resets_mark(five):
+    clock = FakeClock(100.0)
+    s = ra.Store(five, 'P2', clock=clock)
+    ses = ra.new_session(s)                                            # mốc đầu = lúc trang tải
+    assert ses['t'] == 100.0
+    clock.t = 103.26
+    ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    clock.t = 104.0
+    ra.act_decide(s, ses, 'gan_tay', 'DON_CUC', 'F_002')
+    clock.t = 110.0
+    ra.act_undo(s, ses, 'F_001')                                       # Hoàn tác đặt lại mốc
+    clock.t = 111.5
+    ra.act_decide(s, ses, 'nhan', '', 'F_002')
+    clock.t = 150.0
+    ra.act_step(s, ses, 1)                                             # chuyển ảnh KHÔNG đặt lại mốc
+    clock.t = 160.0
+    ra.act_decide(s, ses, 'bo', 'MO_NHO', ses['cur'])
+    secs = [r['seconds'] for r in s.rows]
+    assert secs == ['3.3', '0.7', '', '1.5', '48.5'], secs
+
+
+def test_reason_of_nhan_is_blank_and_validation(five):
+    s = ra.Store(five, 'P2')
+    s.decide('F_004', 'nhan', 'LAT_GUONG', 1)
+    assert s.lat['F_004'] == ('nhan', '') and s.rows[-1]['reason'] == ''
+    with pytest.raises(ValueError):
+        s.decide('F_002', 'khong_biet', '', 1)
+    with pytest.raises(ValueError):
+        s.decide('F_002', 'bo', 'MA_LA', 1)
+    with pytest.raises(ValueError):
+        s.decide('KHONG_CO', 'bo', '', 1)
+    assert len(s.rows) == 1 and len(s.undo_stack) == 1
+
+
+def test_no_face_cannot_be_accepted(tmp_path, monkeypatch):
+    need_pil()
+    monkeypatch.chdir(tmp_path)
+    rd = make_run(tmp_path, {'A': 0}, autoqc={'A': ('on', [])}, no_face=[('N1', 'khong_thay_mat', 'mediapipe')],
+                  crops=['N1'], overlays=['A'])
+    s = ra.Store(rd, 'P2')
+    assert [f.name for f in s.faces] == ['N1', 'A']
+    with pytest.raises(ValueError) as e:
+        s.decide('N1', 'nhan', '', 1)
+    assert 'không có nháp' in str(e.value)
+    assert not os.path.exists(s.path) and s.undo_stack == []
+    s.decide('N1', 'gan_tay', 'NHIEU_MAT', 1)                           # Gán tay và Bỏ thì được
+    assert s.lat['N1'] == ('gan_tay', 'NHIEU_MAT')
+    ses = ra.new_session(s)
+    ses['cur'] = 'N1'
+    msg, level, _ = ra.act_decide(s, ses, 'nhan', '', 'N1')
+    assert level == 'warn' and 'không có nháp' in msg
+    v = ra.make_view(s, ses)
+    assert v['nhan_ok'] is False and 'không có nháp' in v['gallery'][0][1] and 'khoá' in v['info']
+
+
+# ---------- 8. Xong ----------
+def test_finish(five):
+    s = ra.Store(five, 'P2')
+    assert not s.can_finish()
+    with pytest.raises(ValueError) as e:
+        s.write_done()
+    assert '5 mặt chưa rà' in str(e.value)
+    assert not os.path.exists(os.path.join(five, 'review', 'done.txt'))
+    for f in s.faces[:-1]:
+        s.decide(f.name, 'nhan', '', 1)
+    assert not s.can_finish() and s.progress()['remaining'] == 1
+    s.decide(s.faces[-1].name, 'bo', 'MO_NHO', 1)
+    assert s.can_finish()
+    path = s.write_done()
+    assert path == os.path.join(five, 'review', 'done.txt')
+    parts = open(path, encoding='utf-8').read().split('\t')
+    assert parts[0] == 'xong' and parts[1] == 'P2' and parts[3] == '5 mặt' and 'T' in parts[2]
+    assert [n for n in os.listdir(os.path.join(five, 'review')) if '.tmp' in n] == []      # không để file tạm
+    s.undo()                                                                              # hoàn tác sau Xong: lần sau lại bị chặn
+    with pytest.raises(ValueError):
+        s.write_done()
+
+
+def test_change_after_done_removes_stale_done_txt(five):
+    s = ra.Store(five, 'P2')
+    decide_all(s)
+    path = s.write_done()
+    s2 = ra.Store(five, 'P2')                                          # mở lại lượt đã Xong
+    assert s2.had_done and os.path.exists(path)
+    s2.decide('F_001', 'bo', 'MO_NHO', 1)                              # đổi ý: done.txt cũ hết đúng
+    assert not os.path.exists(path) and s2.had_done
+    assert s2.can_finish() and s2.write_done() == path                 # bấm Xong lại thì có lại
+    ra.Store(five, 'P2').undo()                                        # ngăn hoàn tác rỗng: không đụng gì
+    assert os.path.exists(path)
+
+
+# ---------- 9. ảnh chồng và ảnh nhỏ ----------
+def fake_run_with_images(tmp_path, with_overlay=False, with_crop=True, with_mp50=True):
+    pytest.importorskip('PIL')
+    from PIL import Image
+    pts = [(30 + 40 * (i % 10), 40 + 60 * (i // 10)) for i in range(N_PTS)]       # cách nhau 40 px, không đè số của nhau
+    rd = make_run(tmp_path, {'A': 3}, autoqc={'A': ('can_xem', [])})
+    if with_crop:
+        os.makedirs(os.path.join(rd, 'crop', 'images'))
+        Image.new('RGB', (512, 512), (255, 255, 255)).save(os.path.join(rd, 'crop', 'images', 'A.png'))
+    if with_overlay:
+        os.makedirs(os.path.join(rd, 'overlays'))
+        Image.new('RGB', (512, 512), (10, 20, 30)).save(os.path.join(rd, 'overlays', 'A.png'))
+    if with_mp50:
+        os.makedirs(os.path.join(rd, 'map50'))
+        with open(os.path.join(rd, 'map50', 'mp50.json'), 'w', encoding='utf-8') as f:
+            json.dump({'A': {'orig': {f'p{i + 1:02d}': list(p) for i, p in enumerate(pts)}, 'flip': None}}, f)
+    return rd, pts
+
+
+def test_overlay_existing_is_used(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd, _ = fake_run_with_images(tmp_path, with_overlay=True)
+    face = ra.load_queue(rd)[0]
+    path, warn = ra.overlay_for(face, rd)
+    assert path == os.path.join(rd, 'overlays', 'A.png') and warn is None
+
+
+def test_overlay_redrawn_when_missing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from PIL import Image
+    rd, pts = fake_run_with_images(tmp_path)
+    face = ra.load_queue(rd)[0]
+    assert face.overlay is None and face.crop
+    path, warn = ra.overlay_for(face, rd)
+    assert path == os.path.join(rd, '_tmp', 'overlays', 'A.png') and 'vẽ lại' in warn
+    assert not os.path.exists(os.path.join(rd, 'overlays', 'A.png'))        # không ghi vào overlays/
+    im = Image.open(path)
+    assert im.size == (512, 512)
+    for i, (x, y) in enumerate(pts):
+        want = (255, 0, 0) if i < 3 else (0, 200, 0)                          # 3 điểm đầu có cờ: đỏ; còn lại xanh
+        assert im.convert('RGB').getpixel((x, y)) == want, (i, x, y)
+    m = os.path.getmtime(path)
+    assert ra.overlay_for(face, rd)[0] == path and os.path.getmtime(path) == m   # cache
+
+
+def test_overlay_placeholder_when_everything_missing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from PIL import Image
+    rd, _ = fake_run_with_images(tmp_path, with_crop=False)
+    face = ra.load_queue(rd)[0]
+    path, warn = ra.overlay_for(face, rd)
+    im = Image.open(path).convert('RGB')
+    assert im.size == (512, 512) and im.getpixel((3, 3)) == im.getpixel((500, 500)) == (214, 214, 214)
+    assert len({c for _, c in im.getcolors(maxcolors=512 * 512)}) > 1       # có chữ
+    assert warn and 'Thiếu' in warn and 'Nhận' in warn
+    store = ra.Store(rd, 'P2')
+    assert warn in ra.make_view(store, ra.new_session(store))['info']       # cảnh báo hiện trong bảng thông tin
+
+
+def test_overlay_for_no_face_uses_crop(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd = make_run(tmp_path, {'A': 0}, no_face=[('N1', 'khong_thay_mat', 'mediapipe')], crops=['N1'], overlays=['A'])
+    face = next(f for f in ra.load_queue(rd) if f.name == 'N1')
+    assert ra.overlay_for(face, rd) == (os.path.join(rd, 'crop', 'images', 'N1.png'), None)
+
+
+def test_thumb_path_has_status_and_small_size(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from PIL import Image
+    rd, _ = fake_run_with_images(tmp_path, with_overlay=True)
+    face = ra.load_queue(rd)[0]
+    paths = {st: ra.thumb_for(face, st, rd) for st in ('', 'nhan', 'gan_tay', 'bo')}
+    assert len(set(paths.values())) == 4
+    for st, p in paths.items():
+        assert os.path.join('_tmp', 'thumbs') in p and p.endswith('.jpg')
+        assert (st or 'chua') in os.path.basename(p)
+        im = Image.open(p)
+        assert im.format == 'JPEG' and max(im.size) <= 200 and min(im.size) >= 100
+    green = Image.open(paths['nhan']).convert('RGB').getpixel((88, 2))        # viền 6 px vẽ thẳng vào ảnh
+    assert abs(green[0] - 0x16) < 24 and abs(green[1] - 0xa3) < 24 and abs(green[2] - 0x4a) < 24
+    grey = Image.open(paths['']).convert('RGB').getpixel((88, 2))
+    assert abs(grey[0] - 0x9c) < 24 and abs(grey[2] - 0xaf) < 24
+    assert ra.thumb_for(face, 'khong_biet', rd) == paths['']                  # trạng thái lạ = chưa rà
+
+
+def test_thumb_regenerated_when_source_newer(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd, _ = fake_run_with_images(tmp_path, with_overlay=True)
+    face = ra.load_queue(rd)[0]
+    p = ra.thumb_for(face, 'nhan', rd)
+    old = os.path.getmtime(p)
+    assert ra.thumb_for(face, 'nhan', rd) == p and os.path.getmtime(p) == old          # có cache
+    os.utime(p, (old - 100, old - 100))                                                # thumbnail cũ hơn ảnh nguồn
+    ra.thumb_for(face, 'nhan', rd)
+    assert os.path.getmtime(p) > old - 100
+
+
+# ---------- 10. Colab / Kaggle ----------
+def test_notebook_env():
+    assert ra.notebook_env({}, {}) is None
+    assert ra.notebook_env({'PATH': '/bin'}, {'os': 1}) is None
+    assert ra.notebook_env({}, {'google.colab': object()})
+    for var in ('COLAB_RELEASE_TAG', 'COLAB_GPU', 'KAGGLE_KERNEL_RUN_TYPE', 'SPACE_ID'):
+        assert 'Colab' in ra.notebook_env({var: ''}, {}), var                   # chỉ cần biến có mặt
+    if not any(v in os.environ for v in ra.NOTEBOOK_VARS) and 'google.colab' not in sys.modules:
+        assert ra.notebook_env() is None                                        # máy thật
+
+
+# ---------- 11. không kéo gradio / torch vào khi import ----------
+def test_import_loads_neither_gradio_nor_torch():
+    code = ("import sys\nsys.path.insert(0, %r)\nimport review_app\n"
+            "assert 'gradio' not in sys.modules, 'đã import gradio'\n"
+            "assert 'torch' not in sys.modules, 'đã import torch'\nprint('ok')\n") % TOOL
+    r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, encoding='utf-8')
+    assert r.returncode == 0 and 'ok' in r.stdout, r.stderr
+
+
+# ---------- 12. kiểm tĩnh mã nguồn ----------
+def test_source_is_local_only_and_env_precedes_import():
+    src = open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()
+    lines = src.splitlines()
+    code_lines = [l for l in lines if not l.lstrip().startswith('#')]
+    assert 'server_name="127.0.0.1"' in src and 'share=False' in src
+    assert not any('share=True' in l for l in code_lines)
+    assert not any(w in src.lower() for w in ('ngrok', 'cloudflared', 'gradio.live', 'share_server'))
+    n_import = next(i for i, l in enumerate(lines) if l.strip() == 'import gradio as gr')
+    n_temp = next(i for i, l in enumerate(lines) if 'GRADIO_TEMP_DIR' in l and '=' in l and 'env[' in l)
+    n_ana = next(i for i, l in enumerate(lines) if 'GRADIO_ANALYTICS_ENABLED' in l and '=' in l and 'env[' in l)
+    assert n_temp < n_import and n_ana < n_import
+    assert not any(l.lstrip().startswith(('import gradio', 'from gradio', 'import torch', 'from torch'))
+                   for l in lines if not l.startswith(' '))                      # không import ở cấp module
+    assert 'import torch' not in src and 'GoogleFont' not in src and 'ssr_mode=False' in src
+
+
+def test_keyboard_js_rules():
+    js = ra.PAGE_JS
+    assert js.lstrip().startswith('() =>')                                   # launch(js=...) cần một hàm
+    for rule in ('e.repeat', 'e.ctrlKey', 'e.altKey', 'e.metaKey', "'TEXTAREA'", "'SELECT'", 'isContentEditable',
+                 "'btn-nhan'", "'btn-gantay'", "'btn-bo'", "'btn-undo'", "'btn-prev'", "'btn-next'", '#reason input[type=radio]',
+                 "e.key === 'Enter'", "e.key === ' '", 'preventDefault', 'b.disabled'):
+        assert rule in js, rule
+    text_types = js[js.index('const TEXT = ['):].split(']')[0]
+    assert all(t in text_types for t in ('text', 'search', 'number', 'email', 'password'))
+    assert 'radio' not in text_types and 'checkbox' not in text_types       # focus ở radio/checkbox: phím tắt vẫn chạy
+    assert 'btn-xong' not in js.split('const BY_KEY')[1].split('};')[0]       # không có phím tắt cho Xong (tránh bấm nhầm)
+
+
+def test_prepare_env_sets_safe_variables(tmp_path):
+    env = {'NO_PROXY': 'intranet.local', 'no_proxy': 'localhost'}
+    ra.prepare_env(str(tmp_path / 'runs' / 'R1'), env)
+    assert env['GRADIO_ANALYTICS_ENABLED'] == 'False' and env['HF_HUB_OFFLINE'] == '1'
+    assert env['GRADIO_TEMP_DIR'] == os.path.abspath(str(tmp_path / 'runs' / 'R1' / '_tmp'))
+    assert env['NO_PROXY'] == 'intranet.local,localhost,127.0.0.1' and env['no_proxy'] == 'localhost,127.0.0.1'
+    ra.prepare_env(str(tmp_path), env)                                           # chạy lại không nhân đôi
+    assert env['NO_PROXY'] == 'intranet.local,localhost,127.0.0.1'
+
+
+# ---------- 13. hiệu năng ----------
+def test_performance_616_faces(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    faces = {f'F_{i:03d}': (i * 7) % 11 for i in range(616)}
+    qc = {n: (('can_xem' if k > 4 else 'on'), []) for n, k in faces.items()}
+    rd = make_run(tmp_path, faces, autoqc=qc, overlays=list(faces)[:100])
+    t = time.perf_counter()
+    q = ra.load_queue(rd)
+    assert len(q) == 616 and time.perf_counter() - t < 1.0
+    store = ra.Store(rd, 'P2')
+    for f in store.faces[:300]:
+        store.decide(f.name, 'nhan', '', 1)
+    t = time.perf_counter()
+    for mode in ('tat_ca', 'chua_ra', 'dang_ngo', 'da_ra'):
+        ra.filter_faces(store.faces, store.lat, mode)
+    ra.progress(store.faces, store.lat)
+    assert time.perf_counter() - t < 0.05
+    assert ra.page_slice(q, 99, ra.PAGE_SIZE)[2] == 26
+
+
+# ---------- điều khiển và mô hình hiển thị (không cần gradio) ----------
+def test_decide_jumps_to_next_pending_and_filter_shrinks(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    assert ses['cur'] == 'F_004' and ses['mode'] == 'tat_ca'
+    ra.act_filter(s, ses, 'chua_ra')
+    seen = []
+    for _ in range(5):
+        v = ra.make_view(s, ses)
+        seen.append((ses['cur'], len(v['gallery'])))
+        msg, level, reset = ra.act_decide(s, ses, 'nhan', '', ses['cur'])
+        assert level == 'ok' and reset
+    assert seen == [('F_004', 5), ('F_002', 4), ('F_001', 3), ('F_003', 2), ('F_005', 1)]   # bộ lọc co lại sau mỗi lần
+    assert 'Đã rà hết, bấm Xong' in msg and ses['cur'] == 'F_005'
+    v = ra.make_view(s, ses)
+    assert v['xong_ok'] and v['xong_label'] == 'Xong' and v['gallery'] == []
+
+
+def test_decide_from_old_face_continues_after_it(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    ra.act_decide(s, ses, 'nhan', '', 'F_002')                      # đứng ở F_001
+    ra.make_view(s, ses)                                           # UI luôn vẽ lại sau mỗi sự kiện
+    ra.act_select(s, ses, ses['names'].index('F_004'))             # bấm ảnh F_004 trong lưới (đã rà) để đổi ý
+    assert ses['cur'] == 'F_004'
+    ra.act_decide(s, ses, 'bo', 'SAI_MAT', 'F_004')
+    assert s.lat['F_004'] == ('bo', 'SAI_MAT') and ses['cur'] == 'F_001'     # nhảy tới mặt chưa rà kế tiếp sau F_004
+
+
+def test_stale_click_is_ignored(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    msg, level, reset = ra.act_decide(s, ses, 'nhan', '', 'F_004')     # bấm lần hai khi trang chưa kịp đổi ảnh
+    assert level == 'info' and 'chưa kịp đổi' in msg and not reset and len(s.rows) == 1 and ses['cur'] == 'F_002'
+    assert ra.act_undo(s, ses, 'F_004')[1] == 'info' and len(s.rows) == 1
+
+
+def test_write_failure_keeps_face_and_warns(five, monkeypatch):
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+
+    def locked(*a, **k):
+        raise PermissionError(13, 'Permission denied')
+
+    monkeypatch.setattr(ra, 'append_row', locked)
+    msg, level, reset = ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    assert level == 'warn' and 'Excel' in msg and not reset
+    assert ses['cur'] == 'F_004' and s.progress()['done'] == 0 and s.undo_stack == []
+    assert ra.act_undo(s, ses, 'F_004')[1] == 'info'                   # ngăn rỗng
+    monkeypatch.undo()
+
+
+def test_prev_next_walk_filtered_list_without_skipping_done(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    ra.make_view(s, ses)
+    ra.act_select(s, ses, 0)                                           # quay lại F_004 (đã rà)
+    ra.act_step(s, ses, 1)
+    assert ses['cur'] == 'F_002'
+    ra.act_step(s, ses, -1)
+    assert ses['cur'] == 'F_004'                                       # không bỏ qua mặt đã rà
+    ra.act_step(s, ses, -1)
+    assert ses['cur'] == 'F_004'                                       # chạm đầu danh sách thì đứng yên
+    v = ra.make_view(s, ses)
+    assert v['prev_ok'] is False and v['next_ok'] is True
+    ra.act_filter(s, ses, 'da_ra')
+    assert ses['cur'] == 'F_004'
+    ra.act_step(s, ses, 1)
+    assert ses['cur'] == 'F_004'                                       # trong 'Đã rà' chỉ có một mặt
+
+
+def test_gallery_pages_and_selected_index(tmp_path, monkeypatch):
+    need_pil()
+    monkeypatch.chdir(tmp_path)
+    faces = {f'F_{i:03d}': 0 for i in range(60)}
+    rd = make_run(tmp_path, faces, overlays=list(faces))
+    s = ra.Store(rd, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    v = ra.make_view(s, ses)
+    assert len(v['gallery']) == 24 and v['selected'] == 0 and 'Trang <b>1</b>/3' in v['page_html']
+    assert v['page_prev'] is False and v['page_next'] is True
+    ra.act_page(s, ses, 1)
+    v = ra.make_view(s, ses)
+    assert v['selected'] is None and 'Trang <b>2</b>/3' in v['page_html']        # mặt đang xem nằm ở trang khác
+    for _ in range(30):
+        ra.act_decide(s, ses, 'nhan', '', ses['cur'])
+    v = ra.make_view(s, ses)
+    assert ses['cur'] == 'F_030' and ses['page'] == 1 and v['selected'] == 6      # lưới chuyển tới trang có mặt đó
+    ra.act_page(s, ses, 99)
+    assert ra.make_view(s, ses)['page_next'] is False and ses['page'] == 2
+
+
+def test_caption_and_info_text(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    q = {f.name: f for f in s.faces}
+    assert ra.caption(q['F_004'], '') == 'F_004 · 38 cờ · cần xem'
+    assert ra.caption(q['F_001'], 'nhan') == 'F_001 · 0 cờ · ổn · Nhận'
+    ses = ra.new_session(s)
+    info = ra.make_view(s, ses)['info']
+    assert 'F_004.png' in info and '38/50' in info and '1–26, 28, 32–36, 38, 39, 44–47' not in info   # F_004 giả chỉ có cờ 1–38
+    assert '1–38' in info and '1/5 trong hàng đợi' in info and 'Chưa rà' in info and 'cần xem' in info
+
+
+def test_header_mentions_run_reviewer_progress(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    h = ra.make_view(s, ses)['header']
+    assert 'F5' not in h and 'R1' in h and 'P2' in h and 'Đã rà 0/5' in h and 'Còn lại <b>5</b>' in h
+    s.decide('F_004', 'nhan', '', 1)
+    assert 'Đã rà 1/5' in ra.make_view(s, ses)['header']
+    open(os.path.join(five, 'review', 'done.txt'), 'w').write('ok')
+    assert 'đã bấm Xong trước đó' in ra.header_html(ra.Store(five, 'P2'), ses)
+
+
+def test_problems_are_translated(tmp_path, monkeypatch):
+    need_pil()
+    monkeypatch.chdir(tmp_path)
+    rd = make_run(tmp_path, {'A': 0}, autoqc={'A': ('nen_gan_tay', ['diem_ngoai_anh', 'diem_khong_hop_le', 'la'])},
+                  overlays=['A'])
+    s = ra.Store(rd, 'P2')
+    info = ra.make_view(s, ra.new_session(s))['info']
+    assert 'điểm ra ngoài ảnh' in info and 'điểm không hợp lệ' in info and 'la' in info and 'nên gán tay' in info
+
+
+# ---------- chạy thật như m28 gọi ----------
+def run_app(cwd, *args):
+    return subprocess.run([sys.executable, os.path.join(TOOL, 'review_app.py'), *args], cwd=str(cwd), capture_output=True,
+                          text=True, encoding='utf-8', timeout=60)
+
+
+def test_cli_errors_exit_2_with_one_line(five, tmp_path):
+    for args, word in ((('runs/KHONGCO', 'P2'), 'Không thấy thư mục'), (('runs/R1', '../x'), 'không hợp lệ'),
+                       (('runs/R1',), 'Cách dùng')):
+        r = run_app(tmp_path, *args)
+        assert r.returncode == 2 and word in r.stderr and 'Traceback' not in r.stderr, (args, r.stderr)
+        assert len(r.stderr.strip().splitlines()) == 1 and r.stdout == ''
+    r = subprocess.run([sys.executable, os.path.join(TOOL, 'review_app.py'), 'runs/R1', 'P2'], cwd=str(tmp_path),
+                       capture_output=True, text=True, encoding='utf-8', timeout=60, env=dict(os.environ, COLAB_GPU='1'))
+    assert r.returncode == 2 and 'Colab' in r.stderr and 'Traceback' not in r.stderr
+    assert not os.path.exists(os.path.join(five, '_tmp'))              # lỗi thì chưa mở server, chưa tạo gì

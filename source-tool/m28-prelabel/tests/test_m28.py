@@ -548,8 +548,11 @@ def test_review_ui_needs_app_and_stale_done_removed(tmp_path, world, monkeypatch
     imgs = tmp_path / 'imgs'
     write_images(imgs)
     m28.main(['prepare', '--run', 'A', '--images', str(imgs)])
-    with pytest.raises(SystemExit, match='review_app.py'):
-        m28.main(['review', '--run', 'A', '--review', 'ui'])
+    real_exists = os.path.exists                               # tool/review_app.py đã có thật: giả vờ nó vắng mặt
+    with monkeypatch.context() as mp:
+        mp.setattr(os.path, 'exists', lambda q: False if os.path.basename(str(q)) == 'review_app.py' else real_exists(q))
+        with pytest.raises(SystemExit, match='review_app.py'):
+            m28.main(['review', '--run', 'A', '--review', 'ui'])
     # có app giả đóng mà không bấm Xong: done.txt cũ (từ --force) không được tính
     app = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(steps.__file__))), 'review_app.py')
     calls = []

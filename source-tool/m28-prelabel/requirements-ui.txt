@@ -1,3 +1,4 @@
-# Trang rà soát (review_app.py). P2 ghi đúng bản đã cài thử ngày 5/10, ví dụ gradio==6.29.1,
-# sau khi `python -m pip install --dry-run -r requirements-ui.txt` không làm đổi numpy, pillow, opencv.
-gradio
+# Trang rà soát (review_app.py). Bản gradio dưới đây đã thử ngày 5/10/2026 trên Linux cloud, Python 3.11 (trang rà soát và kiểm thử trình duyệt).
+# P2 vẫn phải chạy `python -m pip install --dry-run -r requirements-ui.txt` trên Windows/Python 3.14 để chắc không có numpy, pillow,
+# opencv nào bị đổi, rồi mới cài thật. Không thêm playwright (chỉ tests/e2e_review_ui.py dùng, tuỳ chọn) và không thêm torch.
+gradio==6.29.1
