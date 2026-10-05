@@ -484,7 +484,7 @@ def test_push_needs_images_on_other_machine(tmp_path, world):
 
 # 9 ---------------------------------------------------------------------------
 def test_missing_mapping_module(tmp_path, world, monkeypatch):
-    monkeypatch.delitem(sys.modules, 'm28core.mapping')
+    monkeypatch.setitem(sys.modules, 'm28core.mapping', None)   # coi như chưa có module
     imgs = tmp_path / 'imgs'
     write_images(imgs)
     with pytest.raises(SystemExit, match='m28core.mapping'):

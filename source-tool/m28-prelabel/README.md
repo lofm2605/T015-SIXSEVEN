@@ -86,11 +86,11 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 
 | Ai | Module / khoá | Chữ ký / dạng dữ liệu | m28 dùng ở | Trạng thái |
 |---|---|---|---|---|
-| P3 | `m28core.mapping.apply_map` | `apply_map(pts478, map, config, flipped=False)` → `{tên điểm: [x, y]}` toạ độ ảnh cắt 512; `flipped=True` nhận 478 điểm ảnh lật và **đã bỏ lật** | bước `map50` | chưa ai xác nhận |
-| P3 | `config/m28_config.json` khoá `points` | list, mỗi phần tử có `name` (thứ tự = thứ tự điểm trong XML) | `map50`, `flags`, `autoqc`, XML | chưa ai xác nhận |
+| P3 | `m28core.mapping.apply_map` | `apply_map(pts478, map, config, flipped=False)` → `{tên điểm: [x, y]}` toạ độ ảnh cắt 512; `flipped=True` nhận 478 điểm ảnh lật và **đã bỏ lật** | bước `map50` | **bản nháp có sẵn** (`tool/m28core/mapping.py`), P3 xác nhận |
+| P3 | `config/m28_config.json` khoá `points` | list, mỗi phần tử có `name` (thứ tự = thứ tự điểm trong XML) | `map50`, `flags`, `autoqc`, XML | **bản nháp có sẵn** (`tool/make_config.py`), P3 chốt trước 12/10 |
 | P3/P2 | `config` khoá `iod_points` | 2 tên điểm mắt (phải, trái) để tính khoảng cách hai mắt | `flags` | chưa ai xác nhận |
 | P3/P2 | `config` khoá `t_flip` | số, hoặc `null` (chưa chốt) thì mọi `low_conf` = false | `flags` | chưa ai xác nhận |
-| P3 | `config/map_mp50.json` | nội dung tuỳ P3; m28 chỉ đọc JSON rồi đưa nguyên cho `apply_map` | `map50` | chưa ai xác nhận |
+| P3 | `config/map_mp50.json` | nội dung tuỳ P3; m28 chỉ đọc JSON rồi đưa nguyên cho `apply_map` | `map50` | **bản nháp có sẵn** (`tool/fit_map.py` sinh ra) |
 | P4 | `m28core.autoqc.run` | `run(name, pts50, config)` → list mã lỗi (chuỗi); mã bắt đầu bằng `guong`, `don_cuc` hoặc `diem_khong_hop_le` thì gợi ý "nen_gan_tay". Module tuỳ chọn | bước `autoqc` | chưa ai xác nhận |
 | P4 | `runs/<run>/autoqc/autoqc.csv` | m28 ghi: `name,suggestion,n_flags,decision,reason,seconds,problems` (`suggestion` = `on`/`can_xem`/`nen_gan_tay`; `name` có đuôi `.png`) | `review` (excel, auto), P2 xếp hàng | chưa ai xác nhận |
 | P4 | `m28core.push.push` | `push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project=, prefix=, label_json=)`; đường ảnh là đường dẫn file đầy đủ; từ chối tên không bắt đầu `demo-`; tự ghi `push.json` | bước `push` | chưa ai xác nhận |
@@ -112,9 +112,14 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
     G 2, X 3, D 3) sau khi thử thêm viền xám; P 0/16. Chạy khoảng 50 giây trên CPU.
   - Tập giống R (train, ảnh một mặt, mặt lớn ≥ 25% cạnh ngắn; 40 mặt, seed 18), `--box auto`: **40/40** thấy mặt;
     hộp tự dò so với hộp WFLW có IoU trung vị 0,70, 2/40 mặt dưới 0,5. Xem bằng mắt: 478 điểm nằm đúng trên mặt.
-- **Chưa chạy**: `map50`, `flags`, `autoqc`, `overlays`, `push` trên dữ liệu thật (chờ `mapping.py` + config 50 điểm của P3),
-  Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả có nhập được XML `<skeleton>` không), `review_app.py`, `collect` thật,
-  CSV do Excel lưu.
+- **Bản nháp ánh xạ 478→50 (P3 xác nhận/sửa)**: `tool/make_config.py` sinh `config/m28_config.json` (50 điểm chọn từ 98 điểm WFLW:
+  viền cách một điểm 17, mày 5×2, mắt 4×2, mũi 5, môi 10) và `data/gt50.json`; `tool/fit_map.py` khớp `config/map_mp50.json`
+  (hình trung bình + ridge, k = 6, λ chọn trong {0,1; 1; 10; 100}); `tool/m28core/mapping.py` có `apply_map`. Kết quả trên 58 mặt F
+  kiểm (chưa dùng để chọn λ): NME chỉ số chính (E điểm-điểm, C tới đường cong) trung bình 3,87%, trung vị 2,92% IOD; 5,2% mặt hỏng (≥ 10%);
+  lệch gốc/lật trung vị 2,54% IOD (kế hoạch: < 3%); lật đáp án hai lần lệch ~1e-14 px. λ chọn = 100 nằm sát mép lưới. Bố cục 98 điểm và
+  cặp đối xứng đã kiểm trên 5.931 mặt thẳng của WFLW train; ngưỡng `t_flip` = 0,0709 là bản nháp (quantile 0,85 lệch gốc/lật trên T-dev) cho P2 xác nhận.
+- Chạy `all --box wflw --review auto --dry-run` trên 5 mặt F thật: ra XML 5 × 50 điểm, toạ độ khớp `mp50.json`.
+- **Chưa chạy**: `autoqc` của P4, `push` thật, `collect`, `review_app.py`, Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả nhập được XML `<skeleton>` không), CSV do Excel lưu.
 - Cập nhật sau thí nghiệm 14–15/10 và lượt chạy tập R (16–18/10): thời gian trước/sau, số nháp hỏng trang rà soát bắt được.
 
 ## Giới hạn
