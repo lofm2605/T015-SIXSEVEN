@@ -40,8 +40,11 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
 3. Làm đúng việc của ngày đó, đúng tên file và thư mục như kế hoạch. Không tự đổi tên điểm, tên file,
    ngày giao nhận; nếu thấy kế hoạch sai thì nói rõ và đề xuất sửa.
 4. Code chạy trên Windows, Python 3.14, CPU; lệnh viết cho **cmd** (không phải PowerShell). Phiên Claude
-   trên cloud **không** có ảnh WFLW, không có CVAT của ai và không có GPU: ở đó chỉ viết và thử code bằng
-   dữ liệu giả; người dùng chạy thật trên máy mình.
+   trên cloud không có CVAT của ai và không có GPU. **Từ 5/10/2026 chủ repo cho phép phiên cloud tải và xử
+   lý ảnh WFLW thật** (chạy `split.py`, `crop.py`, thử `m28.py` trên dữ liệu thật) để tạo gói dữ liệu chia cho
+   cả đội; việc này cần môi trường cloud cho phép các host `wywu.github.io`, `drive.usercontent.google.com`
+   (và `huggingface.co`, `archive.ics.uci.edu` khi cần). Host bị chặn thì báo chủ repo sửa Network access, không
+   vòng qua. Phiên cloud vẫn **không** được xử lý ảnh hay dữ liệu của khách hàng.
 
 ## Quyết định đã chốt
 
@@ -62,11 +65,15 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
 
 ## Quy tắc bắt buộc
 
-- **Repo này đang công khai trên GitHub.** Không commit ảnh mặt (WFLW, WIDER FACE, ảnh cắt, ảnh chồng),
-  file đáp án, file xuất CVAT, file sao lưu task, `runs/`, trọng số PIPNet hay bất cứ dữ liệu khách hàng nào.
-  `.gitignore` đã chặn các thư mục này; đừng gỡ chặn. Những thứ đó để trên máy hoặc một repo **riêng tư**.
+- **Repo này chuyển sang riêng tư ngày 5/10/2026**, nhưng vẫn không commit ảnh mặt (WFLW, WIDER FACE, ảnh
+  cắt, ảnh chồng), file đáp án, file xuất CVAT, file sao lưu task, `runs/`, trọng số PIPNet hay dữ liệu khách
+  hàng vào git. `.gitignore` vẫn chặn các thư mục này; chỉ gỡ khi chủ repo yêu cầu rõ. Gói dữ liệu cho đội
+  gửi qua file zip (tải về hoặc Drive riêng tư của đội), không đẩy lên git. Nếu repo bị đổi lại thành công
+  khai thì dữ liệu phải ra khỏi repo ngay.
 - Không bao giờ ghi token, mật khẩu, địa chỉ email riêng vào code, file hay chat.
-- Không đưa ảnh mặt, đáp án hay file xuất CVAT vào bất kỳ chat AI nào (kể cả Gemini trong Colab).
+- Ảnh và đáp án **WFLW** (bộ công khai) được phép xử lý trong phiên Claude cloud của chủ repo, kèm điều kiện
+  ở trên. **Ảnh, đáp án, file xuất CVAT của khách hàng, và ảnh mặt người thật ngoài WFLW** (bộ in-cabin, ảnh
+  đồng đội) không bao giờ được đưa vào chat AI nào (kể cả Gemini trong Colab).
 - Trang rà soát chỉ chạy `launch(server_name="127.0.0.1", share=False)`; không `share=True`, không tunnel.
 - Ảnh WFLW theo giấy phép CC BY-NC-ND: chỉ dùng nội bộ, không phát tán, không đăng bản đã sửa.
 
