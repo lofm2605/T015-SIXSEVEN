@@ -2,8 +2,7 @@
 
 Repo làm việc của một đội gán nhãn. Mỗi đội nhận một bản sao của template này.
 
-> Tên người, handle GitHub, số liệu và link CVAT trong các file mẫu đều là **giả**,
-> chỉ để minh hoạ cách ghi. Thay bằng dữ liệu của đội khi bắt đầu.
+> Các file mẫu (backlog, sổ quyết định, nhật ký tuần) đang để trống, điền khi đội bắt đầu ghi.
 
 ## Có gì trong repo
 
