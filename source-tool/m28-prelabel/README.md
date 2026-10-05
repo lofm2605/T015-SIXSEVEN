@@ -113,11 +113,24 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
   - Tập giống R (train, ảnh một mặt, mặt lớn ≥ 25% cạnh ngắn; 40 mặt, seed 18), `--box auto`: **40/40** thấy mặt;
     hộp tự dò so với hộp WFLW có IoU trung vị 0,70, 2/40 mặt dưới 0,5. Xem bằng mắt: 478 điểm nằm đúng trên mặt.
 - **Bản nháp ánh xạ 478→50 (P3 xác nhận/sửa)**: `tool/make_config.py` sinh `config/m28_config.json` (50 điểm chọn từ 98 điểm WFLW:
-  viền cách một điểm 17, mày 5×2, mắt 4×2, mũi 5, môi 10) và `data/gt50.json`; `tool/fit_map.py` khớp `config/map_mp50.json`
-  (hình trung bình + ridge, k = 6, λ chọn trong {0,1; 1; 10; 100}); `tool/m28core/mapping.py` có `apply_map`. Kết quả trên 58 mặt F
-  kiểm (chưa dùng để chọn λ): NME chỉ số chính (E điểm-điểm, C tới đường cong) trung bình 3,87%, trung vị 2,92% IOD; 5,2% mặt hỏng (≥ 10%);
-  lệch gốc/lật trung vị 2,54% IOD (kế hoạch: < 3%); lật đáp án hai lần lệch ~1e-14 px. λ chọn = 100 nằm sát mép lưới. Bố cục 98 điểm và
-  cặp đối xứng đã kiểm trên 5.931 mặt thẳng của WFLW train; ngưỡng `t_flip` = 0,0709 là bản nháp (quantile 0,85 lệch gốc/lật trên T-dev) cho P2 xác nhận.
+  viền cách một điểm 17, mày 5×2, mắt 4×2, mũi 5, môi 10; 21 R, 21 L, 8 M) và `data/gt50.json`; `tool/fit_map.py` khớp
+  `config/map_mp50.json` (hình trung bình + ridge, k = 6, λ chọn trong {0,1; 1; 10; 100}) và ghi `data/mp50.json` cho mọi mặt;
+  `tool/m28core/mapping.py` có `apply_map`; `tool/check_flip.py` kiểm phép lật. Chạy lại `make_config.py` không xoá `t_flip`,
+  `tolerance`, `status`, `tmpl` đã có trong file. Bố cục 98 điểm và cặp đối xứng đã kiểm bằng script ngoài repo trên 5.931 mặt thẳng của
+  WFLW train; ba người kiểm độc lập tìm ra và đã sửa lỗi bên R/L của môi dưới (WFLW 84 → `p46_lip_L`, 86 → `p48_lip_R`).
+  - Kết quả trên 58 mặt F kiểm (số nhỏ, dễ hơn T-dev/T-test; dùng **trung vị**): NME chính (E điểm-điểm, C tới đường cong) trung vị
+    **2,87%**, trung bình 3,80% IOD, 5,2% mặt hỏng (≥ 10%); NME phụ (điểm-điểm cả 50 điểm) 5,65% / 4,06% (đây là số ghi trong `map_mp50.json`
+    kèm `nme_main_*`). λ chọn = 100 sát mép lưới (λ ~1000–3000 chỉ tốt hơn ~0,04 điểm %: giữ lưới theo kế hoạch). Hằng số bỏ lật ước
+    lượng được `flip_width` = 512,97 (không phải 512: bỏ lật lệch ~1 px sang trái trên F, T-dev, T-test nếu dùng 512).
+  - `python tool\check_flip.py --run <run>`: lật đáp án hai lần lệch ~0; WFLW 0 và 60 ở nửa trái ảnh cắt 616/616; lệch gốc/lật trung vị
+    2,07% IOD trên 20 mặt thẳng F đầu tiên (tiêu chí kế hoạch < 3%: đạt), 2,36% trên mọi mặt thẳng F, **2,80% trên Tdev** (biên mỏng);
+    đối chứng quên đổi tên theo cặp: 71%.
+  - Khớp trên 235 mặt F (đã bỏ 7 mặt no_face và 1 mặt dò nhầm người từ 240 khớp ban đầu) thay vì 240/60 như kế hoạch; danh sách mặt
+    khớp/đo/kiểm ghi trong `meta` của `map_mp50.json`. Mặt tham chiếu Procrustes = mặt đầu theo mã trong tập khớp.
+  - `t_flip` để `null` theo kế hoạch (P2 chốt sau họp 12/10); **đề xuất cho P2** 0,0672 (quantile 0,85 lệch gốc/lật trên Tdev, đã tính với
+    ánh xạ này). `tmpl` = trung bình đáp án gt98 của các mặt F pose = 0 (không lấy từ meanface.txt của PIPNet vì PIPNet không được vào `tool/`).
+  - Quy ước khoá: `gt98.json`, `gt50.json` có đuôi `.png`; `pred478.json`, `mp50.json` không đuôi. 11 mặt ở các tập khác nằm trên cùng
+    một ảnh gốc với một mặt F (WFLW tách theo mặt, không theo ảnh); ghi vào `so-quyet-dinh.md` nếu nhóm muốn tách theo ảnh.
 - Chạy `all --box wflw --review auto --dry-run` trên 5 mặt F thật: ra XML 5 × 50 điểm, toạ độ khớp `mp50.json`.
 - **Chưa chạy**: `autoqc` của P4, `push` thật, `collect`, `review_app.py`, Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả nhập được XML `<skeleton>` không), CSV do Excel lưu.
 - Cập nhật sau thí nghiệm 14–15/10 và lượt chạy tập R (16–18/10): thời gian trước/sau, số nháp hỏng trang rà soát bắt được.

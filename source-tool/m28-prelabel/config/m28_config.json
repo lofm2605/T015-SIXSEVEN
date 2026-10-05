@@ -1063,7 +1063,7 @@
     54
    ],
    "line": "nose_bridge",
-   "anchor": 0,
+   "anchor": 1,
    "coincide": null,
    "tmpl": [
     255.36,
@@ -1397,10 +1397,10 @@
    ]
   },
   {
-   "name": "p46_lip_R",
+   "name": "p46_lip_L",
    "region": "lip",
-   "side": "R",
-   "flip": "p48_lip_L",
+   "side": "L",
+   "flip": "p48_lip_R",
    "wflw": 84,
    "type": "C",
    "curve": [
@@ -1445,10 +1445,10 @@
    ]
   },
   {
-   "name": "p48_lip_L",
+   "name": "p48_lip_R",
    "region": "lip",
-   "side": "L",
-   "flip": "p46_lip_R",
+   "side": "R",
+   "flip": "p46_lip_L",
    "wflw": 86,
    "type": "C",
    "curve": [
@@ -1483,7 +1483,7 @@
     92
    ],
    "line": "lip_inner",
-   "anchor": 0,
+   "anchor": 1,
    "coincide": "p50_lip_M",
    "tmpl": [
     258.25,
@@ -1505,7 +1505,7 @@
     88
    ],
    "line": "lip_inner",
-   "anchor": 0,
+   "anchor": 1,
    "coincide": "p49_lip_M",
    "tmpl": [
     258.15,
@@ -1546,6 +1546,6 @@
   "p33_eye_R",
   "p39_eye_L"
  ],
- "t_flip": 0.0709,
+ "t_flip": null,
  "tolerance": null
 }

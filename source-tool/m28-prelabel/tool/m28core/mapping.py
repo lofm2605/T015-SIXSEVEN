@@ -1,10 +1,15 @@
 """Đổi 478 điểm MediaPipe sang bộ điểm trong config (BẢN NHÁP cho P3). Chỉ dùng numpy.
 
     apply_map(pts478, map, config, flipped=False) -> {tên điểm: [x, y]} theo toạ độ ảnh cắt 512, đúng thứ tự config
-    flipped=True: pts478 là kết quả MediaPipe trên ảnh lật ngang; hàm đổi sang 50 điểm, lấy x = width - x
-                  rồi gán tên theo cột `flip` của config, nên kết quả đã nằm trên ảnh gốc (đã "bỏ lật").
+    flipped=True: pts478 là kết quả MediaPipe trên ảnh lật ngang; hàm đổi sang 50 điểm, lấy x = flip_width - x
+                  rồi gán tên theo cặp đối xứng (cột `flip`), nên kết quả đã nằm trên ảnh gốc (đã "bỏ lật").
 
-`map` là nội dung config/map_mp50.json do tool/fit_map.py sinh ra.
+`map` là nội dung config/map_mp50.json do tool/fit_map.py sinh ra. Config có thể là TẬP CON các điểm của map
+(bỏ bớt điểm thì không cần khớp lại); đổi chỉ số wflw của một điểm giữ nguyên tên thì apply_map báo lỗi.
+
+Quy ước toạ độ: pts478 theo pixel kiểu MediaPipe (x = p.x * width, biên pixel). Ảnh lật đúng nghĩa là x' = 512 - x, nhưng
+ridge học trên đáp án WFLW (quy ước tâm pixel) nên hằng số bỏ lật tốt nhất lệch khỏi 512 chút ít: fit_map.py ước lượng và
+ghi `flip_width` (thường ~511,3) vào map; apply_map dùng số đó khi không truyền `width`.
 """
 import numpy as np
 
@@ -13,8 +18,13 @@ OUT = 512
 
 def similarity(src, dst):
     """Procrustes: tìm s, R, t để s * src @ R.T + t gần dst nhất (không lật gương)."""
+    src, dst = np.asarray(src, float), np.asarray(dst, float)
+    if not (np.isfinite(src).all() and np.isfinite(dst).all()):
+        raise ValueError("điểm có NaN/inf")
     ms, md = src.mean(0), dst.mean(0)
     a, b = src - ms, dst - md
+    if (a ** 2).sum() < 1e-12:
+        raise ValueError("các điểm trùng nhau, không khớp được")
     U, S, Vt = np.linalg.svd(b.T @ a)
     k = np.sign(np.linalg.det(U @ Vt))
     R = U @ np.diag([1.0, k]) @ Vt
@@ -32,6 +42,8 @@ def from_mean(q, s, R, t):                         # khung hình trung bình -> 
 
 def fit_ridge(X, Y, lam):
     """X: (n, 2k) toạ độ k đỉnh gần nhất; Y: (n, 2) điểm đáp án; cùng khung trung bình."""
+    if lam <= 0:
+        raise ValueError("λ phải > 0")
     mx, my = X.mean(0), Y.mean(0)
     A = X - mx
     W = np.linalg.solve(A.T @ A + lam * np.eye(A.shape[1]), A.T @ (Y - my))
@@ -39,7 +51,7 @@ def fit_ridge(X, Y, lam):
 
 
 def map_points(pts478, mp_map):
-    """478 điểm (ảnh bất kỳ, toạ độ pixel) -> {tên: [x, y]} theo đúng toạ độ đầu vào, đúng thứ tự mp_map['names']."""
+    """478 điểm (toạ độ pixel bất kỳ) -> {tên: [x, y]} cho MỌI điểm của map, cùng toạ độ đầu vào."""
     pts = np.asarray(pts478, float)
     if pts.shape != (len(mp_map["mean478"]), 2):
         raise ValueError(f"cần {len(mp_map['mean478'])} điểm MediaPipe, nhận {pts.shape}")
@@ -53,13 +65,19 @@ def map_points(pts478, mp_map):
     return out
 
 
-def apply_map(pts478, mp_map, config, flipped=False, width=OUT):
+def apply_map(pts478, mp_map, config, flipped=False, width=None):
     names = [p["name"] for p in config["points"]]
-    if names != mp_map["names"]:
-        raise ValueError("config và map_mp50.json không cùng danh sách/thứ tự điểm: chạy lại tool/fit_map.py")
+    absent = [n for n in names if n not in mp_map["points"]]
+    if absent:
+        raise ValueError(f"map_mp50.json không có điểm {absent[:3]}...: chạy lại tool/fit_map.py")
+    defs = mp_map.get("defs") or {}
+    for p in config["points"]:
+        if p["name"] in defs and defs[p["name"]]["wflw"] != p["wflw"]:
+            raise ValueError(f"điểm {p['name']} đổi chỉ số wflw so với map: chạy lại tool/fit_map.py")
     res = map_points(pts478, mp_map)
     if not flipped:
         return {n: [float(res[n][0]), float(res[n][1])] for n in names}
-    flip = {p["name"]: p["flip"] for p in config["points"]}
-    back = {flip[n]: [float(width - res[n][0]), float(res[n][1])] for n in names}   # x' = width - x, đổi tên theo cặp đối xứng
+    w = float(mp_map.get("flip_width", OUT) if width is None else width)
+    flip_of = {n: defs[n]["flip"] for n in defs} if defs else {p["name"]: p["flip"] for p in config["points"]}
+    back = {flip_of[n]: [w - float(res[n][0]), float(res[n][1])] for n in mp_map["names"]}   # bỏ lật + đổi tên theo cặp
     return {n: back[n] for n in names}
