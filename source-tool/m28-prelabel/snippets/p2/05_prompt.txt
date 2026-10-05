@@ -1,0 +1,5 @@
+[Trích từ de-tai-m28/p2-model.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Chỉ dùng numpy (không scipy, không sklearn). Input: score và bad dạng (số mặt, 50), regions = dict tên vùng -> chỉ số điểm, ngưỡng t.
+Viết hàm trả về: số cờ trung bình mỗi mặt, % điểm sai bị cờ, AUROC từng vùng (công thức hạng Mann-Whitney) và trung bình.
+Thêm khoảng tin cậy 95% bằng bootstrap 2.000 lần, lấy mẫu lại theo mặt. Thêm 3 test với dữ liệu giả có đáp án biết trước.

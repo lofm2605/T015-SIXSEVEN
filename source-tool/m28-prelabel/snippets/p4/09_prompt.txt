@@ -1,0 +1,7 @@
+[Trích từ de-tai-m28/p4-cvat.md — mục: Phần mới: push và collect (9–18/10) › Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Dùng cvat-sdk 2.77 (Python). Viết hàm tạo task trong project bằng client.tasks.create_from_data
+với spec={"name", "project_id"} (không có labels), resource_type=ResourceType.LOCAL,
+data_params có job_file_mapping; rồi task.import_annotations("CVAT 1.1", xml);
+rồi task.export_dataset("CVAT for images 1.1", path, include_images=False).
+Token đọc từ os.environ["CVAT_ACCESS_TOKEN"], không in ra. Giải thích lỗi thường gặp.

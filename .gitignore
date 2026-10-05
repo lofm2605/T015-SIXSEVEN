@@ -1,0 +1,36 @@
+# Repo này CÔNG KHAI. Không commit ảnh mặt, đáp án, file xuất CVAT, file sao lưu task, trọng số hay bí mật.
+
+# Môi trường
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+
+# Bí mật
+.env
+*.env
+*token*
+*.pem
+
+# Dữ liệu đề tài M28 (để trên máy hoặc repo riêng tư)
+source-tool/m28-prelabel/data/
+source-tool/m28-prelabel/raw/
+source-tool/m28-prelabel/final/
+source-tool/m28-prelabel/outputs/
+source-tool/m28-prelabel/runs/
+source-tool/m28-prelabel/backups/
+source-tool/m28-prelabel/overlays/
+source-tool/m28-prelabel/pipnet/
+timing_*.csv
+
+# Ảnh, dữ liệu nén, trọng số model
+*.png
+*.jpg
+*.jpeg
+*.tar
+*.tar.gz
+*.zip
+*.pth
+*.pt
+*.task
+*.npy

@@ -1,0 +1,3 @@
+[Trích từ de-tai-m28/p3-anh-xa.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Viết hàm Python dùng xml.etree.ElementTree đọc file "CVAT for images 1.1". Mỗi <image name=...> có <skeleton label="face50"> chứa 50 <points label="pNN_..." occluded="0|1" outside="0" points="x,y">; mỗi points có <attribute name="low_conf">true|false</attribute>. Trả dict: tên ảnh -> tên điểm -> {x, y, occluded, low_conf}. Báo lỗi nếu thiếu điểm hoặc outside="1". Không dùng thư viện ngoài.

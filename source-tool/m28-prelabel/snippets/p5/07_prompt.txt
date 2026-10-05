@@ -1,0 +1,3 @@
+[Trích từ de-tai-m28/p5-thi-nghiem.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Giải thích trong 5 câu ngắn, cho người gán nhãn không học thống kê: hiệu NME ghép cặp (có nháp − gán tay) = <TB>% IOD, cận trên một phía 95% = <hi>%, ngưỡng = +0,5%. Không thêm con số tôi không đưa.

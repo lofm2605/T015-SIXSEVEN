@@ -1,0 +1,11 @@
+# Môi trường chung của đội (Python 3.14, Windows, CPU).
+# P2 chạy `python -m pip freeze > requirements.txt` sau khi cài xong và ghi đè file này bằng bản đã khoá đủ phiên bản.
+mediapipe==1.0.1
+cvat-sdk==2.77.0
+cvat-cli==2.77.0
+numpy
+pandas
+# Chỉ để so sánh nội bộ (PIPNet), không đưa vào tool/ giao khách:
+torch
+torchvision
+# Không cài thêm opencv-python cạnh mediapipe (xem tab P2).

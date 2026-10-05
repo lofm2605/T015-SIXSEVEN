@@ -1,0 +1,3 @@
+[Trích từ de-tai-m28/p5-thi-nghiem.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Write Python that makes fake timing_P1.csv … timing_P5.csv for testing. Blocks X1–X5, 10 faces each. Columns: date, person, condition, task, job, block, seq, face_id, seconds, warmup, interrupted, note. Pk does "manual" (task m28-manual) on Xk and "assisted" (task m28-assisted) on X(k+1); P5 does "assisted" on X1. warmup = 1 for seq 1–2. Assisted is 25% faster. Fixed seed.

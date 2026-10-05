@@ -1,0 +1,5 @@
+[Trích từ de-tai-m28/p2-model.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+I have PIPNet's MIT code: Pip_resnet18 from lib/networks.py, plus get_meanface() and forward_pip() copied from lib/functions.py (pasted below).
+Write a CPU function pipnet98(img_bgr, box) that widens the box by 10% on the left and on the right, moves the top edge down by 10% of the box height and the bottom edge down by 10% of the box height (exactly as PIPNet's lib/demo.py does), crops, resizes to 256x256, converts BGR to RGB, normalises with ImageNet mean/std, runs forward_pip and returns 98 (x, y) points in input-image pixels plus 98 heatmap scores.
+Do not import scipy, torchlm or FaceBoxes. Load weights with torch.load(path, map_location="cpu", weights_only=True).

@@ -1,0 +1,5 @@
+[Trích từ de-tai-m28/p3-anh-xa.md — mục: Phần mới: ánh xạ trong pipeline và chấm trang rà soát (9–18/10) › Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Có ba bảng: triage.csv và auto.csv (file, decision ∈ {nhan, gan_tay, bo}) và truth.csv (file, hong ∈ {0,1}).
+Viết hàm Python trả, cho từng bảng triage và auto: số mặt hỏng, số mặt hỏng có decision khác "nhan",
+số mặt tốt có decision khác "nhan". Dùng pandas. Thử với 8 dòng số giả.

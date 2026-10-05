@@ -1,0 +1,7 @@
+[Trích từ de-tai-m28/p1-du-lieu.md — mục: Phần mới: lệnh m28.py (8–16/10) › Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Viết một CLI Python bằng argparse tên m28 với lệnh con prepare, review, push, collect, all.
+Mỗi bước ghi vào runs/<run>/<bước>/. Hàm bước trả True chỉ khi xong thật; khi đó mới tạo done.txt, còn False thì thoát bằng SystemExit kèm lý do.
+Bước đã có done.txt thì in "bỏ qua",
+trừ khi tên bước nằm trong --force. Các hàm bước đã có sẵn trong module m28core.steps, nhận (args, out).
+Không dùng thư viện ngoài. Thêm 3 dòng assert để tự kiểm.

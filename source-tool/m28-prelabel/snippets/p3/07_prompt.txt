@@ -1,0 +1,3 @@
+[Trích từ de-tai-m28/p3-anh-xa.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Two annotators labelled the same faces: dict face -> point name -> (x, y). Each point has type "E" or "C" and a region. For E, use the distance between the two annotators. For C, use only the component along the normal of the nearest segment of a reference polyline ((m, 2) array). Return the median per region. numpy only, with tests on hand-made points.
