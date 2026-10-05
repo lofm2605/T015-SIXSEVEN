@@ -1,0 +1,5 @@
+[Trích từ de-tai-m28/p4-cvat.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Đây là file CVAT for images 1.1 mẫu, toạ độ đã thay bằng số giả: <dán XML>.
+Viết hàm ghi file cùng cấu trúc cho nhiều ảnh, mỗi point có occluded="0", outside="0", low_conf.
+id và name lấy từ danh sách frame của task, không tự đánh số. Báo lỗi nếu ảnh thiếu điểm.

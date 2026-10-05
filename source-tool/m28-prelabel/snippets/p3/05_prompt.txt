@@ -1,0 +1,3 @@
+[Trích từ de-tai-m28/p3-anh-xa.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Write a numpy-only function similarity(src, dst) for 2D Procrustes (Umeyama), no reflection: return s, R, t so that s * src @ R.T + t is closest to dst. Add a test: 20 random points, apply s=1.7, rotation 30 degrees, t=(5,-3), check the recovered values within 1e-6.

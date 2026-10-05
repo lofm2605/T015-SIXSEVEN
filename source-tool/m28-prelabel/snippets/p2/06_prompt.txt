@@ -1,0 +1,5 @@
+[Trích từ de-tai-m28/p2-model.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Write a Python script (opencv + numpy only) that reads a CVAT for images 1.1 XML export. Each image has one <skeleton label="face50"> with 50 <points label="pNN_..."> children.
+Match points by label name, not by order. Draw each point with its number, coloured by side (R/L/M) from our config (column names pasted below), and draw lines between consecutive points of the same curve.
+Ignore the low_conf attribute. Put 6 faces per PNG page with the file name above each face.

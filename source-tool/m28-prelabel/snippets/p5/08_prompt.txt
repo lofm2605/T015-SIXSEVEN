@@ -1,0 +1,4 @@
+[Trích từ de-tai-m28/p5-thi-nghiem.md — mục: Phần mới: quy tắc rà soát, người rà, số liệu pipeline, demo (11–19/10) › Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Có triage.csv (file, decision, reason, seconds). Viết hàm pandas trả: số dòng mỗi decision,
+trung vị seconds, phút cho 100 mặt. Thử với 8 dòng số giả.

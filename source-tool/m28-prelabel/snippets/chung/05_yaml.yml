@@ -1,0 +1,5 @@
+# Trích từ de-tai-m28/huong-dan-chung.md — mục: Cài CVAT trên máy mình (cả 5 người) › Phần B. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.
+services:
+  traefik:
+    ports: !override
+      - "127.0.0.1:8080:8080"

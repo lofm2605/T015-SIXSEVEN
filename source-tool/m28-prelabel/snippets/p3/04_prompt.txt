@@ -1,0 +1,3 @@
+[Trích từ de-tai-m28/p3-anh-xa.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Viết hàm Python chỉ dùng numpy: point_to_curve(p, curve) trả khoảng cách ngắn nhất từ điểm p (2,) tới đường gấp khúc curve (m, 2). Không chia cho 0 khi đoạn dài 0. Viết 5 test có đáp án tính tay: điểm trên đường, giữa một đoạn, ngoài đầu mút, đoạn thẳng đứng, đường chỉ 2 điểm.

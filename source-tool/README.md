@@ -33,7 +33,7 @@ Thêm tool thì thêm một dòng vào bảng:
 
 | Tool | Giải quyết | Người viết | Trạng thái |
 |---|---|---|---|
-| *(chưa có)* |  |  |  |
+| [`m28-prelabel/`](m28-prelabel/) | Đề tài M28: nhãn nháp 50 điểm landmark khuôn mặt, pipeline `m28.py` và trang rà soát trước CVAT | P1–P5 | 🛠️ Đang làm (5–24/10/2026) |
 
 ## Mẫu README cho từng tool
 

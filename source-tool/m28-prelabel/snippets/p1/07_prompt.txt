@@ -1,0 +1,7 @@
+[Trích từ de-tai-m28/p1-du-lieu.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Theo đúng tài liệu https://docs.cvat.ai/docs/api_sdk/sdk/auto-annotation/, viết
+module Python cho cvat-cli auto-annotate. Trả về skeleton label "face50"; tên 50
+điểm đọc từ file cấu hình; mỗi điểm có checkbox low_conf. Điểm lấy từ hàm có sẵn
+prelabel_one(image) -> (pts, flags) trong tool/m28core. Chỉ dùng hàm có trong tài liệu đó và ghi rõ
+từng hàm lấy từ mục nào.

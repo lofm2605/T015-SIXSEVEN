@@ -1,0 +1,6 @@
+[Trích từ de-tai-m28/p4-cvat.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Đây là JSON skeleton 3 điểm chép từ tab Raw của CVAT: <dán JSON>.
+Viết make_label.py đọc config (cột: <dán tên cột>) và sinh JSON cùng cấu trúc cho 50 điểm.
+Giữ nguyên mọi khoá của mẫu, trừ "id": bỏ mọi khoá "id"; trong svg, mỗi nút ghi data-label-name="<tên điểm>", không ghi data-label-id. Mỗi điểm một checkbox low_conf, màu theo cột bên.
+Cạnh chỉ nối điểm liền nhau trên cùng đường cong. In ra số điểm và số cạnh.

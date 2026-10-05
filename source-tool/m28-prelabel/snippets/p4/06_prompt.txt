@@ -1,0 +1,5 @@
+[Trích từ de-tai-m28/p4-cvat.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Viết hàm numpy kiểm đường gấp khúc (mảng N x 2): hai đoạn liền nhau có tích vô hướng dương,
+và đường không tự cắt. Trả về chỉ số điểm lỗi. Kèm 3 test: đường đúng,
+hai điểm liền nhau đổi chỗ, đường tự cắt hình số 8.

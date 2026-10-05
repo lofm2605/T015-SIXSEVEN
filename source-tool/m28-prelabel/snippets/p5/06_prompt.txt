@@ -1,0 +1,3 @@
+[Trích từ de-tai-m28/p5-thi-nghiem.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Kiểm tra đoạn code bootstrap sau. Mô tả: r_i = giây trung bình mỗi mặt có nhãn nháp / giây trung bình mỗi mặt gán tay của từng người; chỉ số chính là trung bình nhân 5 tỉ lệ; bốc lại mặt trong từng khối, dùng chung cho hai cách gán. Code có làm khác mô tả không? Chỉ dùng numpy, pandas. <dán code>

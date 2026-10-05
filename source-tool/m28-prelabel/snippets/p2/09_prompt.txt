@@ -1,0 +1,6 @@
+[Trích từ de-tai-m28/p2-model.md — mục: Phần mới: tự dò khung mặt và trang rà soát (11–17/10) › Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Viết app Gradio Blocks (Python 3.14) để phân loại ảnh: Gallery 5 cột từ danh sách (đường dẫn, chú thích),
+bấm ảnh thì hiện lớn, 3 nút Nhận / Gán tay / Bỏ ảnh và Dropdown lý do, ghi CSV (tên ảnh, quyết định, lý do, số giây).
+Mở lại thì bỏ qua ảnh đã có trong CSV. launch(server_name="127.0.0.1", share=False). Không dùng share, không tunnel.
+Thử bằng 5 ảnh giả: chấm màu trên nền trắng.

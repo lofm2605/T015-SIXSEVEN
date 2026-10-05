@@ -1,0 +1,3 @@
+# Trang rà soát (review_app.py). P2 ghi đúng bản đã cài thử ngày 5/10, ví dụ gradio==6.29.1,
+# sau khi `python -m pip install --dry-run -r requirements-ui.txt` không làm đổi numpy, pillow, opencv.
+gradio

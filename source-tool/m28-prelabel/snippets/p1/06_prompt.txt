@@ -1,0 +1,6 @@
+[Trích từ de-tai-m28/p1-du-lieu.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Viết hàm draw_overlay(img_path, pts, sides, out_path) bằng OpenCV. pts là mảng
+(50, 2) pixel trên ảnh 512x512; sides là list 50 chữ 'R', 'L', 'M'. Vẽ chấm bán
+kính 3 px, màu theo bên, số thứ tự 1-50 cạnh chấm. Không đổi kích thước ảnh.
+Chỉ dùng cv2 và numpy.

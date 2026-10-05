@@ -1,0 +1,6 @@
+[Trích từ de-tai-m28/p4-cvat.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
+
+Write a cvat-sdk auto-annotation function using only https://docs.cvat.ai/docs/api_sdk/sdk/auto-annotation/.
+Spec: skeleton "face50", 50 keypoints whose names are read from our config file (do not list them here), each with a checkbox attribute low_conf.
+detect() runs no model: it reads mp50.json (points) and flags.json (low_conf) and finds each image by frame name, not index.
+List every SDK function you use and its doc section.
