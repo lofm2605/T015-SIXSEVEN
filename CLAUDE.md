@@ -73,5 +73,5 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
 ## Quy ước của repo (template khoá 4A)
 
 - `problem-backlog.md`: edge case và pain point, mã `P-001`…; `so-quyet-dinh.md`: quyết định đã chốt,
-  mã `QĐ-001`…; `nhat-ky-tuan/`: nhật ký tuần. Các mục đang có trong ba file đó là **ví dụ giả** của template.
+  mã `QĐ-001`…; `nhat-ky-tuan/`: nhật ký tuần. Ba file đó hiện để trống (đã xoá các ví dụ giả của template).
 - Mỗi tool trong `source-tool/` có README riêng theo mẫu trong `source-tool/README.md`.
