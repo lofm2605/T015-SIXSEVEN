@@ -346,11 +346,10 @@ def _queue(args):
     return names, fl, sug
 
 
-def _no_face_names(args):
+def _no_face(args):
+    """{tên: lý do} từ no_face.csv (một tên chỉ một dòng, dù nằm ở bước nào)."""
     path = os.path.join(_run_dir(args), "no_face.csv")
-    if not os.path.exists(path):
-        return []
-    return list(dict.fromkeys(r["name"] for r in _read_csv(path)))
+    return {r["name"]: r["reason"] for r in reversed(_read_csv(path))} if os.path.exists(path) else {}
 
 
 def triage_path(args, rd):
@@ -395,9 +394,9 @@ def review(args, out):
             w.writerow(["name", "decision", "reason", "seconds"])
             for n in names:
                 w.writerow([n + ".png", "gan_tay" if sug.get(n) == "nen_gan_tay" else "nhan", "", ""])
-            for n in _no_face_names(args):
+            for n, why in _no_face(args).items():
                 if n not in fl:
-                    w.writerow([n + ".png", "bo", "KHONG_MAT", ""])
+                    w.writerow([n + ".png", "bo", why, ""])
         print(f"review auto: theo gợi ý autoqc (chỉ để chạy thử/demo, không có người rà), ghi {path}")
         return True
     if args.review == "excel":
@@ -486,13 +485,13 @@ def push(args, out):
     for n in meta:
         if dec(n) == "nhan" and n not in mp50:
             print(f"Cảnh báo: {n} được chọn Nhận nhưng MediaPipe không thấy mặt, đưa vào Gán tay.")
-    no_face = _no_face_names(args)
+    no_face = _no_face(args)
     lost = [n for n in no_face if n not in meta and dec(n) == "gan_tay"]
     if lost:
         print(f"Cảnh báo: {len(lost)} mặt chọn Gán tay nhưng không có ảnh cắt (không đọc được/không thấy mặt ở bước crop), "
               f"không tải lên được: {lost[:3]}")
     rejected = [(n, triage[n][1]) for n in triage if dec(n) == "bo"] + \
-               [(n, "KHONG_MAT") for n in no_face if dec(n) not in DECISIONS]
+               [(n, why) for n, why in no_face.items() if dec(n) not in DECISIONS]
     if not nhan and not tay:
         raise SystemExit("Không có mặt nào để đẩy lên (cả nhóm nhận và gán tay đều trống).")
     files = {}

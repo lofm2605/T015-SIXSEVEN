@@ -1,4 +1,4 @@
-"""m28 — pipeline nhãn nháp landmark khuôn mặt: prepare → review → push → collect (all = cả chuỗi).
+"""m28 — pipeline nhãn nháp landmark khuôn mặt: prepare → review → push → collect (all = prepare → review → push).
 
     python tool\\m28.py prepare --run R1610 --list data\\r_list_1610.csv --images <WFLW_images> --box auto
     python tool\\m28.py review  --run R1610 --review ui --reviewer P5
