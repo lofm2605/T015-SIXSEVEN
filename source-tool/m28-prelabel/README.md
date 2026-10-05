@@ -105,9 +105,16 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 - Ra: `runs/<run>/…` (ảnh chồng, cờ, `triage_<Pk>.csv`), task CVAT `demo-…`, file xuất `raw/<task>_<Pk>_<ngày>.xml`.
 
 ## Đã thử trên
-- Chỉ test dữ liệu giả (`tests/`) trên Linux, Python 3.11, bằng landmarker/mapping/push/collect giả.
-- **Chưa chạy**: MediaPipe thật (`make_landmarker`, `run_mp`), Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả có nhập
-  được XML `<skeleton>` không), `review_app.py`, `push`/`collect` thật, ảnh WFLW thật, CSV do Excel lưu.
+- Test dữ liệu giả (`tests/`) trên Linux, Python 3.11, bằng landmarker/mapping/push/collect giả.
+- **Ảnh WFLW thật, MediaPipe thật** (5/10/2026, Linux cloud, Python 3.11, mediapipe 1.0.1, `face_landmarker.task`
+  float16; cần `libegl1`, `libgles2` trên Linux): bước `crop` + `mediapipe` (ảnh gốc + ảnh lật).
+  - 616 mặt của `manifest.csv`, `--box wflw`: thấy mặt **592/616** (96,1%); 24 mặt không thấy (F 6, Tdev 3, Ttest 7,
+    G 2, X 3, D 3) sau khi thử thêm viền xám; P 0/16. Chạy khoảng 50 giây trên CPU.
+  - Tập giống R (train, ảnh một mặt, mặt lớn ≥ 25% cạnh ngắn; 40 mặt, seed 18), `--box auto`: **40/40** thấy mặt;
+    hộp tự dò so với hộp WFLW có IoU trung vị 0,70, 2/40 mặt dưới 0,5. Xem bằng mắt: 478 điểm nằm đúng trên mặt.
+- **Chưa chạy**: `map50`, `flags`, `autoqc`, `overlays`, `push` trên dữ liệu thật (chờ `mapping.py` + config 50 điểm của P3),
+  Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả có nhập được XML `<skeleton>` không), `review_app.py`, `collect` thật,
+  CSV do Excel lưu.
 - Cập nhật sau thí nghiệm 14–15/10 và lượt chạy tập R (16–18/10): thời gian trước/sau, số nháp hỏng trang rà soát bắt được.
 
 ## Giới hạn

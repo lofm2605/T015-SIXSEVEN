@@ -61,7 +61,7 @@ def _need_file(path, why):
     return path
 
 
-def make_landmarker(model_path, num_faces=1):
+def make_landmarker(model_path, num_faces=5):
     alt = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), os.path.basename(model_path))
     if not os.path.exists(model_path) and os.path.exists(alt):      # gói giao khách: model nằm cạnh m28.py
         model_path = alt
@@ -82,7 +82,21 @@ def run_mp(lm, rgb):
     if not res.face_landmarks:
         return None
     h, w = rgb.shape[:2]
-    return [[p.x * w, p.y * h] for p in res.face_landmarks[0]]
+    faces = [[[p.x * w, p.y * h] for p in face] for face in res.face_landmarks]
+    return max(faces, key=lambda f: np.ptp(np.asarray(f), axis=0).prod())   # mặt lớn nhất
+
+
+def run_mp_padded(lm, rgb, run=None):
+    """Như run_mp; không thấy mặt thì thêm viền xám (cạnh dài / 4) rồi thử lại, toạ độ trả về theo ảnh gốc."""
+    run = run or run_mp                 # tra tên lúc gọi để test thay được run_mp
+    pts = run(lm, rgb)
+    if pts is not None:
+        return pts
+    pad = max(rgb.shape[:2]) // 4
+    padded = np.full((rgb.shape[0] + 2 * pad, rgb.shape[1] + 2 * pad, 3), 128, np.uint8)
+    padded[pad:pad + rgb.shape[0], pad:pad + rgb.shape[1]] = rgb
+    pts = run(lm, padded)
+    return None if pts is None else (np.asarray(pts, float) - pad).tolist()
 
 
 def detect_box(lm, rgb, run=None):
@@ -215,11 +229,11 @@ def mediapipe(args, out, landmarker_factory=None):
     try:
         for name in meta:
             rgb = cv2.cvtColor(cv2.imread(os.path.join(rd, "crop", "images", name + ".png")), cv2.COLOR_BGR2RGB)
-            orig = run_mp(lm, rgb)
+            orig = run_mp_padded(lm, rgb)
             if orig is None:
                 no_face.append((name, "khong_thay_mat"))
                 continue
-            pred[name] = dict(orig=orig, flip=run_mp(lm, rgb[:, ::-1]))   # flip: toạ độ ảnh lật, chưa bỏ lật
+            pred[name] = dict(orig=orig, flip=run_mp_padded(lm, rgb[:, ::-1]))   # flip: toạ độ ảnh lật, chưa bỏ lật
     finally:
         if hasattr(lm, "close"):
             lm.close()
