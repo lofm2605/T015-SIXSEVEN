@@ -64,7 +64,9 @@ TT_VI = {c: t for c, t, _i in TRANG_THAI}
 TT_ICON = {c: i for c, _t, i in TRANG_THAI}
 TT_COLOR = {"mo": "#dc2626", "dang_ban": "#d97706", "da_chot": "#16a34a"}       # như STATUS_COLOR của review_app: đỏ / vàng / xanh
 DECISION_VI = {"nhan": "Nhận", "gan_tay": "Gán tay", "bo": "Bỏ ảnh", "": ""}
-NGUON_VI = {"wflw": "WFLW", "khong_ro": "không rõ nguồn"}
+NGUON_VI = {"yawdd": "YawDD", "drivface": "DrivFace", "yawdd+drivface": "YawDD + DrivFace", "wflw": "WFLW (cũ)", "khong_ro": "không rõ nguồn"}
+NGUON_BO_DU_LIEU = ("yawdd", "drivface", "yawdd+drivface", "wflw")     # nguồn là một bộ dữ liệu đã biết (ảnh chồng được phép kèm); còn lại là khong_ro
+NGUON_IN_CABIN = ("yawdd", "drivface")                                 # giá trị cột `source` của manifest in-cabin (QĐ-001)
 
 MAX_GOI = 20 * 1024 * 1024         # tổng dung lượng một gói (dưới giới hạn upload 25 MB của trang)
 MAX_CA = 500                       # số ca tối đa mỗi gói
@@ -372,7 +374,8 @@ def member_rows(runs_root, nguoi, luot=None):
 _MANIFEST = {}
 
 
-def _manifest_files(project_root):
+def _manifest_data(project_root):
+    """(tập `file` của data/manifest.csv, {file: source} hoặc None nếu manifest không có cột `source` = WFLW cũ); None nếu không đọc được manifest."""
     p = os.path.join(project_root, "data", "manifest.csv")
     try:
         m = os.path.getmtime(p)
@@ -382,11 +385,24 @@ def _manifest_files(project_root):
         try:
             with open(p, encoding="utf-8-sig", newline="") as f:
                 text = f.read()
-            files = {(r.get("file") or "").strip() for r in csv.DictReader(io.StringIO(text), delimiter=_delim(text))}
-            _MANIFEST[p] = (m, {x for x in files if x})
+            reader = csv.DictReader(io.StringIO(text), delimiter=_delim(text))
+            has_source = "source" in (reader.fieldnames or [])
+            files, src = set(), {}
+            for r in reader:
+                name = (r.get("file") or "").strip()
+                if name:
+                    files.add(name)
+                    if has_source:
+                        src[name] = (r.get("source") or "").strip().lower()
+            _MANIFEST[p] = (m, (files, src if has_source else None))
         except (OSError, csv.Error, UnicodeDecodeError):
             return None
     return _MANIFEST[p][1]
+
+
+def _manifest_files(project_root):
+    data = _manifest_data(project_root)
+    return None if data is None else data[0]
 
 
 def _run_faces(run_dir):
@@ -411,15 +427,26 @@ def _run_faces(run_dir):
 
 
 def run_source(run_dir, project_root):
-    """'wflw' chỉ khi lượt KHÔNG có inbox/ và MỌI mặt của lượt (tên X.png) có trong cột `file` của data/manifest.csv.
+    """Nguồn của một lượt, chỉ khi lượt KHÔNG có inbox/ và MỌI mặt của lượt (tên X.png) có trong cột `file` của data/manifest.csv:
+      * manifest có cột `source` (in-cabin): tập giá trị `source` của các mặt đó: 'yawdd', 'drivface' hoặc 'yawdd+drivface' (cả hai);
+        giá trị lạ hoặc trống ở một mặt thì 'khong_ro';
+      * manifest không có cột `source` (WFLW cũ): 'wflw' như trước.
     Còn lại (lượt Nạp ảnh, không có manifest, tên lạ, lượt rỗng) là 'khong_ro' = có thể là ảnh khách hàng."""
     if os.path.exists(os.path.join(run_dir, "inbox")):
         return "khong_ro"
-    files = _manifest_files(project_root)
+    data = _manifest_data(project_root)
     faces = _run_faces(run_dir)
-    if not files or not faces:
+    if not data or not data[0] or not faces:
         return "khong_ro"
-    return "wflw" if all(n + ".png" in files for n in faces) else "khong_ro"
+    files, src = data
+    if not all(n + ".png" in files for n in faces):
+        return "khong_ro"
+    if src is None:
+        return "wflw"
+    vals = {src.get(n + ".png", "") for n in faces}
+    if not vals or not vals <= set(NGUON_IN_CABIN):
+        return "khong_ro"
+    return "+".join(v for v in NGUON_IN_CABIN if v in vals)
 
 
 # ---------- ảnh ----------
@@ -486,7 +513,8 @@ def jpg_name(luot, anh, used):
 # ---------- xuất gói họp ----------
 def build_package(runs_root, project_root, nguoi, luot_filter=None, kem_anh=True, kem_ngoai_wflw=False, now=None):
     """Ghi outputs/ca_kho/ca_kho_<người>_<ddmm>.zip gồm đúng ba loại mục: manifest.json, ca_kho.csv, anh/<lượt>__<stem>.jpg.
-    Ảnh chỉ kèm cho lượt 'wflw' (trừ khi kem_ngoai_wflw). Trả dict(path, rel, so_ca, so_anh, bytes, replaced, luot, bo_anh, nguon).
+    Ảnh chỉ kèm cho lượt có nguồn là một bộ dữ liệu đã biết (yawdd, drivface, cả hai, hoặc wflw cũ), không kèm lượt 'khong_ro' trừ khi `kem_ngoai_wflw`
+    (tên tham số giữ như cũ vì có chỗ gọi: nghĩa là "kèm cả lượt không rõ nguồn"). Trả dict(path, rel, so_ca, so_anh, bytes, replaced, luot, bo_anh, nguon).
     0 ca -> RunError, không tạo file. Quá MAX_GOI sau khi thử ảnh nhỏ hơn -> RunError."""
     now = now or now_local()
     check_name(nguoi)
@@ -505,7 +533,7 @@ def build_package(runs_root, project_root, nguoi, luot_filter=None, kem_anh=True
     for l in luots:
         if not kem_anh:
             bo_anh[l] = "không chọn kèm ảnh"
-        elif nguon[l] != "wflw" and not kem_ngoai_wflw:
+        elif nguon[l] not in NGUON_BO_DU_LIEU and not kem_ngoai_wflw:
             bo_anh[l] = "không rõ nguồn (có thể là ảnh khách hàng)"
     out_dir = serve_dir(project_root)
     path = os.path.join(out_dir, f"ca_kho_{nguoi}_{ddmm(now)}.zip")
@@ -952,8 +980,8 @@ class Meeting:
         return by
 
     def face_id(self, c):
-        """Cùng một mặt: ảnh WFLW lấy theo tên ảnh (mọi người dùng chung data/manifest.csv), còn lại theo (lượt, ảnh)."""
-        return ("wflw", c["anh"]) if c.get("nguon") == "wflw" else (c["luot"], c["anh"])
+        """Cùng một mặt: ảnh của bộ dữ liệu (YawDD, DrivFace, WFLW cũ) lấy theo tên ảnh (mọi người dùng chung data/manifest.csv), còn lại theo (lượt, ảnh)."""
+        return ("bo_du_lieu", c["anh"]) if c.get("nguon") in NGUON_BO_DU_LIEU else (c["luot"], c["anh"])
 
     def same_face(self, key):
         c = self.cases.get(key)
@@ -1212,8 +1240,9 @@ def _fmt_dt(s):
 
 
 def warn_html():
-    return ('<div class="nap-box nap-warn"><b>Gói họp chứa ảnh mặt người thật.</b> Chỉ gửi trong đội (Drive riêng tư của đội hoặc gửi trực '
-            'tiếp), không đăng công khai, không đưa vào chat AI nào. Ảnh WFLW theo giấy phép CC BY-NC-ND: chỉ dùng nội bộ.</div>')
+    return ('<div class="nap-box nap-warn"><b>Gói họp chứa ảnh mặt người thật (tài xế trong xe).</b> Ảnh người lái xe là dữ liệu nhạy cảm, '
+            'YawDD và DrivFace chỉ cho dùng học tập, nghiên cứu: chỉ gửi trong đội (Drive riêng tư của đội hoặc gửi trực tiếp), không đăng '
+            'công khai, không giao bên thứ ba, không đưa vào chat AI nào. Ảnh khách hàng không bao giờ rời máy.</div>')
 
 
 def msg_html(text, level="info"):
@@ -1667,7 +1696,7 @@ def member_tab(gr, demo, store, ctx):
             m_ok = gr.Button("Xác nhận xoá", elem_id="ck-m-del-ok", visible=False)
             m_no = gr.Button("Không", elem_id="ck-m-del-no", visible=False)
     gr.Markdown("### Xuất gói họp")
-    kem = gr.Checkbox(value=True, label="Kèm ảnh chồng (lượt WFLW)", elem_id="ck-kem-anh")
+    kem = gr.Checkbox(value=True, label="Kèm ảnh chồng (lượt YawDD/DrivFace)", elem_id="ck-kem-anh")
     ngoai_box = gr.HTML(elem_id="ck-ngoai", apply_default_css=False)
     kem_ngoai = gr.Checkbox(value=False, label="Kèm cả ảnh của lượt không rõ nguồn", elem_id="ck-kem-ngoai")
     b_export = gr.Button("Xuất gói họp", variant="primary", elem_id="ck-export")

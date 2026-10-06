@@ -728,7 +728,7 @@ def test_dot_plan_counts_equal_steps_push(tmp_path, world, capsys):
 def write_manifest_incabin(rows, crops_dir=None):
     """rows: [(file, image, (h, w))]. Manifest in-cabin tối thiểu (cột image, face_idx, hộp, left/top/k); hộp mặt giữa ảnh.
     crops_dir: nếu có thì ghi luôn ảnh cắt của từng mặt vào đó (như gói dữ liệu, không có khung gốc)."""
-    from wflw import crop_geometry
+    from m28core.cat_mat import crop_geometry
     os.makedirs('data', exist_ok=True)
     with open('data/manifest.csv', 'w', newline='', encoding='utf-8') as f, open('data/list.csv', 'w', newline='', encoding='utf-8') as g:
         w, wl = csv.writer(f), csv.writer(g)
@@ -777,7 +777,7 @@ def test_old_wflw_columns_still_accepted(tmp_path, world):
 
 def test_only_crops_package_runs_with_images_data_crops(tmp_path, world):
     """Người trong đội chỉ có gói (ảnh cắt + manifest, không có khung gốc): --images data/crops dùng chính ảnh cắt."""
-    from wflw import square_crop
+    from m28core.cat_mat import square_crop
     imgs = tmp_path / 'imgs'
     write_images(imgs)
     rows = [(f'F_{i + 1:03d}.png', rel, SIZES[rel]) for i, rel in enumerate(SIZES)]

@@ -2,7 +2,7 @@
 
 Phần của P1 (crop, mediapipe, flags, overlays, review auto/excel, ghi XML) viết ở đây.
 Phần của người khác gọi qua module riêng, thiếu thì báo rõ tên module cần:
-  m28core.mapping.apply_map   (P3)  — 478 điểm → {tên điểm: [x, y]} ảnh cắt 512
+  m28core.mapping.apply_map   (P3)  — 478 điểm → {tên điểm: [x, y]} ảnh cắt 512 (chọn đỉnh MediaPipe trực tiếp theo `mp_idx` của config, QĐ-001)
   m28core.autoqc.run          (P4, tuỳ chọn) — QC 5 kiểm; thiếu thì chạy kiểm tối thiểu
   m28core.push.push           (P4)  — tạo task CVAT và nhập XML
   m28core.collect.collect     (P4)  — xuất nhãn từ task
@@ -23,7 +23,7 @@ from xml.sax.saxutils import quoteattr
 import numpy as np
 
 from m28core import loai_tru, phan_loai  # noqa: E402
-from wflw import SIDE_SCALE, square_crop
+from m28core.cat_mat import SIDE_SCALE, square_crop  # noqa: F401
 
 OUT = 512
 IMG_EXT = (".png", ".jpg", ".jpeg")

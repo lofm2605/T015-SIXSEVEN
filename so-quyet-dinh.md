@@ -14,6 +14,7 @@ cũ được gán theo cách cũ.
 | Mã | Quyết định | Ngày | Xuất phát từ | Trạng thái |
 |---|---|---|---|---|
 | [QĐ-001](#qđ-001) | Tập chính là in-cabin (YawDD + DrivFace), bỏ WFLW, dự án phi thương mại | 06/10/2026 | Chủ repo | Hiệu lực |
+| [QĐ-002](#qđ-002) | Ánh xạ 478→50 bằng chọn đỉnh MediaPipe trực tiếp | 06/10/2026 | QĐ-001 | Hiệu lực |
 
 **Trạng thái:** Hiệu lực · Bị thay bởi QĐ-xxx · Huỷ (ghi lý do)
 
@@ -40,6 +41,26 @@ cũ được gán theo cách cũ.
 - **Trạng thái:** Hiệu lực
 
 ---
+
+## QĐ-002
+
+**Ánh xạ 478→50 bằng chọn đỉnh MediaPipe trực tiếp**
+
+- **Ngày:** 06/10/2026
+- **Người tham gia:** chủ repo (chốt), P3, P2, P4 (chờ duyệt)
+- **Xuất phát từ:** QĐ-001
+- **Bối cảnh:** bỏ WFLW thì không còn đáp án 50 điểm để học phép khớp; ridge học trên WFLW lệch ở hàm và lông mày trên mặt tài xế. So 5 điểm DrivFace: bản mới tốt hơn ở khoé miệng (8,6 và 4,9 so với 10,5 và 6,3% IOD), ngang ở mũi, hơi kém ở tâm mắt.
+- **Các phương án đã cân nhắc:**
+  1. *Giữ ridge WFLW.* Loại: học trên dữ liệu đã bỏ.
+  2. *Học ridge trên nhãn in-cabin nhóm tự gán.* Chưa có nhãn; xét lại sau khi có tập gán tay.
+  3. *Chọn đỉnh trực tiếp.* **Chọn.** Đơn giản, không cần đáp án; nhược điểm: viền L co vào má khi mặt quay trên ~25–30°.
+- **Quyết định:** config version 2 (`mp_idx` thay `wflw`, `curve` là danh sách tên điểm); `config/mp_mirror478.json` là hoán vị gương; `flip_width` ước lượng không cần đáp án; công cụ WFLW dời vào `tool/legacy_wflw/`; đáp án đo là nhãn gán tay, đo bằng `tool/eval50.py`.
+- **Việc phải làm theo:**
+  - [ ] Duyệt đỉnh và `curve` p49/p50 (@P3)
+  - [ ] Chốt `t_flip` ngày 12/10, đề xuất 0,0464 (@P2)
+  - [ ] Dựng lại label CVAT bằng `face50_label.json` mới (@P4)
+  - [ ] Cập nhật bản Claude Docs (chủ repo)
+- **Trạng thái:** Hiệu lực
 
 ## Mẫu để copy
 

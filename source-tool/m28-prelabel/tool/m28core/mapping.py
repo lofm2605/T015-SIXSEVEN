@@ -1,19 +1,27 @@
-"""Đổi 478 điểm MediaPipe sang bộ điểm trong config (BẢN NHÁP cho P3). Chỉ dùng numpy.
+"""Đổi 478 điểm MediaPipe sang 50 điểm của config bằng CHỌN ĐỈNH trực tiếp (không học phép khớp nào). Chỉ dùng numpy.
 
-    apply_map(pts478, map, config, flipped=False) -> {tên điểm: [x, y]} theo toạ độ ảnh cắt 512, đúng thứ tự config
-    flipped=True: pts478 là kết quả MediaPipe trên ảnh lật ngang; hàm đổi sang 50 điểm, lấy x = flip_width - x
-                  rồi gán tên theo cặp đối xứng (cột `flip`), nên kết quả đã nằm trên ảnh gốc (đã "bỏ lật").
+    apply_map(pts478, map, config, flipped=False, width=None) -> {tên điểm: [x, y]} theo toạ độ ảnh cắt 512, đúng thứ tự config
+    flipped=True: pts478 là kết quả MediaPipe trên ảnh lật ngang; điểm n (đã bỏ lật) = [w - x, y] của đỉnh mp_idx(flip(n)) trên ảnh lật,
+                  với w = width nếu có, không thì map["flip_width"]. Kết quả nằm trên ảnh gốc, cùng tên điểm như bản không lật.
 
-`map` là nội dung config/map_mp50.json do tool/fit_map.py sinh ra. Config có thể là TẬP CON các điểm của map
-(bỏ bớt điểm thì không cần khớp lại); đổi chỉ số wflw của một điểm giữ nguyên tên thì apply_map báo lỗi.
+Vì sao chọn đỉnh (QĐ-001, QĐ-002 dự thảo): bỏ WFLW thì không còn đáp án 50 điểm để học phép khớp ridge như trước (ridge học trên WFLW lệch ở
+hàm và lông mày khi gặp mặt tài xế). Mỗi điểm của config là MỘT đỉnh MediaPipe (config `mp_idx`), nên điểm nháp nằm đúng trên lưới mặt
+của model, không có số học nào cần nhóm kiểm lại, và đổi định nghĩa một điểm chỉ là đổi một chỉ số.
 
-Quy ước toạ độ: pts478 theo pixel kiểu MediaPipe (x = p.x * width, biên pixel). Ảnh lật đúng nghĩa là x' = 512 - x, nhưng
-ridge học trên đáp án WFLW (quy ước tâm pixel) nên hằng số bỏ lật tốt nhất lệch khỏi 512 chút ít: fit_map.py ước lượng và
-ghi `flip_width` (thường ~511,3) vào map; apply_map dùng số đó khi không truyền `width`.
+Định dạng config/map_mp50.json (version 2, kind "vertex"), do tool/make_config.py sinh cùng m28_config.json:
+    {"version": 2, "kind": "vertex", "names": [tên điểm theo thứ tự config],
+     "points": {tên: {"mp_idx": đỉnh 0-477, "flip": tên điểm đối xứng}}, "flip_width": w, "meta": {...}}
+Không có mean478, ridge hay ma trận nào. Map kiểu cũ (ridge, có `mean478`/`W`) bị từ chối bằng ValueError rõ ràng.
+Config có thể là TẬP CON các điểm của map; `mp_idx` hoặc `flip` của một điểm trong config lệch với map thì báo lỗi (chạy lại make_config.py).
+
+Quy ước toạ độ: pts478 theo pixel kiểu MediaPipe (x = p.x * width, biên pixel). Ảnh lật đúng nghĩa là x' = width - x; `flip_width` là
+số ước lượng trên dữ liệu thật (make_config.py, mặt thẳng của tập F, không cần đáp án) và có thể lệch khỏi 512 chút ít.
+Ánh xạ cũ (ridge) nằm ở tool/legacy_wflw/mapping_ridge.py, chỉ để so sánh (tool/check_drivface.py).
 """
 import numpy as np
 
 OUT = 512
+N_VERT = 478
 
 
 def similarity(src, dst):
@@ -40,44 +48,52 @@ def from_mean(q, s, R, t):                         # khung hình trung bình -> 
     return (q - t) @ R / s
 
 
-def fit_ridge(X, Y, lam):
-    """X: (n, 2k) toạ độ k đỉnh gần nhất; Y: (n, 2) điểm đáp án; cùng khung trung bình."""
-    if lam <= 0:
-        raise ValueError("λ phải > 0")
-    mx, my = X.mean(0), Y.mean(0)
-    A = X - mx
-    W = np.linalg.solve(A.T @ A + lam * np.eye(A.shape[1]), A.T @ (Y - my))
-    return mx, W, my                               # dự đoán: (X_moi - mx) @ W + my
+def _check_map(mp_map):
+    if not isinstance(mp_map, dict):
+        raise ValueError("map_mp50.json không phải đối tượng JSON")
+    if "mean478" in mp_map or any(isinstance(v, dict) and "W" in v for v in (mp_map.get("points") or {}).values()) \
+            or mp_map.get("version") != 2 or mp_map.get("kind") != "vertex":
+        raise ValueError("map_mp50.json là bản cũ (ánh xạ ridge học trên WFLW, đã lỗi thời theo QĐ-001): "
+                         "chạy lại tool\\make_config.py để sinh map version 2 (chọn đỉnh)")
+    if not isinstance(mp_map.get("points"), dict) or not isinstance(mp_map.get("names"), list):
+        raise ValueError("map_mp50.json thiếu 'names' hoặc 'points': chạy lại tool\\make_config.py")
 
 
-def map_points(pts478, mp_map):
-    """478 điểm (toạ độ pixel bất kỳ) -> {tên: [x, y]} cho MỌI điểm của map, cùng toạ độ đầu vào."""
-    pts = np.asarray(pts478, float)
-    if pts.shape != (len(mp_map["mean478"]), 2):
-        raise ValueError(f"cần {len(mp_map['mean478'])} điểm MediaPipe, nhận {pts.shape}")
-    s, R, t = similarity(pts, np.asarray(mp_map["mean478"], float))
-    out = {}
-    for name in mp_map["names"]:
-        m = mp_map["points"][name]
-        x = to_mean(pts[m["idx"]], s, R, t).reshape(-1)
-        y = (x - np.asarray(m["mx"])) @ np.asarray(m["W"]) + np.asarray(m["my"])
-        out[name] = from_mean(y[None], s, R, t)[0]
+def vertex_table(mp_map, config):
+    """[(tên, mp_idx, tên đối xứng)] cho các điểm của config, đã kiểm khớp với map. ValueError nếu lệch."""
+    _check_map(mp_map)
+    out = []
+    for p in config["points"]:
+        n = p["name"]
+        m = mp_map["points"].get(n)
+        if m is None:
+            raise ValueError(f"map_mp50.json không có điểm {n}: chạy lại tool\\make_config.py")
+        if "mp_idx" not in p:
+            raise ValueError(f"điểm {n} trong config không có 'mp_idx' (config kiểu cũ?): chạy lại tool\\make_config.py")
+        if int(m["mp_idx"]) != int(p["mp_idx"]):
+            raise ValueError(f"điểm {n}: mp_idx của config ({p['mp_idx']}) lệch với map ({m['mp_idx']}): chạy lại tool\\make_config.py")
+        if m["flip"] != p["flip"]:
+            raise ValueError(f"điểm {n}: cặp flip của config ({p['flip']}) lệch với map ({m['flip']}): chạy lại tool\\make_config.py")
+        if p["flip"] not in mp_map["points"]:
+            raise ValueError(f"điểm {n}: cặp flip {p['flip']} không có trong map: chạy lại tool\\make_config.py")
+        out.append((n, int(m["mp_idx"]), p["flip"]))
     return out
 
 
 def apply_map(pts478, mp_map, config, flipped=False, width=None):
-    names = [p["name"] for p in config["points"]]
-    absent = [n for n in names if n not in mp_map["points"]]
-    if absent:
-        raise ValueError(f"map_mp50.json không có điểm {absent[:3]}...: chạy lại tool/fit_map.py")
-    defs = mp_map.get("defs") or {}
-    for p in config["points"]:
-        if p["name"] in defs and defs[p["name"]]["wflw"] != p["wflw"]:
-            raise ValueError(f"điểm {p['name']} đổi chỉ số wflw so với map: chạy lại tool/fit_map.py")
-    res = map_points(pts478, mp_map)
+    pts = np.asarray(pts478, float)
+    if pts.shape != (N_VERT, 2):
+        raise ValueError(f"cần {N_VERT} điểm MediaPipe dạng (478, 2), nhận {pts.shape}")
+    if not np.isfinite(pts).all():
+        raise ValueError("điểm MediaPipe có NaN/inf")
+    table = vertex_table(mp_map, config)
     if not flipped:
-        return {n: [float(res[n][0]), float(res[n][1])] for n in names}
+        return {n: [float(pts[i][0]), float(pts[i][1])] for n, i, _ in table}
     w = float(mp_map.get("flip_width", OUT) if width is None else width)
-    flip_of = {n: defs[n]["flip"] for n in defs} if defs else {p["name"]: p["flip"] for p in config["points"]}
-    back = {flip_of[n]: [w - float(res[n][0]), float(res[n][1])] for n in mp_map["names"]}   # bỏ lật + đổi tên theo cặp
-    return {n: back[n] for n in names}
+    idx = {n: int(mp_map["points"][n]["mp_idx"]) for n in mp_map["points"]}
+    # điểm n của ảnh gốc = đỉnh của điểm đối xứng trên ảnh lật, đổi x -> w - x
+    out = {}
+    for n, _, fl in table:
+        j = idx[fl]
+        out[n] = [w - float(pts[j][0]), float(pts[j][1])]
+    return out

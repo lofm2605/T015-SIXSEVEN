@@ -19,7 +19,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tool'))
 import check_manifest as cm  # noqa: E402
 import inc_ingest as ii  # noqa: E402
-from wflw import crop_geometry, square_crop  # noqa: E402
+from m28core.cat_mat import crop_geometry, square_crop  # noqa: E402
 
 W, H = 320, 240
 

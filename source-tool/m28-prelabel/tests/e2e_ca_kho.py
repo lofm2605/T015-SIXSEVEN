@@ -2,7 +2,7 @@
 
 Cần playwright và Chromium, KHÔNG nằm trong requirements, pytest không gom file này (tên không khớp test_*.py).
 Chỉ chạy trên Linux (dùng `lsof` để kiểm cổng chỉ bind 127.0.0.1). Cần một thư mục chạy (--work) có config/, data/ (có manifest.csv),
-runs/F5 (5 mặt WFLW đã prepare) và runs/NAP_001 (lượt từ tab Nạp ảnh, có inbox/), face_landmarker.task không bắt buộc. Các lượt chứa ảnh WFLW
+runs/F5 (5 mặt in-cabin hoặc WFLW cũ đã prepare) và runs/NAP_001 (lượt từ tab Nạp ảnh, có inbox/), face_landmarker.task không bắt buộc. Các lượt chứa ảnh WFLW
 nên chỉ để ngoài git. Ví dụ (Linux cloud):
 
     cd $W && PYTHONPATH=$S/pwlib PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python $M/tests/e2e_ca_kho.py --work $W --shots $S/ui_shots
@@ -14,7 +14,7 @@ Các bước (mỗi bước dùng app thật, proxy chết để chứng minh kh
   3  tab Ca khó: 4 ca, sửa, xoá (Không rồi Xác nhận), hộp đỏ về CKN, xuất gói (tải về, mở zip kiểm)
   4  runs/CKB người P3: 2 ca (một ca cùng ảnh F_001.png), xuất gói
   5  `review_app.py --nap P5`: tab Họp team nhập 2 gói + zip độc hại + gói trùng, lưới, nhóm, lọc, chi tiết, trạng thái, trình chiếu, mở lại phiên,
-     biên bản (P-001, QĐ-001 vì hai file repo đang trống)
+     biên bản (số P, QĐ tiếp theo theo problem-backlog.md và so-quyet-dinh.md hiện có trong repo)
   6  không có request nào ra ngoài 127.0.0.1
   7  ảnh chụp cakho_*.png vào --shots (desktop 1440x900, hẹp 420 px)
 """
@@ -256,6 +256,12 @@ def step2(pw, W, shots):
 
 
 # ---------- bước 3 ----------
+def nguon_cka(W):
+    """Nguồn mong đợi của lượt CKA (bản chép của F5) theo data/manifest.csv của thư mục chạy: yawdd, drivface, yawdd+drivface (manifest in-cabin) hoặc wflw (manifest cũ)."""
+    import ca_kho
+    return ca_kho.run_source(os.path.join(W, 'runs', 'CKA'), W)
+
+
 def step3(pw, pg, W, shots):
     log('\n== BƯỚC 3: tab Ca khó của P1 ==')
     page = pg.pg
@@ -265,7 +271,7 @@ def step3(pw, pg, W, shots):
     check('Gói họp chứa ảnh mặt người thật' in page.inner_text('#ck-warn'), 'có hộp cảnh báo riêng tư')
     box = page.inner_text('#ck-ngoai')
     check('CKN' in box and 'khách hàng' in box and page.locator('#ck-ngoai .nap-err').count() == 1, f'hộp đỏ nêu lượt CKN: {box[:90]!r}')
-    check(not page.locator('#ck-kem-ngoai input').is_checked() and page.locator('#ck-kem-anh input').is_checked(), 'mặc định: kèm ảnh WFLW bật, ảnh không rõ nguồn tắt')
+    check(not page.locator('#ck-kem-ngoai input').is_checked() and page.locator('#ck-kem-anh input').is_checked(), 'mặc định: kèm ảnh của bộ dữ liệu (YawDD/DrivFace/WFLW cũ) bật, ảnh không rõ nguồn tắt')
     page.wait_for_function("Array.from(document.querySelectorAll('#ck-list img')).filter(i => i.complete && i.naturalWidth > 0).length >= 3", timeout=20000)
     check(True, 'ảnh nhỏ của ca tải được (≥ 3)')
     pg.shot(shots, 'cakho_03_tab_desktop')
@@ -316,7 +322,7 @@ def step3(pw, pg, W, shots):
     with zipfile.ZipFile(out) as zf:
         names = sorted(zf.namelist())
         man = json.loads(zf.read('manifest.json'))
-        check(man['nguoi'] == 'P1' and man['so_ca'] == 4 and man['so_anh'] == 3 and man['nguon'] == {'CKA': 'wflw', 'CKN': 'khong_ro'}, f'manifest đúng: {man}')
+        check(man['nguoi'] == 'P1' and man['so_ca'] == 4 and man['so_anh'] == 3 and man['nguon'] == {'CKA': nguon_cka(W), 'CKN': 'khong_ro'}, f'manifest đúng: {man}')
         imgs = [n for n in names if n.startswith('anh/')]
         check(len(imgs) == 3 and all(n.startswith('anh/CKA__') for n in imgs) and set(names) - set(imgs) == {'manifest.json', 'ca_kho.csv'},
               f'gói chỉ có ảnh CKA, CKN không kèm ảnh: {names}')
@@ -359,7 +365,7 @@ def step4(pw, W, shots):
         check(len(rows) == 2 and rows[0]['anh'] == 'F_001.png' and rows[1]['anh'] == 'F_003.png' and {r['nguoi'] for r in rows} == {'P3'}, f'CKB: 2 ca của P3: {[(r["anh"], r["loai"]) for r in rows]}')
         pg.tab('Ca khó')
         page.wait_for_function("document.querySelectorAll('#ck-list .ck-mcard').length === 2", timeout=20000)
-        check('CKN' not in page.inner_text('#ck-ngoai') and page.locator('#ck-ngoai .nap-err').count() == 0, 'P3 chỉ có lượt WFLW: không có hộp đỏ')
+        check('CKN' not in page.inner_text('#ck-ngoai') and page.locator('#ck-ngoai .nap-err').count() == 0, 'P3 chỉ có lượt bộ dữ liệu: không có hộp đỏ')
         page.click('#ck-export')
         page.wait_for_selector('#ck-download', state='visible', timeout=30000)
         with page.expect_download(timeout=30000) as dl:
@@ -556,9 +562,13 @@ def step5(pw, W, shots, repo_hash):
         tag = re.search(r'hop_(\d{4})', sess_name).group(1)
         md = open(os.path.join(sd, f'bien_ban_{tag}.md'), encoding='utf-8').read()
         cs = list(csv.DictReader(open(os.path.join(sd, f'tong_hop_{tag}.csv'), encoding='utf-8-sig', newline='')))
-        check('P-001' in md and 'QĐ-001' in md and '## Dán vào problem-backlog.md' in md, 'biên bản có P-001 và QĐ-001 (hai file repo đang trống)')
-        check(len(cs) == n_cases and any(r['ma_qd'] == 'QĐ-001' for r in cs), f'CSV tổng hợp đủ {n_cases} dòng, có QĐ-001')
-        check('P-001' in page.inner_text('#hop-preview'), 'xem trước markdown trong trang')
+        import ca_kho
+        p0 = ca_kho.next_number(open(os.path.join(REPO, 'problem-backlog.md'), encoding='utf-8').read(), 'P')       # số tiếp theo theo hai file repo hiện có
+        q0 = ca_kho.next_number(open(os.path.join(REPO, 'so-quyet-dinh.md'), encoding='utf-8').read(), 'QĐ')
+        pc, qc = f'P-{p0:03d}', f'QĐ-{q0:03d}'
+        check(pc in md and qc in md and '## Dán vào problem-backlog.md' in md, f'biên bản có {pc} và {qc} (số tiếp theo của hai file repo)')
+        check(len(cs) == n_cases and any(r['ma_qd'] == qc for r in cs), f'CSV tổng hợp đủ {n_cases} dòng, có {qc}')
+        check(pc in page.inner_text('#hop-preview'), 'xem trước markdown trong trang')
         check(page.locator('#hop-file-md').is_visible() and page.locator('#hop-file-csv').is_visible(), 'hiện hai file để tải')
         gi = [sha(os.path.join(REPO, f)) for f in ('problem-backlog.md', 'so-quyet-dinh.md')]
         check(gi == repo_hash, 'problem-backlog.md và so-quyet-dinh.md không bị đụng tới')

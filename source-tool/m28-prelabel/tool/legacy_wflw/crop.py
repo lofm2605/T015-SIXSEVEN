@@ -1,7 +1,7 @@
-"""Cắt mặt 512 x 512 theo manifest.csv và ghi gt98.json (P1, 6/10).
-WFLW cũ, sẽ thay ở giai đoạn 2 (QĐ-001: tập chính là in-cabin YawDD + DrivFace).
+"""LỊCH SỬ, KHÔNG DÙNG (QĐ-001: bỏ WFLW). Cắt mặt 512 x 512 theo manifest.csv và ghi gt98.json (P1, 6/10).
+Đã thay bằng tool/inc_ingest.py (in-cabin); giữ để tham khảo.
 
-    python tool\\crop.py --manifest data\\manifest.csv --annotations <list_98pt...> --images <WFLW_images> --out data
+    python tool\\legacy_wflw\\crop.py --manifest data\\manifest.csv --annotations <list_98pt...> --images <WFLW_images> --out data
 
 Ra data\\crops\\<file>.png và data\\gt98.json (98 điểm theo toạ độ ảnh cắt, khoá là tên file).
 Ảnh mặt WFLW (CC BY-NC-ND): chỉ để trên máy và repo riêng tư.
