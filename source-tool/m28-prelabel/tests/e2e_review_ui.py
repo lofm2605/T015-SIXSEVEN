@@ -417,8 +417,13 @@ def phase_b(pw, W, shots, port, tri):
     bo = sorted((n, w) for n, (d, w) in tri.items() if d == 'bo')                 # rejected.csv ghi tên không đuôi
     xml = open(os.path.join(run, 'xml', 'prelabel.xml'), encoding='utf-8').read()
     names = sorted(re.findall(r'<image id="\d+" name="([^"]+)"', xml))
-    check(names == [n + '.png' for n in nhan], f'prelabel.xml có {len(names)} <image> = số mặt Nhận ({nhan})')
-    check(sorted(open(os.path.join(run, 'push', 'manual_list.txt'), encoding='utf-8').read().split()) == tay, f'manual_list.txt = các mặt Gán tay {tay}')
+    ml = steps.read_manual_list(os.path.join(run, 'push', 'manual_list.txt'))
+    co_nhap = sorted(n for n, k in ml if k == 'co_nhap')
+    check(sorted(n for n, _k in ml) == tay, f'manual_list.txt = các mặt Gán tay {tay}')
+    check(names == sorted([n + '.png' for n in nhan] + co_nhap), f'prelabel.xml có {len(names)} <image> = mặt Nhận ({nhan}) + Gán tay có nháp ({co_nhap})')
+    check(all(k in ('co_nhap', 'anh_trong') for _n, k in ml) and (not co_nhap or all(
+        re.search(r'<image id="\d+" name="' + re.escape(n) + r'".*?</image>', xml, re.S).group(0).count('>true<') == 50 for n in co_nhap)),
+        'mặt Gán tay có nháp: đủ 50 điểm, mọi low_conf = true')
     rej = sorted((r_[0], r_[1]) for r_ in read_csv_rows(os.path.join(run, 'push', 'rejected.csv'))[1:])
     check(rej == bo, f'rejected.csv = các mặt Bỏ ảnh kèm lý do {bo}')
 

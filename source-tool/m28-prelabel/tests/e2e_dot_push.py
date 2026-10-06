@@ -31,6 +31,7 @@ CODE = os.path.abspath(os.path.join(HERE, '..'))
 sys.path.insert(0, HERE)
 import e2e_review_ui as base  # noqa: E402
 from e2e_review_ui import check, log, read_csv_rows, start, stop_all, wait_port  # noqa: E402
+from m28core import steps  # noqa: E402  (đã thêm tool/ vào sys.path ở e2e_review_ui): read_manual_list
 
 TOKEN = 'TOKEN-GIA-e2e-8f3k2m9q-KHONG-PHAI-THAT'
 URL = 'http://localhost:8080'
@@ -295,6 +296,17 @@ def run(pw, W, wflw, shots, port):
         back_to_list(pg)
         # ---------- 4. rà đợt Khoi ----------
         log('\n-- 4. rà đợt Khoi --')
+        # Một mặt của Khoi giả làm "MediaPipe không thấy mặt" (bỏ khỏi mp50.json/flags.json, thêm vào no_face.csv, còn ảnh cắt):
+        # mặt này chỉ chọn được Gán tay, và lên CVAT là ảnh trống; ba mặt còn lại có nháp.
+        kr = os.path.join(runs, 'Khoi')
+        no_draft = sorted(json.load(open(os.path.join(kr, 'crop', 'meta.json'), encoding='utf-8')))[-1]
+        for sub, fn in (('map50', 'mp50.json'), ('flags', 'flags.json')):
+            pth = os.path.join(kr, sub, fn)
+            dd = json.load(open(pth, encoding='utf-8'))
+            dd.pop(no_draft)
+            json.dump(dd, open(pth, 'w', encoding='utf-8'))
+        with open(os.path.join(kr, 'no_face.csv'), 'a', encoding='utf-8', newline='') as f:
+            f.write(f'{no_draft},khong_thay_mat,mediapipe\n')
         card(pg, 'Khoi').locator('button[data-act=ra]').click()
         pg.wait_for_function("document.title === 'Rà soát M28 · Khoi'", timeout=60000)
         pg.wait_for_selector('#info .face-name', timeout=60000)
@@ -306,11 +318,17 @@ def run(pw, W, wflw, shots, port):
         check(pg.locator('#btn-push').is_disabled(), 'còn mặt chưa rà: nút Đẩy lên CVAT khoá')
         pg.wait_for_function("(document.querySelector('#push-panel')?.innerText || '').includes('chưa rà')", timeout=15000)
         check(f'Còn {n_faces} mặt chưa rà' in pg.inner_text('#push-panel'), f'lý do khoá: {pg.inner_text("#push-panel")!r}')
-        keys = ['g', 'b', 'n', 'n']
+        draft_keys = iter(['g', 'b', 'n', 'n'])                  # mặt có nháp: Gán tay (có nháp), Bỏ, Nhận; mặt không có nháp: Gán tay (ảnh trống)
+        shot_nd = False
         for i in range(n_faces):
-            k = keys[i]
-            if k == 'n' and 'không có nháp' in pg.inner_text('#info'):
+            if 'không có nháp' in pg.inner_text('#info'):
                 k = 'g'
+                if not shot_nd:
+                    check('Gán tay mặt này lên CVAT là ảnh trống' in pg.inner_text('#info'), 'mặt không có nháp: cảnh báo ghi rõ Gán tay là ảnh trống')
+                    shot('gantay_khong_nhap.png')
+                    shot_nd = True
+            else:
+                k = next(draft_keys)
             pg.keyboard.press(k)
             ui.wait_done(i + 1)
             if i == 0:
@@ -320,6 +338,8 @@ def run(pw, W, wflw, shots, port):
         decs = [r[1] for r in tri[1:]]
         check('gan_tay' in decs and 'bo' in decs, f'đã rà hết, có Gán tay và Bỏ: {decs}')
         n_nhan, n_tay, n_bo = decs.count('nhan'), decs.count('gan_tay'), decs.count('bo')
+        check(shot_nd and n_tay == 2 and n_nhan == 1 and n_bo == 1, f'Khoi: 1 Nhận, 2 Gán tay (1 có nháp, 1 ảnh trống), 1 Bỏ: {decs}')
+        shot('gantay_guide.png')
         # bấm Xong TRƯỚC khi đẩy: trang tải lại một lần, vẫn còn server, Đẩy lên CVAT và tab Các đợt dùng được sau Xong
         base.click_xong(ui)
         check(os.path.exists(os.path.join(runs, 'Khoi', 'review', 'done.txt')), 'Khoi: bấm Xong ghi review/done.txt')
@@ -344,6 +364,9 @@ def run(pw, W, wflw, shots, port):
                                 "r.querySelector('td').innerText])"))
         nums = [int(next(v for k, v in rows.items() if k.startswith(w)).split()[0]) for w in ('Mặt Nhận', 'Mặt Gán tay', 'Mặt Bỏ')]
         check(nums == [n_nhan, n_tay, n_bo], f'hộp xác nhận đúng số Nhận/Gán tay/Bỏ {nums} == {[n_nhan, n_tay, n_bo]}')
+        gt = next(v for k, v in rows.items() if k.startswith('Mặt Gán tay'))
+        check('1 có nháp' in gt and 'low_conf' in gt and '1 ảnh trống' in gt, f'hộp xác nhận tách Gán tay có nháp / ảnh trống: {gt!r}')
+        shot('gantay_confirm.png')
         check(int(rows['Số job dự kiến'].split()[0]) == -(-n_nhan // 8) + (1 if n_tay else 0), f'hộp xác nhận ghi số job dự kiến: {rows["Số job dự kiến"]!r}')
         shot('push_confirm.png')
         before_csv = open(os.path.join(runs, 'Khoi', 'review', 'triage_E2E.csv'), encoding='utf-8').read()
@@ -382,6 +405,22 @@ def run(pw, W, wflw, shots, port):
         check([t['name'] for t in st['tasks']] == ['demo-Khoi'], f'CVAT giả có đúng một task demo-Khoi: {[t["name"] for t in st["tasks"]]}')
         check(n_calls(state, 'tasks.create_from_data') == 1 and n_calls(state, 'Task.import_annotations') == 1, 'đúng một lần tạo task, đúng một lần nhập nhãn')
         card_txt = pg.inner_text('#push-panel')
+        check('1 có nháp' in card_txt and '1 ảnh trống' in card_txt and 'Gán tay có nháp: 1/1' in card_txt, f'thẻ kết quả tách Gán tay: {card_txt[:300]!r}')
+        shot('gantay_ket_qua.png')
+        check(ps['phien_ban'] == 2 and ps['so_anh'] == dict(nhan=1, gan_tay=2, gan_tay_co_nhap=1, gan_tay_trong=1) and len(ps['gan_tay_co_nhap']) == 1,
+              f'push.json bản 2 ghi so_anh và gan_tay_co_nhap: {ps["so_anh"]} {ps["gan_tay_co_nhap"]}')
+        ml = steps.read_manual_list(os.path.join(runs, 'Khoi', 'push', 'manual_list.txt'))
+        check([k for _n, k in ml] == ['co_nhap', 'anh_trong'] and [n for n, k in ml if k == 'co_nhap'] == ps['gan_tay_co_nhap'],
+              f'manual_list.txt ghi đúng loại (có nháp trước): {ml}')
+        ann = st['tasks'][0]['annotations']['by_name']
+        ten_trong = [n for n, k in ml if k == 'anh_trong'][0]
+        ten_nhap = ps['gan_tay_co_nhap'][0]
+        check(ten_trong not in ann and len(ann[ten_nhap]) == 1 and len(ann[ten_nhap][0]['points']) == 50 and
+              all(pt['low_conf'] == 'true' for pt in ann[ten_nhap][0]['points']),
+              'CVAT giả: Gán tay có nháp có 50 điểm toàn low_conf true; Gán tay ảnh trống không có nhãn')
+        check(len(ann) == 2, f'CVAT giả: chỉ 2 ảnh có nhãn (1 Nhận + 1 Gán tay có nháp): {sorted(ann)}')
+        check(re.search(r'\tpush\t\w+\t[\d.]+s\tgan_tay co_nhap=1 anh_trong=1', open(os.path.join(runs, 'Khoi', 'log.txt'), encoding='utf-8').read()) is not None,
+              'log.txt ghi chi tiết bước push: gan_tay co_nhap=1 anh_trong=1')
         link = pg.locator('#push-panel a.push-link')
         check(link.get_attribute('href') == f'{URL}/tasks/{ps["task_id"]}' and link.get_attribute('target') == '_blank' and 'noopener' in link.get_attribute('rel'),
               'thẻ kết quả có link CVAT mở tab mới, rel=noopener')
@@ -546,6 +585,7 @@ def run(pw, W, wflw, shots, port):
         pg.wait_for_selector('#push-panel .push-done', timeout=20000)
         check(overflow(pg) <= 1, f'420 px: tab Rà soát có khung Đẩy không cuộn ngang ({overflow(pg)})')
         shot('push_review_narrow.png')
+        shot('gantay_hep.png')
         pg.set_viewport_size({'width': 1440, 'height': 900})
         pg.wait_for_timeout(300)
         # ---------- 10. bí mật, mạng ----------

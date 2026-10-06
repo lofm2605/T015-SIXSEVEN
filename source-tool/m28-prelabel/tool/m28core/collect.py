@@ -9,6 +9,7 @@ Mọi đường ghi nằm trong raw/ và outputs/ của thư mục chạy.
 import datetime
 import glob
 import importlib
+import json
 import os
 import re
 import sys
@@ -82,20 +83,52 @@ def latest_raw_files(task, raw_dir=RAW):
     return {w: p for w, (_k, p) in sorted(best.items())}
 
 
-def analyze(xml_bytes, point_names):
-    """Số liệu của một file xuất: ảnh, mặt có skeleton, mặt đủ điểm, điểm thiếu, điểm low_conf bật."""
+def push_info(task, runs_dir="runs"):
+    """Thông tin Gán tay của task demo-… từ runs/*/push.json bản 2 (phien_ban >= 2) có `task` trùng tên: dict(run, tay_nhap=[tên file],
+    n_tay_nhap, n_tay_trong) hoặc None (không có lượt nào, hoặc là lượt cũ/task thí nghiệm m28-…: báo cáo giữ như cũ). Chỉ đọc."""
+    best = None
+    for p in glob.glob(os.path.join(runs_dir, "*", "push.json")):
+        try:
+            with open(p, encoding="utf-8") as f:
+                st = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(st, dict) or st.get("task") != task or not isinstance(st.get("phien_ban"), int) or st["phien_ban"] < 2:
+            continue
+        co = st.get("gan_tay_co_nhap")
+        if not isinstance(co, list):
+            continue
+        sa = st.get("so_anh") if isinstance(st.get("so_anh"), dict) else {}
+        key = str(st.get("cap_nhat") or "")
+        if best is None or key > best[0]:
+            tong = sa.get("gan_tay") if isinstance(sa.get("gan_tay"), int) else len(co)
+            best = (key, dict(run=os.path.basename(os.path.dirname(p)), tay_nhap=[str(x) for x in co], n_tay_nhap=len(co),
+                              n_tay_trong=max(tong - len(co), 0)))
+    return best[1] if best else None
+
+
+def analyze(xml_bytes, point_names, tay_nhap=None):
+    """Số liệu của một file xuất: ảnh, mặt có skeleton, mặt đủ điểm, điểm thiếu, điểm low_conf bật.
+    tay_nhap (tên file các mặt Gán tay có nháp, từ push.json bản 2): thêm n_low_on_nhan / n_low_on_tay (low_conf bật ở mặt Gán tay có nháp)."""
     ann = io_.parse_annotations(xml_bytes)
     need = set(point_names)
-    n_face = n_full = miss = low_on = 0
-    for im in ann.values():
+    n_face = n_full = miss = low_on = low_tay = 0
+    gan = set(tay_nhap or ())
+    for name, im in ann.items():
         for sk in im["skeletons"]:
             n_face += 1
             have = {n for n, p in sk["points"].items() if p.get("x") is not None}
             if have == need:
                 n_full += 1
             miss += len(need - have)
-            low_on += sum(1 for p in sk["points"].values() if p.get("low_conf") == "true")
-    return dict(n_images=len(ann), n_face=n_face, n_full=n_full, n_missing=miss, n_low_on=low_on)
+            k = sum(1 for p in sk["points"].values() if p.get("low_conf") == "true")
+            low_on += k
+            if name in gan:
+                low_tay += k
+    res = dict(n_images=len(ann), n_face=n_face, n_full=n_full, n_missing=miss, n_low_on=low_on)
+    if tay_nhap is not None:
+        res.update(n_low_on_nhan=low_on - low_tay, n_low_on_tay=low_tay)
+    return res
 
 
 def _qc_line(paths, out_dir):
@@ -235,12 +268,17 @@ def collect(args):
             lines += ["Chưa có file nhãn nào.", ""]
             continue
         for who, path in files[name].items():
+            pinfo = push_info(name) if name.startswith(io_.SAFE_PREFIX) else None        # chỉ task demo-… của m28.py push bản mới
             with open(path, "rb") as f:
-                st = analyze(f.read(), point_names)
+                st = analyze(f.read(), point_names, pinfo["tay_nhap"] if pinfo else None)
             all_paths.append(path)
             lines += [f"- Người: **{who}** · file `{path}`",
                       f"  - Ảnh: {st['n_images']} · mặt có skeleton: {st['n_face']} · mặt đủ {len(point_names)} điểm: {st['n_full']}"
                       f" · điểm thiếu: {st['n_missing']} · điểm low_conf đang bật: {st['n_low_on']}"]
+            if pinfo:
+                lines += [f"  - Gán tay: {pinfo['n_tay_nhap']} có nháp, {pinfo['n_tay_trong']} ảnh trống (theo runs\\{pinfo['run']}\\push.json)",
+                          f"  - low_conf đang bật: {st['n_low_on_nhan']} ở mặt Nhận · {st['n_low_on_tay']} ở mặt Gán tay có nháp "
+                          "(bật sẵn từ máy, người gán chưa tắt)"]
             jobs = job_rows.get(name) or _jobs_from_txt(os.path.splitext(path)[0] + ".txt")
             if jobs is None:
                 lines.append("  - Chưa có thông tin job (không có file .txt cạnh file xuất).")

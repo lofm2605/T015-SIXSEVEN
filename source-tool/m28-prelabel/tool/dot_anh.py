@@ -157,6 +157,12 @@ def read_meta(run_dir):
     return d if isinstance(d, dict) else {}
 
 
+def read_mp50(run_dir):
+    """mp50.json (nháp 50 điểm của máy: {tên: {orig, flip}}) hoặc {}; đọc một lần cho mỗi (mtime, size). Không sửa kết quả trả về."""
+    d = _cached(os.path.join(run_dir, "map50", "mp50.json"), _jload)
+    return d if isinstance(d, dict) else {}
+
+
 def read_mp50_names(run_dir):
     d = _cached(os.path.join(run_dir, "map50", "mp50.json"), _jload)
     return set(d) if isinstance(d, dict) else set()

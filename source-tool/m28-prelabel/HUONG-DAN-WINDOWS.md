@@ -82,6 +82,8 @@ và có `runs\F5\xml\prelabel.xml` (5 mặt × 50 điểm). Lần chạy này `l
 python tool\m28.py review --run F5 --reviewer P1 --force review
 ```
 Trình duyệt tự mở http://127.0.0.1:7860 (chỉ máy bạn truy cập được). Chọn lý do **trước**, rồi bấm **Nhận (N) / Gán tay (G) / Bỏ ảnh (B)**; Hoàn tác (Z), ← → để chuyển mặt.
+**Gán tay** đưa mặt lên CVAT ở job riêng **kèm nháp, mọi điểm đánh dấu low_conf**: kiểm kỹ từng điểm, giữ điểm đúng, sửa điểm sai (mặt không có nháp thì lên **ảnh trống**). Phân vân Nhận/Gán tay thì chọn Nhận.
+**"Gán tay" trên trang rà soát khác điều kiện "gán tay" của thí nghiệm.** Nút Gán tay chỉ ảnh hưởng task `demo-…` do `m28.py push` tạo: mặt lên job riêng kèm nháp, mọi điểm low_conf. Thí nghiệm bấm giờ 14–15/10 dùng task `m28-manual` (không nháp) và `m28-assisted` khôi phục từ `backups\`, không đi qua nút này nên không đổi. Không dùng số đo trên task `demo-…` làm mốc "gán tay" của thí nghiệm.
 Rà hết thì bấm **Xong** (trang tải lại, hiện dải xanh; sau đó vẫn Đẩy lên CVAT, xem Các đợt, xuất Ca khó được), xong việc bấm **Đóng trang rà soát** ở đầu trang rồi xác nhận để lệnh trong cmd đi tiếp. Kết quả nằm ở `runs\F5\review\triage_P1.csv`. Chỉ mở **một tab**. Không chia sẻ cổng này cho ai.
 Không có Gradio hoặc trang lỗi: dùng `--review excel` (mở `runs\F5\autoqc\autoqc.csv` bằng Excel, điền cột `decision` = nhan / gan_tay / bo, lưu CSV UTF-8 thành `runs\F5\review\triage_P1.csv`).
 
