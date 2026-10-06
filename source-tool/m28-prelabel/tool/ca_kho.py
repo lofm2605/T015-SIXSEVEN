@@ -1574,8 +1574,10 @@ def mark_panel(gr, demo, store, ctx, shown):
     keep = gr.update()
 
     def on_open(sh):
+        if ctx.closing:
+            return hide(nap_anh.CLOSING_MSG, "info", sh) + (keep,) * 4
         if store.finished:
-            return hide("Đã bấm Xong, trang sắp tắt: không ghi thêm được.", "info", sh) + (keep,) * 4
+            return hide("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).", "info", sh) + (keep,) * 4
         f = face_of(sh)
         if not sh or f is None:
             return hide("Chưa có mặt nào đang xem.", "warn", sh) + (keep,) * 4
@@ -1587,8 +1589,10 @@ def mark_panel(gr, demo, store, ctx, shown):
                 gr.update(value=r["loai"] if r else None), gr.update(choices=choices, value=vals), gr.update(value=r["ghi_chu"] if r else ""))
 
     def on_save(sh, op, lo, dm, nt):
+        if ctx.closing:
+            return hide(nap_anh.CLOSING_MSG, "info", sh)
         if store.finished:
-            return hide("Đã bấm Xong, trang sắp tắt: không ghi thêm được.", "info", sh)
+            return hide("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).", "info", sh)
         if not op or sh != op:
             return hide("Ảnh đã đổi, mở lại Ca khó.", "warn", sh)
         f = face_of(op)
@@ -1608,8 +1612,10 @@ def mark_panel(gr, demo, store, ctx, shown):
         return hide("", "info", sh)
 
     def on_unmark(sh, op, arm):
+        if ctx.closing:
+            return hide(nap_anh.CLOSING_MSG, "info", sh)
         if store.finished:
-            return hide("Đã bấm Xong, trang sắp tắt: không ghi thêm được.", "info", sh)
+            return hide("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).", "info", sh)
         if not op or sh != op:
             return hide("Ảnh đã đổi, mở lại Ca khó.", "warn", sh)
         if not arm:
@@ -1716,6 +1722,8 @@ def member_tab(gr, demo, store, ctx):
     pick_outs = [edit, m_loai, m_diem, m_note, m_del, m_ok, m_no]
 
     def on_save(v, luot, lo, dm, nt):
+        if ctx.closing:
+            return render(luot or "", v, nap_anh.CLOSING_MSG)
         l, a = split_pick(v)
         if not l:
             return render(luot or "", None, "Chọn một ca trước.")
@@ -1739,7 +1747,9 @@ def member_tab(gr, demo, store, ctx):
     def on_del_ok(v, luot):
         l, a = split_pick(v)
         msg = "Chọn một ca trước."
-        if l:
+        if ctx.closing:
+            msg = nap_anh.CLOSING_MSG
+        elif l:
             try:
                 msg = f"Đã xoá ca {l}/{a}." if delete_mark(os.path.join(ctx.runs_root, l), ctx.reviewer, a, runs_root=ctx.runs_root) else "Ca này không còn nữa."
             except RunError as ex:
@@ -1748,6 +1758,8 @@ def member_tab(gr, demo, store, ctx):
         return render(luot or "", None, msg) + (gr.update(visible=True), gr.update(visible=False), gr.update(visible=False))
 
     def on_export(luot, kem_anh, kem_n):
+        if ctx.closing:
+            return msg_html(nap_anh.CLOSING_MSG, "warn"), gr.update(visible=False)
         try:
             info = build_package(ctx.runs_root, ctx.project_root, ctx.reviewer, [luot] if luot else None, bool(kem_anh), bool(kem_n))
         except RunError as ex:
