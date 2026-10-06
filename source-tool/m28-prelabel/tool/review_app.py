@@ -1295,6 +1295,18 @@ def prepare_env(run_dir, environ=None):
         env[k] = ",".join(have + [h for h in ("localhost", "127.0.0.1") if h not in have])
 
 
+XONG_RELOAD_JS = r"""() => {
+  const t0 = Date.now();
+  const tick = () => {
+    const bar = document.querySelector('#progress .m28-done-bar');
+    const msg = document.querySelector('#msg');
+    if (bar && msg && msg.innerText.indexOf('done.txt') >= 0) { setTimeout(() => location.reload(), 400); return; }
+    if (Date.now() - t0 < 4000 && !bar) { setTimeout(tick, 150); }
+  };
+  tick();
+}"""
+
+
 def _review_tab(gr, demo, store, ctx, header):
     """Tab "Rà soát" (bố cục và sự kiện như trước khi có tab Nạp ảnh; mọi elem_id giữ nguyên). `header` là thanh #progress đặt trên các tab."""
 
@@ -1423,6 +1435,9 @@ def _review_tab(gr, demo, store, ctx, header):
         b_bo.click(on_decide("bo"), [reason, shown, ses_state], all_outs, **opts),
         b_undo.click(on_undo, [shown, ses_state], all_outs, **opts),
         b_xong.click(on_xong, [ses_state], all_outs, **opts)]
+    # Xong ghi done.txt xong thì tải lại trang (server vẫn chạy) để mọi tab nạp lại trạng thái mới. Chỉ tải lại khi LẦN BẤM NÀY vừa ghi done.txt
+    # (thông báo có 'done.txt' và dải xanh đã hiện): lượt mở lại đã có done.txt, hay bấm khi đã khoá, không bao giờ tự tải lại -> không vòng lặp.
+    events[8].then(None, None, None, js=XONG_RELOAD_JS)
     for ev in events[4:8]:                      # sau mỗi quyết định/hoàn tác vẽ lại khung Đẩy lên CVAT (còn bao nhiêu mặt chưa rà)
         push_hook(ev)
     return types.SimpleNamespace(on_reselect=on_reselect, ses_state=ses_state, all_outs=all_outs, opts=opts,

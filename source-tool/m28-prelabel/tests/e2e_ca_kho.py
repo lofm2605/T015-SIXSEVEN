@@ -594,11 +594,47 @@ def step_review_pages(pw, W, shots):
         stop(p)
 
 
+def step_after_xong(pw, W, shots):
+    """Sau Xong: đánh dấu ca khó MỚI bị từ chối (chữ mới), nhưng tab Ca khó xem/sửa/xuất gói vẫn dùng được; trang không tắt."""
+    log('\n== sau Xong: Ca khó ==')
+    run = os.path.join(W, 'runs', 'CKA')
+    marks = os.path.join(run, 'ca_kho.csv')
+    p = run_app(['runs/CKA', 'P1'], W, 7887, os.path.join(shots, 'app_ck7.log'))
+    pg = Page(pw, 7887)
+    try:
+        pg.open()
+        page = pg.pg
+        for _ in range(8):
+            if page.locator('#btn-xong').is_enabled():
+                break
+            page.click('#btn-nhan' if page.locator('#btn-nhan').is_enabled() else '#btn-gantay')
+            page.wait_for_timeout(700)
+        check(page.locator('#btn-xong').is_enabled(), 'CKA rà hết, nút Xong bật')
+        base.click_xong(pg.ui)
+        n0 = len(read_marks(marks))
+        page.click('#btn-cakho')
+        page.wait_for_function("document.body.innerText.includes('Đã bấm Xong: không đánh dấu thêm ca khó mới')", timeout=10000)
+        check(not page.locator('#ck-panel').first.is_visible() and len(read_marks(marks)) == n0 and 'trang sắp tắt' not in page.inner_text('body'),
+              'sau Xong: đánh dấu ca khó mới bị từ chối với chữ mới, không ghi gì')
+        pg.tab('Ca khó')
+        page.wait_for_function("document.querySelectorAll('#ck-list .ck-mcard').length >= 1", timeout=20000)
+        page.click('#ck-export')
+        page.wait_for_selector('#ck-download', state='visible', timeout=30000)
+        check('ca' in page.inner_text('#ck-sum') and page.locator('#progress .m28-done-bar').is_visible(), 'sau Xong: xuất gói Ca khó được, dải xanh còn')
+        check(p.poll() is None, 'sau Xong: server vẫn chạy')
+        pg.shot(shots, 'cakho_05_sau_xong')
+    finally:
+        pg.close()
+        stop(p)
+        if os.path.exists(os.path.join(run, 'review', 'done.txt')):
+            os.remove(os.path.join(run, 'review', 'done.txt'))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--work', required=True)
     ap.add_argument('--shots', required=True)
-    ap.add_argument('--steps', default='12345')
+    ap.add_argument('--steps', default='123456')
     a = ap.parse_args()
     W, shots = os.path.abspath(a.work), os.path.abspath(a.shots)
     os.makedirs(shots, exist_ok=True)
@@ -614,6 +650,8 @@ def main():
             if '5' in a.steps:
                 step5(pw, W, shots, repo_hash)
             step_review_pages(pw, W, shots)
+            if '6' in a.steps:
+                step_after_xong(pw, W, shots)
         out = [u for u in ALL_REQUESTS if not u.startswith(('http://127.0.0.1', 'data:', 'blob:'))]
         check(out == [], f'không request nào ra ngoài 127.0.0.1 (đã thấy {len(ALL_REQUESTS)} request)')
     except (AssertionError, RuntimeError) as e:

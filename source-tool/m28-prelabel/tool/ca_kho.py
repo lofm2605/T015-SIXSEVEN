@@ -1577,6 +1577,7 @@ def mark_panel(gr, demo, store, ctx, shown):
         if ctx.closing:
             return hide(nap_anh.CLOSING_MSG, "info", sh) + (keep,) * 4
         if store.finished:
+            gr.Info("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).")
             return hide("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).", "info", sh) + (keep,) * 4
         f = face_of(sh)
         if not sh or f is None:
@@ -1592,6 +1593,7 @@ def mark_panel(gr, demo, store, ctx, shown):
         if ctx.closing:
             return hide(nap_anh.CLOSING_MSG, "info", sh)
         if store.finished:
+            gr.Info("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).")
             return hide("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).", "info", sh)
         if not op or sh != op:
             return hide("Ảnh đã đổi, mở lại Ca khó.", "warn", sh)
@@ -1615,6 +1617,7 @@ def mark_panel(gr, demo, store, ctx, shown):
         if ctx.closing:
             return hide(nap_anh.CLOSING_MSG, "info", sh)
         if store.finished:
+            gr.Info("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).")
             return hide("Đã bấm Xong: không đánh dấu thêm ca khó mới ở lượt này được (xem/sửa/xuất ở tab Ca khó vẫn dùng được).", "info", sh)
         if not op or sh != op:
             return hide("Ảnh đã đổi, mở lại Ca khó.", "warn", sh)

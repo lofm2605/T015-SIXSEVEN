@@ -1410,3 +1410,21 @@ def test_cli_nap_without_name_exits_2(tmp_path):
     assert r.returncode == 2 and 'Cách dùng' in r.stderr and 'Traceback' not in r.stderr
     r = run_app(tmp_path, '--nap', '../x')
     assert r.returncode == 2 and 'không hợp lệ' in r.stderr and not os.path.exists(os.path.join(tmp_path, 'runs'))
+
+
+def test_xong_reloads_page_once_and_new_session_sees_done(five):
+    """Xong ghi done.txt rồi trang tải lại (JS); phiên mới sau tải lại phải thấy dải xanh; JS chỉ tải lại khi lần bấm này vừa ghi done.txt."""
+    need_pil()
+    src = open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()
+    assert 'events[8].then(None, None, None, js=XONG_RELOAD_JS)' in src and 'b_xong.click(on_xong' in src
+    js = ra.XONG_RELOAD_JS
+    assert 'location.reload()' in js and "'done.txt'" in js and '.m28-done-bar' in js          # điều kiện chống vòng lặp
+    assert js.count('location.reload()') == 1
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    decide_all(s)
+    ra.act_finish(s, ra.new_session(s))
+    fresh = ra.new_session(s)                                          # phiên mới sau tải lại
+    v = ra.make_view(s, fresh)
+    assert 'm28-done-bar' in v['header'] and not v['nhan_ok'] and v['msg'] == ''     # không có 'done.txt' trong #msg -> JS không tải lại nữa
+    s2 = ra.Store(five, 'P2', clock=FakeClock())                       # lượt đã có done.txt từ trước: không bar, không tải lại
+    assert 'm28-done-bar' not in ra.make_view(s2, ra.new_session(s2))['header']

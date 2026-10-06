@@ -71,6 +71,24 @@ def confirm_close(pg):
     pg.wait_for_selector('.m28-closed', state='visible', timeout=10000)
 
 
+def click_xong(ui):
+    """Bấm Xong: trang phải tải lại ĐÚNG MỘT lần (server còn sống), mở lại đúng lượt, tab Rà soát, thấy dải xanh và nút Đóng."""
+    pg = ui.page
+    n0 = len(ui.loads)
+    pg.click('#btn-xong')
+    pg.wait_for_function("() => !!document.querySelector('#progress .m28-done-bar')", timeout=15000)
+    t = time.time()
+    while len(ui.loads) <= n0 and time.time() - t < 15:
+        pg.wait_for_timeout(100)
+    check(len(ui.loads) == n0 + 1, 'bấm Xong: trang tải lại sau khi ghi done.txt')
+    pg.wait_for_selector('#info .face-name', timeout=30000)
+    pg.wait_for_selector('#progress .m28-done-bar', state='visible', timeout=15000)
+    pg.wait_for_timeout(3000)
+    check(len(ui.loads) == n0 + 1, 'trang chỉ tải lại một lần (không vòng lặp reload)')
+    check(pg.locator('#tab-ra').is_visible() and pg.locator('#btn-dong').is_visible() and pg.locator('#btn-nhan').is_disabled(),
+          'sau tải lại: tab Rà soát, thấy nút Đóng, quyết định vẫn khoá')
+
+
 def big_fixed(pg):
     """Số phần tử position:fixed phủ gần hết khung nhìn (lớp chặn toàn màn hình)."""
     return pg.evaluate("""() => Array.from(document.querySelectorAll('body *')).filter(e => {
@@ -125,6 +143,8 @@ class Ui:
         self.browser = pw.chromium.launch()
         self.page = self.browser.new_page(viewport={'width': w, 'height': h})
         self.requests, self.errors = [], []
+        self.loads = []                              # mỗi lần trang tải xong (kể cả tải lại sau Xong)
+        self.page.on('load', lambda _p: self.loads.append(time.time()))
         self.page.on('request', lambda r: self.requests.append(r.url))
         self.page.on('pageerror', lambda e: self.errors.append(str(e)))
         self.page.on('console', lambda m: self.errors.append(m.text) if m.type == 'error' else None)
@@ -298,9 +318,8 @@ def phase_a(pw, W, shots, ports):
         check('Đã rà hết' in pg.inner_text('#msg'), 'rà hết: có dòng "Đã rà hết, bấm Xong"')
         check(not pg.locator('#btn-xong').is_disabled() and pg.inner_text('#btn-xong').strip() == 'Xong', 'nút Xong bật lên')
         pg.screenshot(path=os.path.join(shots, '03_desktop_xong.png'))
-        pg.click('#btn-xong')
         t = time.time()
-        pg.wait_for_function("document.querySelector('#msg').innerText.includes('done.txt')")
+        click_xong(ui)
         check(os.path.exists(os.path.join(run, 'review', 'done.txt')), 'bấm Xong: review/done.txt xuất hiện')
         check(pg.inner_text('#progress .m28-done-bar').strip() == DONE_BAR, 'bấm Xong: dải xanh ở đầu trang đúng chữ')
         check(pg.locator('#progress .m28-done-bar').get_attribute('role') == 'status', 'dải xanh có role=status')
@@ -374,9 +393,8 @@ def phase_b(pw, W, shots, port, tri):
         ui.open()
         check(ui.progress() == (5, 5) and not ui.page.locator('#btn-xong').is_disabled(), 'mở qua m28: tiến độ 5/5, nút Xong đang bật')
         check(not os.path.exists(os.path.join(run, 'review', 'done.txt')), 'm28 đã xoá done.txt cũ trước khi mở trang')
-        ui.page.click('#btn-xong')
-        ui.page.wait_for_function("document.querySelector('#msg').innerText.includes('done.txt')")
-        ui.page.wait_for_timeout(3000)
+        click_xong(ui)
+        check(os.path.exists(os.path.join(run, 'review', 'done.txt')), 'bấm Xong: done.txt có')
         check(p.poll() is None, 'sau Xong, `m28.py review` vẫn đang chờ (chưa bấm Đóng)')
         open_close_box(ui.page)
         confirm_close(ui.page)
@@ -620,8 +638,7 @@ def phase_e(pw, W, shots, port):
         pg.click('#close-confirm-cancel')
         pg.wait_for_selector('#close-confirm', state='hidden', timeout=10000)
         # Xong: dải xanh (không lớp phủ), tab cũ không ghi được, trang vẫn dùng được
-        pg.click('#btn-xong')
-        pg.wait_for_selector('#progress .m28-done-bar', state='visible', timeout=10000)
+        click_xong(ui)
         check(pg.inner_text('#progress .m28-done-bar').strip() == DONE_BAR, 'bấm Xong: dải xanh đúng chữ ở đầu trang')
         check(big_fixed(pg) == 0 and pg.locator('.m28-done, .m28-closed').count() == 0, 'không có lớp phủ chặn nào sau Xong')
         pg.screenshot(path=os.path.join(shots, 'after_05_xong_dai_xanh.png'))

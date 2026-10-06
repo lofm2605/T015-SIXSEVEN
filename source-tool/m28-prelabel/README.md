@@ -107,8 +107,17 @@ python tool\review_app.py --nap P5
 | `B` | Bỏ ảnh | `1`…`8` | Lý do: `LAT_GUONG`, `DON_CUC`, `LECH_VUNG`, `QUAY_CHE`, `NHIEU_MAT`, `KHONG_MAT`, `SAI_MAT`, `MO_NHO` |
 | `Z` | Hoàn tác lần bấm gần nhất | | |
 
-- **Xong** chỉ bật khi hết mặt chưa rà. Bấm Xong thì trang ghi `runs\<run>\review\done.txt` rồi **tự tắt sau 2 giây**, lệnh `m28.py review`/`all` đi tiếp,
-  không cần Ctrl+C. Đóng khi chưa bấm Xong (Ctrl+C, đóng cửa sổ cmd) thì không có `done.txt`, `m28` dừng ở bước review: gõ lại đúng lệnh để rà tiếp.
+- **Xong** chỉ bật khi hết mặt chưa rà. Bấm Xong thì trang ghi `runs\<run>\review\done.txt` (nguyên tử), khoá việc bấm quyết định / đánh dấu Ca khó mới rồi **tự tải lại một lần**
+  (server vẫn chạy) để mọi tab đọc lại trạng thái: đầu trang hiện **dải xanh** "Đã ghi xong. Bạn có thể Đẩy lên CVAT, xem Các đợt, xuất Ca khó. Xong việc bấm 'Đóng trang rà soát' để quay lại cmd."
+  (không phủ màn hình, không chặn chuột/phím; tab Nạp ảnh, Các đợt, Ca khó, Họp team và khung Đẩy lên CVAT dùng được bình thường). Xong **không** tắt trang.
+  Lượt mở lại đã có `done.txt` từ trước thì không khoá, không có dải xanh, không tự tải lại; quyết định mới vẫn gỡ `done.txt`. Sau Xong mà khôi phục (tab Các đợt) một ảnh chưa
+  có quyết định thì lượt có lại mặt chưa rà: mở khoá, mất dải xanh, nút Xong khoá lại kèm "còn N mặt chưa rà" để rà tiếp rồi bấm Xong lại; xoá mềm ảnh sau Xong thì giữ trạng thái đã xong.
+- **Đóng trang rà soát** (nút ở thanh đầu trang, thấy ở mọi tab, cả chế độ `--nap`) là chỗ duy nhất tắt trang (ngoài Ctrl+C và chuyển lượt). Bấm → hộp xác nhận (nút Huỷ có focus mặc định,
+  Esc = Huỷ): đã Xong thì "Lệnh m28 trong cmd sẽ đi tiếp"; **chưa Xong còn mặt chưa rà** thì cảnh báo "chưa bấm Xong, lượt này sẽ còn mặt chưa rà" kèm số mặt, m28 sẽ dừng ở bước review (gõ lại
+  đúng lệnh, các lần bấm đã lưu); chưa Xong nhưng đã rà hết thì cảnh báo m28 coi như chưa rà xong, bấm Huỷ rồi Xong trước. **Bị từ chối** khi đang chuẩn bị (prepare), đẩy lên CVAT, xoá task hoặc
+  đang chuyển lượt (kiểm lại lúc xác nhận). Xác nhận thì mọi thao tác ghi (quyết định, Ca khó, Nạp ảnh, xoá/khôi phục, Đẩy lên CVAT, Xong) bị từ chối, hiện lớp phủ "Đã đóng trang rà soát",
+  server tắt sau ~1 giây, `m28.py review`/`all` đi tiếp nếu có `done.txt` (cmd in "đã bấm Xong"), nếu không thì dừng. Đóng bằng Ctrl+C khi đã bấm Xong: m28 vẫn dừng nhưng báo
+  đã bấm Xong, gõ lại đúng lệnh (không thêm `--force review`) là bước review được bỏ qua.
 - **Hoàn tác** không xoá dòng nào: nó ghi thêm một dòng trả mặt về trạng thái trước (quyết định và lý do cũ, `seconds` để trống). Nếu trước đó mặt
   chưa rà thì dòng mới có `decision` rỗng. Ai đọc `triage_<Pk>.csv` bằng pandas hay script riêng phải **lấy dòng cuối của mỗi `name`** rồi bỏ dòng
   `decision` rỗng (`read_triage` của `push` làm đúng như vậy). Ngăn hoàn tác chỉ sống trong một phiên; mở lại muốn đổi thì bấm ảnh rồi chọn lại.
@@ -139,7 +148,7 @@ rem hoặc từ trang đang rà dở: bấm tab Nạp ảnh
   nói rõ cách sửa và nút Bắt đầu bị khoá. Chạy trang từ thư mục có `runs\` (tab Nạp ảnh báo lỗi nếu thư mục lượt không nằm trong một thư mục tên `runs`).
 - **Chuyển lượt**: bấm Rà lượt này thì trang dựng lại và mở lại trên **cùng cổng, cùng tiến trình** (mất kết nối 1–3 giây, trình duyệt tự tải lại; cmd in lượt cũ còn bao nhiêu mặt chưa rà và lệnh mở lại,
   ví dụ `python tool\review_app.py runs\F5 P2`). Các lần bấm của lượt cũ đã ghi từng dòng nên không mất. Nếu bạn mở trang bằng `m28.py review --run <cũ>` thì lệnh đó sẽ báo chưa bấm Xong
-  cho lượt cũ: gõ lại sau. Bấm **Xong** khi đang chuẩn bị bị từ chối (Xong tắt trang và giết prepare). File tạm/ảnh nhỏ sau khi chuyển vẫn nằm ở `_tmp` của lượt đầu tiên
+  cho lượt cũ: gõ lại sau. Bấm **Đóng trang rà soát** khi đang chuẩn bị bị từ chối (đóng sẽ giết prepare); Xong thì không bị từ chối vì không tắt gì. File tạm/ảnh nhỏ sau khi chuyển vẫn nằm ở `_tmp` của lượt đầu tiên
   (Gradio chỉ đọc `GRADIO_TEMP_DIR` lúc import); vẫn dưới `runs\`, ngoài git.
 - `--nap`: chưa có lượt nào thì chạy `python tool\review_app.py --nap <người rà>` (tạo `runs\` nếu chưa có, tab Rà soát chỉ ghi "Chưa có lượt nào").
 - **Ảnh mặt người thật chỉ xử lý trên máy này (127.0.0.1)**: không đưa ảnh khách hàng, ảnh chụp màn hình trang, file kết quả vào chat AI hay dịch vụ ngoài. Server vẫn chỉ phát file trong
@@ -149,7 +158,7 @@ rem hoặc từ trang đang rà dở: bấm tab Nạp ảnh
 Dưới nút **Xong** có khung **Đẩy lên CVAT**: bấm là đẩy lượt đang rà lên CVAT mà không gõ lệnh. Trang **không gọi mạng**: nó chạy tiến trình con
 `python -u tool\m28.py push --run <lượt> --reviewer <người rà> --task demo-<lượt>` (thư mục chạy = thư mục chứa `runs\`), tiến trình con mới gọi CVAT.
 - **Khi nào bật:** hết mặt chưa rà (đã trừ ảnh xoá mềm), có ít nhất một mặt Nhận hoặc Gán tay, chưa đẩy xong, ảnh gốc còn đủ, biến môi trường đủ và không có việc nào khác chạy
-  cho lượt. Còn mặt chưa rà: nút khoá kèm "Còn N mặt chưa rà". Không cần bấm Xong trước khi đẩy (Xong tắt trang).
+  cho lượt. Còn mặt chưa rà: nút khoá kèm "Còn N mặt chưa rà". Không cần bấm Xong trước khi đẩy; bấm Xong rồi đẩy vẫn được (Xong không tắt trang). Đang đẩy thì nút Đóng trang rà soát bị từ chối.
 - **Biến môi trường:** `CVAT_URL` (ghi rõ `http://`) và `CVAT_ACCESS_TOKEN` (tuỳ chọn `CVAT_ORG`) đọc từ môi trường của tiến trình trang mỗi lần vẽ, rồi tiến trình con kế thừa.
   Thiếu thì nút khoá và trang hiện hướng dẫn: đóng trang (Ctrl+C), trong **cùng cửa sổ cmd** gõ `set CVAT_URL=http://localhost:8080` và `set CVAT_ACCESS_TOKEN=<token của bạn>`
   rồi mở lại trang. **Không có ô nhập token hay URL nào trên trang**; token không bao giờ hiện trên trang, không đi qua đối số dòng lệnh, và bị lọc khỏi log (`***`).
@@ -304,7 +313,7 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 - Chạy `all --box wflw --review auto --dry-run` trên 5 mặt F thật: ra XML 5 × 50 điểm, toạ độ khớp `mp50.json`.
 - **Trang rà soát** (`tool/review_app.py`, 5/10/2026): Gradio 6.29.1, Python 3.11, Linux cloud, Chromium headless qua Playwright 1.56.0; trên `runs\F5` thật (5 mặt) và
   lượt 616 mặt WFLW (24 mặt không có nháp). Đã thử: phím tắt, hoàn tác, đóng giữa chừng (kill) rồi mở lại, màn 1440x900 và 800x900, chế độ tối (`?__theme=dark`),
-  lỗi ghi file (giả lập), nút Xong tự tắt trang (mã thoát 0) và đi tiếp trong `m28.py review` rồi `push --dry-run`, không có request ra ngoài 127.0.0.1 dù đặt proxy chết.
+  lỗi ghi file (giả lập), nút Xong (dải xanh, tải lại một lần, trang vẫn chạy) rồi nút Đóng trang rà soát (mã thoát 0) và đi tiếp trong `m28.py review` rồi `push --dry-run`, không có request ra ngoài 127.0.0.1 dù đặt proxy chết.
   Số đo trên 616 mặt (CPU cloud, lúc nguội, chưa có ảnh nhỏ nào): từ lệnh chạy đến khi lưới hiện ảnh khoảng 6,5 giây (nạp Gradio chiếm khoảng 4,5 giây), mỗi quyết định
   trung vị 0,11 giây, đổi trang lần đầu tối đa 0,61 giây. `tests\e2e_review_ui.py` tự đo lại các số này.
 - **Tab Nạp ảnh** (6/10/2026, `tool/nap_anh.py` + `review_app.py`): Linux cloud, Python 3.11, Gradio 6.29.1, mediapipe 1.0.1, Chromium qua Playwright. Pha F của `tests\e2e_review_ui.py`:
