@@ -53,7 +53,7 @@ import cai_dat  # noqa: E402  (cài đặt dùng chung cả tiến trình: CVAT,
 import cai_dat_ui  # noqa: E402  (tab Cài đặt; không import gradio ở đầu module)
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
-from m28core import loai_tru  # noqa: E402  (danh sách mặt xoá mềm excluded.txt)
+from m28core import dang_chay, loai_tru  # noqa: E402  (khoá lượt; danh sách mặt xoá mềm excluded.txt)
 from m28core.steps import DECISIONS, _stem  # noqa: E402  (dùng chung quy ước tên/quyết định với push)
 from nap_anh import NO_FACE_VI, RunError  # noqa: E402,F401  (RunError dùng chung với nap_anh)
 
@@ -1871,6 +1871,7 @@ def main(argv=None):
             s.reconfigure(errors="replace")      # cmd Windows không chết vì chữ có dấu
         except (AttributeError, ValueError):
             pass
+    dang_chay.mark_owner()       # tiến trình con (push, xoá task) nhận ra khoá do trang giữ, kể cả khi python.exe của .venv là bộ khởi chạy (Windows)
     argv = sys.argv[1:] if argv is None else list(argv)
     parsed = parse_argv(argv)
     if parsed is None:

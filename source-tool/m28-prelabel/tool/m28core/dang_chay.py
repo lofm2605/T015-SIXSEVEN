@@ -92,6 +92,25 @@ def release(run_dir, pid=None):
             pass
 
 
+OWNER_ENV = "M28_LOCK_OWNER"
+
+
+def owners():
+    """pid được coi là 'chủ khoá hợp lệ' của tiến trình con: cha trực tiếp, và pid trang ghi trong M28_LOCK_OWNER. Cần cả hai vì trên
+    Windows python.exe trong .venv là bộ khởi chạy sinh ra python thật, nên cha trực tiếp của tiến trình con KHÔNG phải trang."""
+    out = {os.getppid()}
+    try:
+        out.add(int(os.environ.get(OWNER_ENV, "")))
+    except ValueError:
+        pass
+    return out
+
+
+def mark_owner():
+    """Gọi một lần trong tiến trình trang: mọi tiến trình con (push, xoá task, thử kết nối) kế thừa biến này."""
+    os.environ[OWNER_ENV] = str(os.getpid())
+
+
 class Guard:
     """with Guard(run_dir, "push"): dùng trong tiến trình con. Khoá do tiến trình cha giữ thì dùng tiếp (không xoá khi thoát);
     chưa có khoá thì tự ghi và tự xoá; khoá của tiến trình khác còn sống thì SystemExit."""
@@ -102,7 +121,7 @@ class Guard:
 
     def __enter__(self):
         cur = busy(self.run_dir)
-        if cur and cur[1] == os.getppid():
+        if cur and cur[1] in owners():
             return self                                   # trang (tiến trình cha) đã giữ khoá cho việc này
         if cur:
             raise SystemExit(f"Lượt này đang có việc khác chạy ({cur[0]}, tiến trình {cur[1]}): chờ xong rồi {self.what}.")
