@@ -7,9 +7,11 @@ Sửa điểm không làm ở đây (làm trong CVAT).
     python tool\\m28.py review --run F5 --reviewer P2  # qua m28 (bước review --review ui)
     python tool\\review_app.py --nap P2              # chưa có lượt nào: chỉ mở tab "Nạp ảnh" (kéo thả ảnh -> prepare -> rà)
 
-Trang có ba tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
+Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
 ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà
-không gõ lệnh) và "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT).
+không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team".
+Nút Xong chỉ ghi done.txt và khoá việc bấm quyết định (hiện dải xanh ở đầu trang); trang KHÔNG tự tắt, vẫn Đẩy lên CVAT, xem Các đợt,
+xuất Ca khó được. Chỗ duy nhất tắt trang là nút "Đóng trang rà soát" (có hộp xác nhận, đứng trên các tab), Ctrl+C, hoặc chuyển lượt.
 Trang KHÔNG gọi mạng: đẩy lên CVAT và xoá task chạy bằng tiến trình con `m28.py push ...`; CVAT_URL/CVAT_ACCESS_TOKEN chỉ đọc từ biến môi trường.
 
 Đọc  runs/<run>/flags/flags.json, overlays/, autoqc/autoqc.csv, no_face.csv, map50/mp50.json, crop/images/.
@@ -418,7 +420,8 @@ class Store:
         self.lat = latest(self.rows)
         self.resumed = self.progress()["done"]          # số mặt đã rà từ lần chạy trước
         self.undo_stack = []
-        self.finished = False            # đã bấm Xong thật: mọi tab từ chối ghi thêm trong 2 giây trang còn mở
+        self.finished = False            # đã bấm Xong thật: khoá bấm quyết định / đánh dấu Ca khó mới ở mọi tab (trang vẫn mở, các tab khác dùng được)
+        self.closed = False              # đã xác nhận "Đóng trang rà soát": mọi handler ghi từ chối (trang sắp tắt)
 
     def status(self, name):
         return _status(self.lat, name)
@@ -492,8 +495,9 @@ class Store:
             self.faces, self.notes = _load(self.run_dir)
             self.by_name = {f.name: f for f in self.faces}
             self.undo_stack = [u for u in self.undo_stack if u[0] in self.by_name]
-            if self.progress()["remaining"] and os.path.exists(self.done_path):
+            if self.progress()["remaining"]:
                 self._reopen()
+                self.finished = False        # sau Xong mà khôi phục ảnh chưa rà: mở khoá để rà tiếp rồi bấm Xong lại
 
     def write_done(self):
         """Ghi review/done.txt nguyên tử (file tạm rồi os.replace). Còn mặt chưa rà thì từ chối."""
@@ -696,7 +700,7 @@ def thumb_for(face, status, run_dir):
 # ---------- phiên làm việc của một tab trình duyệt (dict thuần, để trong gr.State) ----------
 def new_session(store):
     cur = next_pending(store.faces, store.lat, None) or store.faces[0].name
-    ses = dict(cur=cur, mode="tat_ca", page=0, names=[], t=store.clock(), finished=False)
+    ses = dict(cur=cur, mode="tat_ca", page=0, names=[], t=store.clock())
     _follow(store, ses)
     return ses
 
@@ -757,13 +761,16 @@ def act_step(store, ses, delta):
 
 
 STALE_MSG = "Bỏ qua một lần bấm vì ảnh chưa kịp đổi. Nhìn ảnh rồi bấm lại."
-CLOSED_MSG = "Đã bấm Xong, trang sắp tắt: không ghi thêm được."
+CLOSED_MSG = "Đã bấm Xong: lượt này đã khoá quyết định, không ghi thêm được."
+CLOSING_MSG = nap_anh.CLOSING_MSG
 
 
 def act_decide(store, ses, decision, reason, shown):
     """Bấm Nhận / Gán tay / Bỏ ảnh cho mặt `shown` (mặt người rà đang nhìn thấy khi bấm). Trả (thông báo, mức, đặt lại lý do).
     Nếu `shown` khác mặt hiện hành của server (bấm quá nhanh khi trang chưa kịp đổi ảnh) thì bỏ qua, không ghi gì.
     Bấm đúng quyết định (và lý do) mặt đó đang có thì không ghi thêm dòng nào."""
+    if store.closed:
+        return CLOSING_MSG, "info", False
     if store.finished:
         return CLOSED_MSG, "info", False
     if shown != ses["cur"]:
@@ -806,6 +813,8 @@ def act_decide(store, ses, decision, reason, shown):
 
 
 def act_undo(store, ses, shown):
+    if store.closed:
+        return CLOSING_MSG, "info", False
     if store.finished:
         return CLOSED_MSG, "info", False
     if shown != ses["cur"]:
@@ -826,7 +835,9 @@ def act_undo(store, ses, shown):
 
 
 def act_finish(store, ses):
-    """Trả (thông báo, mức, đã xong thật). Xong thật thì UI tự tắt trang sau 2 giây."""
+    """Trả (thông báo, mức, đã xong thật). Xong chỉ ghi done.txt và khoá quyết định; KHÔNG tắt trang (nút 'Đóng trang rà soát' lo việc đó)."""
+    if store.closed:
+        return CLOSING_MSG, "info", False
     if store.finished:
         return CLOSED_MSG, "info", False
     try:
@@ -835,9 +846,50 @@ def act_finish(store, ses):
         return str(e), "warn", False
     except OSError as e:
         return f"Không ghi được {_shown(store.done_path)} ({e}).", "warn", False
-    ses["finished"] = True
     store.finished = True
-    return (f"Đã ghi {_shown(path)}. Trang tự tắt sau 2 giây, quay lại cửa sổ cmd."), "ok", True
+    return (f"Đã ghi {_shown(path)}. Bạn có thể Đẩy lên CVAT, xem Các đợt, xuất Ca khó; xong việc bấm 'Đóng trang rà soát'."), "ok", True
+
+
+# ---------- nút "Đóng trang rà soát" (logic thuần, test không cần gradio) ----------
+def close_check(store, ctx):
+    """(được đóng, thông điệp, mức). Từ chối khi đang chuẩn bị / đẩy / xoá task hoặc đang chuyển lượt (đóng lúc đó giết việc đang chạy).
+    Đã đang đóng thì cũng không cho đóng lần nữa (cờ nằm trên ctx, dùng chung mọi tab)."""
+    if ctx.closing:
+        return False, "Trang đang đóng.", "info"
+    if ctx.switch_to is not None:
+        return False, "Đang chuyển sang lượt mới: chờ trang tải lại rồi hãy đóng.", "warn"
+    if ctx.job.running:
+        return False, f"Đang chuẩn bị lượt {ctx.job.run}: chờ xong hoặc bấm Huỷ.", "warn"
+    if ctx.push_job.running or ctx.del_job.running:
+        busy = ctx.push_job if ctx.push_job.running else ctx.del_job
+        return False, f"Đang {'đẩy' if busy is ctx.push_job else 'xoá task của'} lượt {busy.run} (CVAT): chờ xong hoặc bấm Huỷ.", "warn"
+    return True, "", "info"
+
+
+def close_prompt(store):
+    """Nội dung hộp xác nhận Đóng: (loại, câu hỏi, cảnh báo). Loại: nap (chưa có lượt) | xong | chua_con (chưa Xong, còn mặt chưa rà)
+    | chua_het (chưa Xong nhưng đã rà hết). 'Đã Xong' dựa vào done.txt có thật trên đĩa lúc này (không chỉ cờ store.finished)."""
+    if store is None:
+        return "nap", "Đóng trang rà soát? Chưa có lượt nào đang rà; việc đã làm ở các tab khác đã được lưu.", ""
+    if store.finished or os.path.exists(store.done_path):
+        return "xong", "Đóng trang rà soát? Lệnh m28 trong cmd sẽ đi tiếp.", ""
+    left = store.progress()["remaining"]
+    if left:
+        return ("chua_con", "Đóng trang rà soát?",
+                f"Bạn chưa bấm Xong, lượt này sẽ còn mặt chưa rà (còn {left} mặt). m28 sẽ dừng ở bước review; "
+                "gõ lại đúng lệnh để làm tiếp, các lần bấm đã lưu không mất.")
+    return ("chua_het", "Đóng trang rà soát?",
+            "Bạn chưa bấm Xong: m28 sẽ coi như chưa rà xong; bấm Huỷ rồi bấm Xong trước nếu muốn đi tiếp.")
+
+
+def close_body_html(store):
+    kind, q, warn = close_prompt(store)
+    w = f'<div class="nap-box nap-err" role="alert"><b>{html.escape(warn)}</b></div>' if warn else ""
+    return f'<div class="modal-title" id="close-confirm-title">{html.escape(q)}</div>{w}'
+
+
+CLOSED_HTML = ('<div class="m28-closed" role="alert"><div class="m28-closed-box"><b>Đã đóng trang rà soát.</b>'
+               '<span>Quay lại cửa sổ cmd. Trang đã tắt, bấm gì cũng không còn tác dụng.</span></div></div>')
 
 
 # ---------- mô hình hiển thị (thuần, test không cần gradio) ----------
@@ -865,6 +917,10 @@ def notes_html(store):
     return "".join(f'<div class="m28-note">{html.escape(n)}</div>' for n in notes)
 
 
+DONE_BAR_TEXT = ("Đã ghi xong. Bạn có thể Đẩy lên CVAT, xem Các đợt, xuất Ca khó. "
+                 "Xong việc bấm 'Đóng trang rà soát' để quay lại cmd.")
+
+
 def header_html(store, ses):
     p = store.progress()
     pct = round(100 * p["done"] / p["total"]) if p["total"] else 0
@@ -872,16 +928,14 @@ def header_html(store, ses):
                     (("nhan", "Nhận"), ("gan_tay", "Gán tay"), ("bo", "Bỏ")))
     chips += f'<span class="m28-chip c-chua">Còn lại <b>{p["remaining"]}</b></span>'
     again = ('<span class="m28-chip c-gan_tay">Lượt này đã bấm Xong trước đó</span>'
-             if store.had_done and not (ses.get("finished") or store.finished) else "")
-    done = ('<div class="m28-done" role="alert"><div class="m28-done-box"><b>Đã ghi xong.</b>'
-            '<span>Đóng tab này và quay lại cửa sổ cmd. Trang đã tắt, bấm gì cũng không còn tác dụng.</span></div></div>'
-            if (ses.get("finished") or store.finished) else "")
-    return (f'<div class="m28-head"><div class="m28-top"><div class="m28-title">Rà soát nhãn nháp M28</div>'
+             if store.had_done and not store.finished else "")
+    done = (f'<div class="m28-done-bar" role="status">{html.escape(DONE_BAR_TEXT, quote=False)}</div>' if store.finished else "")
+    return (f'{done}<div class="m28-head"><div class="m28-top"><div class="m28-title">Rà soát nhãn nháp M28</div>'
             f'<div class="m28-sub">lượt <b>{html.escape(run_name(store.run_dir))}</b> · người rà '
             f'<b>{html.escape(store.reviewer)}</b></div>{again}</div>'
             f'<div class="m28-prog"><span class="m28-count">Đã rà {p["done"]}/{p["total"]}</span>'
             f'<div class="m28-bar" role="progressbar" aria-valuenow="{p["done"]}" aria-valuemax="{p["total"]}">'
-            f'<i style="width:{pct}%"></i></div><div class="m28-chips">{chips}</div></div></div>{done}')
+            f'<i style="width:{pct}%"></i></div><div class="m28-chips">{chips}</div></div></div>')
 
 
 def info_html(store, face, status, warn):
@@ -928,7 +982,7 @@ def make_view(store, ses, msg="", level="info"):
     cur_i = ses["names"].index(face.name) if face.name in ses["names"] else None
     names_all = [f.name for f in items]
     pos = names_all.index(face.name) if face.name in names_all else None
-    fin = bool(ses.get("finished") or store.finished)
+    fin = bool(store.finished or store.closed)
     incl = pos is not None                       # mặt đang xem nằm trong danh sách đã lọc (N/G/B chỉ bật khi đúng)
     return dict(
         header=header_html(store, ses),
@@ -969,11 +1023,22 @@ CSS = """
 #msg .progress-text, #msg .meta-text-center, #msg .meta-text, #msg .generating, #msg .eta-bar { display: none !important; }
 .m28-empty { padding: 28px 12px; text-align: center; font-size: 15px; color: var(--body-text-color-subdued);
   border: 1px dashed var(--border-color-primary); border-radius: 10px; }
-.m28-done { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center;
+/* Dải xanh sau Xong: nằm trong dòng (đầu trang, trên các tab), KHÔNG phủ màn hình, không chặn chuột/phím. */
+.m28-done-bar { margin: 0 0 8px; padding: 10px 16px; border-radius: var(--radius-lg); font-size: 15px; font-weight: 700; overflow-wrap: anywhere;
+  color: var(--body-text-color); background: color-mix(in srgb, #16a34a 18%, transparent); border: 1px solid #16a34a; border-left-width: 6px; }
+/* Lớp phủ chỉ có SAU KHI xác nhận 'Đóng trang rà soát' (trang sắp tắt). */
+.m28-closed { position: fixed; inset: 0; z-index: 100002; display: flex; align-items: center; justify-content: center; padding: 12px;
   background: color-mix(in srgb, var(--background-fill-primary) 96%, transparent); }
-.m28-done-box { display: flex; flex-direction: column; gap: 8px; padding: 28px 36px; text-align: center; max-width: 560px;
+.m28-closed-box { display: flex; flex-direction: column; gap: 8px; padding: 28px 36px; text-align: center; max-width: 560px;
   background: var(--block-background-fill); border: 2px solid #16a34a; border-radius: 16px; font-size: 17px; }
-.m28-done-box b { font-size: 26px; color: #16a34a; }
+.m28-closed-box b { font-size: 26px; color: #16a34a; }
+#close-row { align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+#close-row > * { flex: 0 1 auto; min-width: 0; }
+#btn-dong { max-width: 240px; }
+#close-msg, #close-closed, #close-body { padding: 0 !important; }
+#close-msg:not(:has(.html-container > div > *)), #close-closed:not(:has(.html-container > div > *)) { display: none; }
+#close-confirm-title { margin: 0; }
+#close-confirm-ok:not(:disabled) { background: #dc2626 !important; border-color: #b91c1c !important; color: #fff !important; }
 .m28-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 28px; padding: 10px 16px;
   background: var(--block-background-fill); border: 1px solid var(--border-color-primary);
   border-radius: var(--radius-lg); }
@@ -1173,17 +1238,21 @@ PAGE_JS = r"""() => {
     if (!mainEl || mainEl.offsetParent === null) { return; }
     if (document.querySelector('.m28-modal')) { return; }          // hộp xác nhận đang mở: không phím tắt nào ngoài Esc/Tab/Enter của hộp
     if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || typing(e.target)) { return; }
-    if (document.querySelector('.m28-done')) { e.preventDefault(); return; }
+    // Đã đóng (lớp phủ .m28-closed): chặn hết. Sau Xong (dải xanh .m28-done-bar): các phím tắt dưới đây không còn tác dụng ở tab Rà soát
+    // (nút đã khoá), còn phím khác (Tab, Enter trên nút Đẩy lên CVAT, gõ chữ...) đi qua bình thường.
+    if (document.querySelector('.m28-closed')) { e.preventDefault(); return; }
+    const locked = !!document.querySelector('.m28-done-bar');
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
-      press(e.key === 'ArrowLeft' ? 'btn-prev' : 'btn-next');
+      if (!locked) { press(e.key === 'ArrowLeft' ? 'btn-prev' : 'btn-next'); }
       return;
     }
     if ((e.key === 'Enter' || e.key === ' ') && onDecide(e.target)) { e.preventDefault(); return; }
     const k = e.key.length === 1 ? e.key.toLowerCase() : '';       // e.code là dự phòng khi bộ gõ/bố cục phím làm e.key lạ
     const id = BY_KEY[k] || BY_CODE[e.code];
-    if (id) { e.preventDefault(); press(id); return; }
+    if (id) { e.preventDefault(); if (!locked) { press(id); } return; }
     const m = /^[0-8]$/.test(k) ? [k, k] : /^(?:Digit|Numpad)([0-8])$/.exec(e.code || '');
+    if (m && locked) { e.preventDefault(); return; }
     if (m) {
       const radios = document.querySelectorAll('#reason input[type=radio]');
       const r = radios[parseInt(m[1], 10)];
@@ -1226,9 +1295,20 @@ def prepare_env(run_dir, environ=None):
         env[k] = ",".join(have + [h for h in ("localhost", "127.0.0.1") if h not in have])
 
 
+XONG_RELOAD_JS = r"""() => {
+  const t0 = Date.now();
+  const tick = () => {
+    const bar = document.querySelector('#progress .m28-done-bar');
+    const msg = document.querySelector('#msg');
+    if (bar && msg && msg.innerText.indexOf('done.txt') >= 0) { setTimeout(() => location.reload(), 400); return; }
+    if (Date.now() - t0 < 4000 && !bar) { setTimeout(tick, 150); }
+  };
+  tick();
+}"""
+
+
 def _review_tab(gr, demo, store, ctx, header):
     """Tab "Rà soát" (bố cục và sự kiện như trước khi có tab Nạp ảnh; mọi elem_id giữ nguyên). `header` là thanh #progress đặt trên các tab."""
-    close_once = {"started": False}
 
     def apply(v, reset_reason):
         """Đổi mô hình hiển thị thành tuple cập nhật, đúng thứ tự `outs`."""
@@ -1334,16 +1414,7 @@ def _review_tab(gr, demo, store, ctx, header):
 
     def on_xong(ses):
         ses = ensure_session(store, ses)
-        if ctx.job.running:                     # Xong tắt server và sẽ giết prepare đang chạy ở tab Nạp ảnh
-            return render(ses, f"Đang chuẩn bị lượt {ctx.job.run}: chờ xong hoặc bấm Huỷ.", "warn", reset=False)
-        if ctx.push_job.running or ctx.del_job.running:       # ... và giết push/xoá task đang chạy giữa chừng
-            busy = ctx.push_job if ctx.push_job.running else ctx.del_job
-            return render(ses, f"Đang {'đẩy' if busy is ctx.push_job else 'xoá task của'} lượt {busy.run} (CVAT): chờ xong hoặc bấm Huỷ.",
-                          "warn", reset=False)
-        m, lv, ok = act_finish(store, ses)
-        if ok and not close_once["started"]:
-            close_once["started"] = True
-            threading.Timer(2.0, lambda: demo.close(verbose=False)).start()
+        m, lv, _ok = act_finish(store, ses)         # Xong chỉ ghi done.txt và khoá quyết định; việc tắt trang là của nút 'Đóng trang rà soát'
         return render(ses, m, lv, reset=False)
 
     def on_reselect(ses):
@@ -1364,6 +1435,9 @@ def _review_tab(gr, demo, store, ctx, header):
         b_bo.click(on_decide("bo"), [reason, shown, ses_state], all_outs, **opts),
         b_undo.click(on_undo, [shown, ses_state], all_outs, **opts),
         b_xong.click(on_xong, [ses_state], all_outs, **opts)]
+    # Xong ghi done.txt xong thì tải lại trang (server vẫn chạy) để mọi tab nạp lại trạng thái mới. Chỉ tải lại khi LẦN BẤM NÀY vừa ghi done.txt
+    # (thông báo có 'done.txt' và dải xanh đã hiện): lượt mở lại đã có done.txt, hay bấm khi đã khoá, không bao giờ tự tải lại -> không vòng lặp.
+    events[8].then(None, None, None, js=XONG_RELOAD_JS)
     for ev in events[4:8]:                      # sau mỗi quyết định/hoàn tác vẽ lại khung Đẩy lên CVAT (còn bao nhiêu mặt chưa rà)
         push_hook(ev)
     return types.SimpleNamespace(on_reselect=on_reselect, ses_state=ses_state, all_outs=all_outs, opts=opts,
@@ -1417,11 +1491,30 @@ class AppCtx:
     push_pending: object = None        # dot_anh.Pending: yêu cầu xác nhận đẩy (mã ngẫu nhiên)
     dot_pending: object = None         # dot_anh.Pending: yêu cầu xác nhận xoá ở tab Các đợt
     switch_to: object = None           # (run_dir, Store) khi bấm "Rà lượt này"
+    closing: bool = False              # đã xác nhận "Đóng trang rà soát" (một lần duy nhất cho mọi tab): mọi handler ghi từ chối
+    close_lock: object = dataclasses.field(default_factory=threading.Lock, repr=False)
     demo: object = None
     tmp_dir: str = ""
     runs_root: str = ""
     project_root: str = ""
     layout_error: object = None
+
+    def begin_close(self):
+        """Đặt cờ đang đóng. True đúng một lần (lần đầu), False nếu đã đóng rồi hoặc đang chuyển lượt: chống bấm hai lần / hai tab."""
+        with self.close_lock:
+            if self.closing or self.switch_to is not None:
+                return False
+            self.closing = True
+            return True
+
+    def begin_switch(self, target):
+        """Đặt đích chuyển lượt (run_dir, Store) nếu chưa đóng/chưa chuyển; False nếu trang đang đóng. Đã chuyển rồi thì giữ đích cũ (True)."""
+        with self.close_lock:
+            if self.closing:
+                return False
+            if self.switch_to is None:
+                self.switch_to = target
+            return True
 
     def __post_init__(self):
         if self.job is None:
@@ -1541,6 +1634,8 @@ def _nap_tab(gr, demo, store, ctx):
             gr.Warning(text, title="Chưa bắt đầu được")
             return ((gr.update(), plan_st, gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), box(text, "warn"))
                     + job_update(job.snapshot(), n_ok_of(plan_st)))
+        if ctx.closing:
+            return refuse(nap_anh.CLOSING_MSG)
         if job.running:
             return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Huỷ.")
         if ctx.layout_error:
@@ -1564,6 +1659,8 @@ def _nap_tab(gr, demo, store, ctx):
         def refuse(text):
             gr.Warning(text, title="Chưa chạy lại được")
             return (box(text, "warn"),) + job_update(job.snapshot(), n_ok_of(plan_st))
+        if ctx.closing:
+            return refuse(nap_anh.CLOSING_MSG)
         if job.running:
             return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Huỷ.")
         if job.state not in ("loi", "da_huy") or not job.run:
@@ -1588,6 +1685,8 @@ def _nap_tab(gr, demo, store, ctx):
         def refuse(text):
             gr.Warning(text, title="Chưa chuyển được")
             return box(text, "warn"), ""
+        if ctx.closing:
+            return refuse(nap_anh.CLOSING_MSG)
         if ctx.switch_to is not None:
             return box("Đang chuyển sang lượt mới…", "ok"), "Rà soát M28 · " + run_name(ctx.switch_to[0])
         snap = job.snapshot()
@@ -1605,7 +1704,8 @@ def _nap_tab(gr, demo, store, ctx):
             new_store = Store(snap["run_dir"], ctx.reviewer)           # dựng TRƯỚC: lỗi thì báo ở đây, chưa đóng gì
         except RunError as e:
             return refuse(str(e))
-        ctx.switch_to = (snap["run_dir"], new_store)
+        if not ctx.begin_switch((snap["run_dir"], new_store)):
+            return refuse(nap_anh.CLOSING_MSG)
         threading.Timer(0.8, lambda: demo.close(verbose=False)).start()
         return box(f"Đang chuyển sang lượt {snap['run']}: trang mất kết nối 1–3 giây rồi tự tải lại.", "ok"), "Rà soát M28 · " + snap["run"]
 
@@ -1618,6 +1718,57 @@ def _nap_tab(gr, demo, store, ctx):
     b_cancel.click(on_cancel, [plan_state], [msg] + job_outs, **dict(opts, concurrency_id="nap_huy"))
     timer.tick(on_tick, [plan_state], job_outs, **dict(opts, concurrency_id="nap_tick"))
     b_go.click(on_go, [plan_state], [msg, target], **nap).then(None, [target], None, js=NAP_SWITCH_JS)
+
+
+def _close_bar(gr, demo, store, ctx):
+    """Hàng 'Đóng trang rà soát' (đứng giữa thanh #progress và các tab nên thấy ở mọi tab, cả chế độ --nap) + hộp xác nhận + lớp phủ 'đã đóng'.
+    Đây là chỗ DUY NHẤT tắt server (ngoài Ctrl+C và chuyển lượt): bấm nút -> kiểm việc đang chạy -> hộp xác nhận -> kiểm lại ->
+    đặt cờ ctx.closing (một lần) -> lớp phủ -> demo.close() sau ~1 giây để phản hồi kịp tới trình duyệt."""
+    with gr.Row(elem_id="close-row"):
+        b_dong = gr.Button("Đóng trang rà soát", elem_id="btn-dong", size="sm")
+        msg = gr.HTML(elem_id="close-msg", apply_default_css=False)
+    closed = gr.HTML(elem_id="close-closed", apply_default_css=False)
+    with gr.Column(visible=False, elem_id="close-confirm", elem_classes=["m28-modal"]) as modal:
+        with gr.Column(elem_classes=["m28-modal-box"]):
+            body = gr.HTML(elem_id="close-body", apply_default_css=False)
+            with gr.Row(elem_classes=["m28-modal-btns"]):
+                b_ok = gr.Button("Đóng trang rà soát", variant="stop", elem_id="close-confirm-ok")
+                b_no = gr.Button("Huỷ", elem_id="close-confirm-cancel")
+    opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="dong")
+    outs = [modal, body, msg, closed]
+    hide = gr.update(visible=False)
+
+    def refuse(text, level):
+        if level == "warn":
+            gr.Warning(text, title="Chưa đóng được")
+        return hide, "", f'<div class="m28-msg m-{level}" role="status">{html.escape(text)}</div>', gr.update()
+
+    def on_open():
+        ok, text, level = close_check(store, ctx)
+        if not ok:
+            return refuse(text, level)
+        return gr.update(visible=True), close_body_html(store), "", gr.update()
+
+    def on_confirm():
+        ok, text, level = close_check(store, ctx)               # job có thể vừa bắt đầu khi hộp đang mở: kiểm lại
+        if not ok and ctx.closing:
+            return hide, "", "", CLOSED_HTML                       # tab thứ hai: trang đã đóng rồi, cũng hiện lớp phủ
+        if not ok:
+            return refuse(text, level)
+        if not ctx.begin_close():
+            return refuse("Trang đang đóng hoặc đang chuyển lượt.", "info")
+        if store is not None:
+            store.closed = True
+        threading.Timer(1.0, lambda: demo.close(verbose=False)).start()
+        return hide, "", "", CLOSED_HTML
+
+    def on_cancel():
+        return hide, "", "", gr.update()
+
+    b_dong.click(on_open, None, outs, **opts)
+    b_ok.click(on_confirm, None, outs, **opts)
+    b_no.click(on_cancel, None, outs, **opts)
+    return types.SimpleNamespace(button=b_dong, modal=modal)
 
 
 def build_ui(store, ctx=None):
@@ -1634,6 +1785,7 @@ def build_ui(store, ctx=None):
         ctx.demo = demo
         header = gr.HTML(HEAD_NAP_HTML.format(rev=html.escape(ctx.reviewer)) if store is None else "", elem_id="progress",
                          apply_default_css=False)
+        close_ui = _close_bar(gr, demo, store, ctx)
         with gr.Tabs(elem_id="tabs", selected="ra" if store is not None else "nap") as tabs:
             with gr.Tab("Rà soát", id="ra", elem_id="tab-ra") as tab_ra:
                 if store is None:
@@ -1750,11 +1902,19 @@ def main(argv=None):
             else:
                 p = store.progress()
                 print(f"Trang rà soát lượt {run_name(ctx.run_dir)}, người rà {reviewer}: còn {p['remaining']}/{p['total']} mặt chưa rà.\n"
-                      f"Mở {url} nếu trình duyệt chưa tự mở (chỉ máy này vào được). Rà xong bấm Xong, trang tự tắt; "
+                      f"Mở {url} nếu trình duyệt chưa tự mở (chỉ máy này vào được).\n"
+                      "Rà xong bấm Xong, rồi bấm 'Đóng trang rà soát' (sau Xong vẫn Đẩy lên CVAT, xem Các đợt, xuất Ca khó được); "
                       "Ctrl+C để đóng giữa chừng (gõ lại đúng lệnh để làm tiếp).", flush=True)
-            while demo.is_running:                    # bấm Xong (hoặc Rà lượt này) thì demo.close() chạy và vòng này kết thúc
+            while demo.is_running:                    # nút 'Đóng trang rà soát' (hoặc Rà lượt này) gọi demo.close() và vòng này kết thúc; Xong không tắt gì
                 time.sleep(0.2)
             if ctx.switch_to is None:
+                if store is None:
+                    print("Đã đóng trang rà soát (chưa có lượt nào).", flush=True)
+                elif os.path.exists(store.done_path):
+                    print(f"Đã đóng trang rà soát: lượt {run_name(store.run_dir)} đã bấm Xong ({_shown(store.done_path)}).", flush=True)
+                else:
+                    print(f"Đã đóng trang rà soát mà chưa bấm Xong (lượt {run_name(store.run_dir)}, còn "
+                          f"{store.progress()['remaining']} mặt chưa rà): gõ lại đúng lệnh để làm tiếp.", flush=True)
                 return 0
             new_dir, new_store = ctx.switch_to
             if store is not None:
@@ -1766,7 +1926,10 @@ def main(argv=None):
             store, first = new_store, False
             ctx = AppCtx(reviewer=reviewer, run_dir=new_dir)       # job mới, ctx mới (lượt đã chuyển không giữ job cũ)
     except KeyboardInterrupt:
-        print("Đã đóng trang rà soát (chưa bấm Xong).", flush=True)
+        if store is not None and os.path.exists(store.done_path):
+            print(f"Đã đóng trang rà soát bằng Ctrl+C: lượt {run_name(store.run_dir)} đã bấm Xong ({_shown(store.done_path)}).", flush=True)
+        else:
+            print("Đã đóng trang rà soát (chưa bấm Xong).", flush=True)
         if demo is not None:
             demo.close(verbose=False)
         return 0

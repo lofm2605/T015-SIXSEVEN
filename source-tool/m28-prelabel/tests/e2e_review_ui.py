@@ -9,15 +9,17 @@ các lượt này chứa ảnh WFLW nên chỉ để ngoài git. Ví dụ (Linux
         python tests/e2e_review_ui.py --work $W --shots $S/ui_shots
 
 Sáu pha (A-F):
-  A  chạy app thẳng trên bản chép F5UI: phím tắt, hoàn tác, đóng giữa chừng (kill) rồi mở lại, màn hẹp 800 px, nút Xong tự tắt trang,
-     không có request ra ngoài 127.0.0.1, server chỉ bind 127.0.0.1 (đặt proxy chết để chứng minh không cần mạng).
-  B  qua m28 thật: `m28.py review --force review` rồi `push --dry-run`, XML/manual_list/rejected khớp CSV.
+  A  chạy app thẳng trên bản chép F5UI: phím tắt, hoàn tác, đóng giữa chừng (kill) rồi mở lại, màn hẹp 800 px, nút Xong chỉ ghi done.txt
+     (dải xanh, KHÔNG tắt: tiến trình còn chạy sau 3 giây, tab Các đợt mở được) rồi nút "Đóng trang rà soát" (hộp xác nhận, Huỷ, xác nhận)
+     tắt tiến trình mã 0 với lớp phủ "Đã đóng", không có request ra ngoài 127.0.0.1, server chỉ bind 127.0.0.1 (proxy chết).
+  B  qua m28 thật: `m28.py review --force review` (Xong, đợi, Đóng) rồi `push --dry-run`, XML/manual_list/rejected khớp CSV.
   C  độ mượt trên ALL616 (616 mặt): mở trang, một quyết định, đổi trang; xoá triage_E2E.csv sau khi đo.
   D  (thêm) lỗi ghi CSV (giả lập Excel khoá file bằng cách đặt một thư mục vào chỗ file): báo "Không ghi được", giữ nguyên mặt, sửa xong bấm lại thì ghi được.
-  E  sửa theo đợt kiểm 6/10: đổi bộ lọc, lưới rỗng, lớp phủ sau Xong, Host lạ bị chặn, cổng bận, tab thứ hai sau Xong, bấm lặp.
+  E  sửa theo đợt kiểm 6/10: đổi bộ lọc, lưới rỗng, dải xanh sau Xong (không lớp phủ), phím tắt/tab cũ không ghi sau Xong, gõ chữ ở tab khác
+     được, hộp Đóng (cảnh báo khi chưa Xong, Huỷ, Esc, focus mặc định ở Huỷ), Host lạ bị chặn, cổng bận, tab thứ hai sau Xong, bấm lặp.
   F  tab "Nạp ảnh": kéo thả (set_input_files) ảnh WFLW thật + ảnh xấu vào trang đang rà dở F5UP, tạo lượt NAP_001, prepare thật (MediaPipe),
      tóm tắt, màn hẹp 420 px, "Rà lượt này" (trang tự tải lại cùng cổng, lượt F5UP không bị đụng), Huỷ rồi Thử lại (NAP_002), thiếu model
-     (khung đỏ, khoá nút), và chế độ `review_app.py --nap` từ trang trống. Cần thêm --wflw (mặc định <work>/../wflw/WFLW_images).
+     (khung đỏ, khoá nút), nút Đóng bị từ chối khi prepare đang chạy, và chế độ `review_app.py --nap` từ trang trống (Đóng ở chế độ này). Cần thêm --wflw (mặc định <work>/../wflw/WFLW_images).
 Mọi tiến trình đã mở được dọn ở `finally`. Cổng 7871–7879, M28_NO_BROWSER=1.
 """
 import argparse
@@ -50,6 +52,48 @@ def check(cond, msg):
     if not cond:
         raise AssertionError(msg)
     log('  ok  ', msg)
+
+
+DONE_BAR = ("Đã ghi xong. Bạn có thể Đẩy lên CVAT, xem Các đợt, xuất Ca khó. "
+            "Xong việc bấm 'Đóng trang rà soát' để quay lại cmd.")
+
+
+def open_close_box(pg):
+    """Bấm 'Đóng trang rà soát' ở thanh đầu trang; trả chữ trong hộp xác nhận."""
+    pg.click('#btn-dong')
+    pg.wait_for_selector('#close-confirm', state='visible', timeout=10000)
+    pg.wait_for_timeout(400)
+    return pg.inner_text('#close-confirm')
+
+
+def confirm_close(pg):
+    pg.click('#close-confirm-ok')
+    pg.wait_for_selector('.m28-closed', state='visible', timeout=10000)
+
+
+def click_xong(ui):
+    """Bấm Xong: trang phải tải lại ĐÚNG MỘT lần (server còn sống), mở lại đúng lượt, tab Rà soát, thấy dải xanh và nút Đóng."""
+    pg = ui.page
+    n0 = len(ui.loads)
+    pg.click('#btn-xong')
+    pg.wait_for_function("() => !!document.querySelector('#progress .m28-done-bar')", timeout=15000)
+    t = time.time()
+    while len(ui.loads) <= n0 and time.time() - t < 15:
+        pg.wait_for_timeout(100)
+    check(len(ui.loads) == n0 + 1, 'bấm Xong: trang tải lại sau khi ghi done.txt')
+    pg.wait_for_selector('#info .face-name', timeout=30000)
+    pg.wait_for_selector('#progress .m28-done-bar', state='visible', timeout=15000)
+    pg.wait_for_timeout(3000)
+    check(len(ui.loads) == n0 + 1, 'trang chỉ tải lại một lần (không vòng lặp reload)')
+    check(pg.locator('#tab-ra').is_visible() and pg.locator('#btn-dong').is_visible() and pg.locator('#btn-nhan').is_disabled(),
+          'sau tải lại: tab Rà soát, thấy nút Đóng, quyết định vẫn khoá')
+
+
+def big_fixed(pg):
+    """Số phần tử position:fixed phủ gần hết khung nhìn (lớp chặn toàn màn hình)."""
+    return pg.evaluate("""() => Array.from(document.querySelectorAll('body *')).filter(e => {
+        if (getComputedStyle(e).position !== 'fixed') { return false; }
+        const r = e.getBoundingClientRect(); return r.width >= innerWidth * 0.8 && r.height >= innerHeight * 0.8; }).length""")
 
 
 # ---------- tiến trình ----------
@@ -99,6 +143,8 @@ class Ui:
         self.browser = pw.chromium.launch()
         self.page = self.browser.new_page(viewport={'width': w, 'height': h})
         self.requests, self.errors = [], []
+        self.loads = []                              # mỗi lần trang tải xong (kể cả tải lại sau Xong)
+        self.page.on('load', lambda _p: self.loads.append(time.time()))
         self.page.on('request', lambda r: self.requests.append(r.url))
         self.page.on('pageerror', lambda e: self.errors.append(str(e)))
         self.page.on('console', lambda m: self.errors.append(m.text) if m.type == 'error' else None)
@@ -272,12 +318,45 @@ def phase_a(pw, W, shots, ports):
         check('Đã rà hết' in pg.inner_text('#msg'), 'rà hết: có dòng "Đã rà hết, bấm Xong"')
         check(not pg.locator('#btn-xong').is_disabled() and pg.inner_text('#btn-xong').strip() == 'Xong', 'nút Xong bật lên')
         pg.screenshot(path=os.path.join(shots, '03_desktop_xong.png'))
-        pg.click('#btn-xong')
         t = time.time()
-        pg.wait_for_function("document.querySelector('#msg').innerText.includes('done.txt')")
+        click_xong(ui)
         check(os.path.exists(os.path.join(run, 'review', 'done.txt')), 'bấm Xong: review/done.txt xuất hiện')
-        code = p.wait(timeout=10)
-        check(code == 0, f'tiến trình tự thoát mã 0 sau {time.time() - t:.1f}s')
+        check(pg.inner_text('#progress .m28-done-bar').strip() == DONE_BAR, 'bấm Xong: dải xanh ở đầu trang đúng chữ')
+        check(pg.locator('#progress .m28-done-bar').get_attribute('role') == 'status', 'dải xanh có role=status')
+        check(pg.locator('.m28-done, .m28-closed, .m28-modal').count() == 0 and big_fixed(pg) == 0, 'sau Xong không có lớp phủ/hộp nào chặn màn hình')
+        check(pg.locator('#btn-nhan').is_disabled() and pg.locator('#btn-xong').is_disabled() and pg.locator('#btn-undo').is_disabled(),
+              'sau Xong: Nhận/Hoàn tác/Xong bị khoá')
+        check(pg.locator('#btn-dong').is_visible(), 'nút Đóng trang rà soát thấy được sau Xong')
+        pg.screenshot(path=os.path.join(shots, '03b_sau_xong_dai_xanh.png'))
+        n_csv = len(read_csv_rows(csv_path))
+        for k in ('n', 'g', 'b', 'z', 'k', '3', 'ArrowLeft'):
+            pg.keyboard.press(k)
+        pg.wait_for_timeout(3200)
+        check(p.poll() is None, f'Xong KHÔNG tắt: tiến trình vẫn chạy sau {time.time() - t:.1f}s')
+        check(len(read_csv_rows(csv_path)) == n_csv and os.path.exists(os.path.join(run, 'review', 'done.txt')),
+              'phím N/G/B/Z/K/3/← sau Xong không ghi gì, done.txt còn')
+        pg.get_by_role('tab', name='Các đợt').click()
+        pg.wait_for_selector('#dot-root .dot-card', timeout=15000)
+        check('F5UI' in pg.inner_text('#dot-root') and pg.locator('#progress .m28-done-bar').is_visible() and pg.locator('#btn-dong').is_visible(),
+              'sau Xong: tab Các đợt mở được, dải xanh và nút Đóng vẫn ở đầu trang')
+        pg.get_by_role('tab', name='Rà soát').click()
+        pg.wait_for_selector('#info .face-name')
+        box = open_close_box(pg)
+        check('Lệnh m28 trong cmd sẽ đi tiếp' in box and 'chưa bấm Xong' not in box, f'hộp Đóng sau Xong: {box!r}')
+        check(pg.evaluate('document.activeElement && document.activeElement.id') == 'close-confirm-cancel', 'hộp Đóng: nút Huỷ có focus mặc định')
+        pg.screenshot(path=os.path.join(shots, '03c_hop_dong.png'))
+        pg.click('#close-confirm-cancel')
+        pg.wait_for_selector('#close-confirm', state='hidden', timeout=10000)
+        pg.wait_for_timeout(1500)
+        check(p.poll() is None and pg.locator('.m28-closed').count() == 0, 'Huỷ ở hộp Đóng: trang và tiến trình còn nguyên')
+        open_close_box(pg)
+        confirm_close(pg)
+        code = p.wait(timeout=15)
+        check(code == 0, f'xác nhận Đóng: tiến trình thoát mã 0 sau {time.time() - t:.1f}s kể từ Xong')
+        check('Đã đóng trang rà soát' in pg.inner_text('.m28-closed'), 'lớp phủ "Đã đóng trang rà soát" hiện sau khi đóng')
+        pg.screenshot(path=os.path.join(shots, '03d_sau_dong.png'))
+        log_a = open(os.path.join(shots, 'app_a2.log'), encoding='utf-8').read()
+        check('đã bấm Xong' in log_a.splitlines()[-1] and 'F5UI' in log_a.splitlines()[-1], f'cmd in dòng đã đóng sau Xong: {log_a.splitlines()[-1]!r}')
         check(ui.external() == [], 'cuối pha: vẫn không có request ra ngoài 127.0.0.1')
     finally:
         ui.close()
@@ -314,13 +393,17 @@ def phase_b(pw, W, shots, port, tri):
         ui.open()
         check(ui.progress() == (5, 5) and not ui.page.locator('#btn-xong').is_disabled(), 'mở qua m28: tiến độ 5/5, nút Xong đang bật')
         check(not os.path.exists(os.path.join(run, 'review', 'done.txt')), 'm28 đã xoá done.txt cũ trước khi mở trang')
-        ui.page.click('#btn-xong')
-        ui.page.wait_for_function("document.querySelector('#msg').innerText.includes('done.txt')")
+        click_xong(ui)
+        check(os.path.exists(os.path.join(run, 'review', 'done.txt')), 'bấm Xong: done.txt có')
+        check(p.poll() is None, 'sau Xong, `m28.py review` vẫn đang chờ (chưa bấm Đóng)')
+        open_close_box(ui.page)
+        confirm_close(ui.page)
     finally:
         ui.close()
     code = p.wait(timeout=20)
     text = open(out, encoding='utf-8').read()
     check(code == 0 and 'đã đóng mà chưa bấm Xong' not in text, f'm28 review thoát mã {code}, không in "Trang rà soát đã đóng mà chưa bấm Xong"')
+    check('đã bấm Xong' in text, 'cmd in dòng "Đã đóng trang rà soát: lượt F5UI đã bấm Xong"')
     lines = open(os.path.join(run, 'log.txt'), encoding='utf-8').read().splitlines()
     check(lines[-1].split('\t')[1:3] == ['review', 'xong'], f'log.txt có dòng review xong: {lines[-1]}')
     check(open(os.path.join(run, 'review', 'done.txt'), encoding='utf-8').read() == 'ok', 'review/done.txt có nội dung ok (m28 ghi đè)')
@@ -506,10 +589,19 @@ def phase_e(pw, W, shots, port):
               'bộ lọc Đáng ngờ: 2 ảnh, nút quyết định bật')
         pg.screenshot(path=os.path.join(shots, 'after_01_loc_dangngo.png'))
         pg.locator('#filter label:has-text("Tất cả")').click()
+        pg.wait_for_function("document.querySelectorAll('#grid img').length === 5")
+        pg.wait_for_timeout(800)                         # chờ lần vẽ lại của bộ lọc xong, kẻo nó xoá dòng nhắc của quyết định kế tiếp (flake cũ)
         # Gán tay không lý do: nhắc mềm
         pg.keyboard.press('g')
         ui.wait_done(1)
+        pg.wait_for_function("document.querySelector('#msg').innerText.includes('Chưa có lý do')", timeout=10000)
         check('Chưa có lý do' in pg.inner_text('#msg'), 'Gán tay không lý do: có nhắc "Chưa có lý do"')
+        box = open_close_box(pg)                        # chưa bấm Xong, còn mặt chưa rà: cảnh báo
+        check('chưa bấm Xong, lượt này sẽ còn mặt chưa rà' in box and '4 mặt' in box and 'dừng ở bước review' in box, f'hộp Đóng chưa Xong, còn mặt: {box!r}')
+        pg.screenshot(path=os.path.join(shots, 'after_02b_dong_chua_xong.png'))
+        pg.keyboard.press('Escape')                     # Esc = Huỷ
+        pg.wait_for_selector('#close-confirm', state='hidden', timeout=10000)
+        check(p.poll() is None, 'Esc ở hộp Đóng: không đóng')
         check('TRƯỚC' in pg.inner_text('#reason'), 'nhãn lý do ghi rõ chọn TRƯỚC')
         pg.screenshot(path=os.path.join(shots, 'after_02_nhac_ly_do.png'))
         # rà hết mặt còn lại
@@ -541,21 +633,60 @@ def phase_e(pw, W, shots, port):
         pg.screenshot(path=os.path.join(shots, 'after_04_500px.png'), full_page=True)
         pg.set_viewport_size({'width': 1440, 'height': 900})
         pg.wait_for_timeout(400)
-        # Xong: lớp phủ, tab cũ không ghi được
-        pg.click('#btn-xong')
-        pg.wait_for_selector('.m28-done', state='visible', timeout=10000)
-        check('quay lại cửa sổ cmd' in pg.inner_text('.m28-done'), 'bấm Xong: lớp phủ "Đóng tab này và quay lại cửa sổ cmd"')
-        pg.screenshot(path=os.path.join(shots, 'after_05_xong_overlay.png'))
+        box = open_close_box(pg)                        # chưa bấm Xong nhưng đã rà hết
+        check('chưa bấm Xong: m28 sẽ coi như chưa rà xong; bấm Huỷ rồi bấm Xong trước nếu muốn đi tiếp' in box, f'hộp Đóng chưa Xong, rà hết: {box!r}')
+        pg.click('#close-confirm-cancel')
+        pg.wait_for_selector('#close-confirm', state='hidden', timeout=10000)
+        # Xong: dải xanh (không lớp phủ), tab cũ không ghi được, trang vẫn dùng được
+        click_xong(ui)
+        check(pg.inner_text('#progress .m28-done-bar').strip() == DONE_BAR, 'bấm Xong: dải xanh đúng chữ ở đầu trang')
+        check(big_fixed(pg) == 0 and pg.locator('.m28-done, .m28-closed').count() == 0, 'không có lớp phủ chặn nào sau Xong')
+        pg.screenshot(path=os.path.join(shots, 'after_05_xong_dai_xanh.png'))
         before = read_csv_rows(csv_path)
         other.click('#btn-bo')
-        other.wait_for_timeout(1000)
-        check(read_csv_rows(csv_path) == before, 'tab cũ bấm Bỏ trong 2 giây cuối: không ghi gì')
+        other.wait_for_selector('#progress .m28-done-bar', state='visible', timeout=10000)
+        other.wait_for_timeout(600)
+        check(read_csv_rows(csv_path) == before, 'tab cũ bấm Bỏ sau Xong: không ghi gì')
+        check(other.locator('#btn-bo').is_disabled() and other.locator('#btn-xong').is_disabled(), 'tab cũ cũng thấy dải xanh và bị khoá quyết định')
         check(os.path.exists(os.path.join(run, 'review', 'done.txt')), 'done.txt không bị xoá')
+        pg.get_by_role('tab', name='Nạp ảnh').click()   # gõ chữ ở tab khác sau Xong phải gõ được; phím tắt không ghi gì
+        pg.fill('#nap-name textarea, #nap-name input', '')
+        pg.click('#nap-name textarea, #nap-name input')
+        pg.keyboard.type('nbgz k12')
+        check(pg.input_value('#nap-name textarea, #nap-name input') == 'nbgz k12', 'sau Xong: gõ chữ (kể cả n b g z k) ở ô tên lượt tab Nạp ảnh được')
+        pg.fill('#nap-name textarea, #nap-name input', '')
+        pg.get_by_role('tab', name='Ca khó').click()
+        pg.wait_for_selector('#ck-export', timeout=10000)
+        check(pg.locator('#ck-export').is_enabled() and pg.locator('#progress .m28-done-bar').is_visible(), 'sau Xong: tab Ca khó dùng được, dải xanh còn ở đầu trang')
+        pg.get_by_role('tab', name='Rà soát').click()
+        pg.wait_for_selector('#info .face-name')
+        pg.keyboard.press('b')
+        pg.keyboard.press('n')
+        pg.wait_for_timeout(800)
+        check(read_csv_rows(csv_path) == before and p.poll() is None, 'phím B/N ở tab Rà soát sau Xong: không ghi, trang còn sống')
+        t = time.time()
+        pg.wait_for_timeout(2500)
+        check(p.poll() is None, f'Xong KHÔNG tắt tiến trình ({time.time() - t + 3:.0f}s sau khi bấm)')
+        box = open_close_box(pg)
+        check('Lệnh m28 trong cmd sẽ đi tiếp' in box, f'hộp Đóng sau Xong: {box!r}')
+        pg.keyboard.press('b')                           # hộp đang mở: phím tắt không làm gì
+        pg.wait_for_timeout(500)
+        check(read_csv_rows(csv_path) == before, 'hộp Đóng đang mở: phím B không ghi')
+        pg.keyboard.press('Tab')
+        pg.keyboard.press('Tab')
+        pg.keyboard.press('Tab')
+        check(pg.evaluate("document.activeElement && document.activeElement.closest('#close-confirm') !== null"), 'Tab giữ focus trong hộp Đóng')
+        pg.keyboard.press('Escape')
+        pg.wait_for_selector('#close-confirm', state='hidden', timeout=10000)
+        pg.wait_for_timeout(1500)
+        check(p.poll() is None, 'Esc ở hộp Đóng: không đóng')
+        open_close_box(pg)
+        confirm_close(pg)
+        pg.screenshot(path=os.path.join(shots, 'after_06_sau_dong.png'))
         t = time.time()
         while p.poll() is None and time.time() - t < 10:
             time.sleep(0.2)
-        check(p.returncode == 0 and os.path.exists(os.path.join(run, 'review', 'done.txt')), 'tiến trình thoát mã 0, done.txt còn')
-        pg.screenshot(path=os.path.join(shots, 'after_06_sau_tat.png'))
+        check(p.returncode == 0 and os.path.exists(os.path.join(run, 'review', 'done.txt')), 'xác nhận Đóng: tiến trình thoát mã 0, done.txt còn')
         check(not ui.external(), 'không có request ra ngoài 127.0.0.1')
         check(not ui.errors or all('Failed to load resource' in e or 'ERR_' in e for e in ui.errors), f'không lỗi JS: {ui.errors[:2]}')
     finally:
@@ -681,6 +812,11 @@ def phase_f(pw, W, shots, ports, wflw):
         pg.wait_for_function("document.querySelectorAll('#nap-list img').length === 0 || !document.querySelector('#nap-list img')?.offsetParent",
                              timeout=15000)
         check('Chưa chọn ảnh nào' in pg.inner_text('#nap-count'), 'sau khi bắt đầu: vùng thả và lưới đã xoá')
+        pg.click('#btn-dong')                            # prepare đang chạy: Đóng bị từ chối, không mở hộp
+        pg.wait_for_function("document.querySelector('#close-msg')?.innerText.includes('Đang chuẩn bị lượt NAP_001')", timeout=10000)
+        check(pg.locator('#close-confirm').count() == 0 or not pg.locator('#close-confirm').is_visible(), 'prepare đang chạy: Đóng bị từ chối, không mở hộp')
+        check(p.poll() is None and pg.locator('.m28-closed').count() == 0, 'prepare đang chạy: trang và server còn nguyên sau khi bấm Đóng')
+        pg.screenshot(path=os.path.join(shots, 'upload_02b_dong_bi_tu_choi.png'))
         pg.screenshot(path=os.path.join(shots, 'upload_02_dang_chay.png'))
         label = pg.inner_text('#nap-prog .nap-label')
         check(label.startswith(('Đang nạp MediaPipe', 'Bước')), f'nhãn tiến độ: {label!r}')
@@ -786,6 +922,10 @@ def phase_f(pw, W, shots, ports, wflw):
         check('Chưa có lượt nào' in pg.inner_text('#tab-ra'), 'tab Rà soát ghi "Chưa có lượt nào"')
         pg.get_by_role('tab', name='Nạp ảnh').click()
         pg.screenshot(path=os.path.join(shots, 'upload_06_thieu_model.png'))
+        box = open_close_box(pg)                         # chế độ --nap (chưa có lượt): hộp xác nhận đơn giản, đóng được ở mọi tab
+        check('Đóng trang rà soát?' in box and 'chưa bấm Xong' not in box, f'--nap: hộp Đóng đơn giản: {box!r}')
+        confirm_close(pg)
+        check(p.wait(timeout=15) == 0, '--nap: xác nhận Đóng, tiến trình thoát mã 0')
     finally:
         ui.close()
         p.terminate()

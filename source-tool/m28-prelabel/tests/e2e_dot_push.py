@@ -320,6 +320,16 @@ def run(pw, W, wflw, shots, port):
         decs = [r[1] for r in tri[1:]]
         check('gan_tay' in decs and 'bo' in decs, f'đã rà hết, có Gán tay và Bỏ: {decs}')
         n_nhan, n_tay, n_bo = decs.count('nhan'), decs.count('gan_tay'), decs.count('bo')
+        # bấm Xong TRƯỚC khi đẩy: trang tải lại một lần, vẫn còn server, Đẩy lên CVAT và tab Các đợt dùng được sau Xong
+        base.click_xong(ui)
+        check(os.path.exists(os.path.join(runs, 'Khoi', 'review', 'done.txt')), 'Khoi: bấm Xong ghi review/done.txt')
+        pg.wait_for_function("() => { const b = document.querySelector('#btn-push'); return !!b && !b.disabled; }", timeout=20000)
+        check(pg.locator('#btn-push').is_enabled(), 'sau Xong: nút Đẩy lên CVAT vẫn bật')
+        pg.get_by_role('tab', name='Các đợt').click()
+        pg.wait_for_selector('#dot-root .dot-card', timeout=15000)
+        check(card(pg, 'Khoi').count() == 1 and pg.locator('#progress .m28-done-bar').is_visible(), 'sau Xong: tab Các đợt mở được, dải xanh còn ở đầu trang')
+        pg.get_by_role('tab', name='Rà soát').click()
+        pg.wait_for_selector('#btn-push', timeout=15000)
         # phím tắt không chạy khi hộp xác nhận đang mở
         # ---------- 5. đẩy lên CVAT ----------
         log('\n-- 5. đẩy lên CVAT (CVAT giả) --')
@@ -354,6 +364,16 @@ def run(pw, W, wflw, shots, port):
         pg.click('#push-confirm-ok')
         modal_gone(pg, '#push-confirm')
         pg.wait_for_selector('#push-prog .nap-prog', timeout=15000)
+        pg.click('#btn-dong')                                    # đang đẩy: Đóng bị từ chối (nếu CVAT giả chưa kịp xong)
+        pg.wait_for_timeout(700)
+        if pg.locator('#push-cancel').is_visible():
+            pg.wait_for_function("(document.querySelector('#close-msg')?.innerText || '').includes('Đang đẩy lượt Khoi')", timeout=10000)
+            check(not pg.locator('#close-confirm').is_visible() and p.poll() is None, 'đang đẩy lên CVAT: Đóng bị từ chối, không mở hộp')
+        else:
+            if pg.locator('#close-confirm').is_visible():
+                pg.click('#close-confirm-cancel')
+                modal_gone(pg, '#close-confirm')
+            log('  ...  push xong quá nhanh: không bắt được lúc đang chạy (logic từ chối được kiểm bằng pytest test_close_check_refuses_while_jobs_run_or_switching)')
         pg.wait_for_selector('#push-panel .push-done', timeout=180000)
         check(pg.locator('#btn-push').is_hidden(), 'sau khi đẩy: nút Đẩy ẩn, thẻ kết quả thay vào')
         ps = json.load(open(os.path.join(runs, 'Khoi', 'push.json'), encoding='utf-8'))

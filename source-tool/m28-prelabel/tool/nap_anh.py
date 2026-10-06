@@ -54,6 +54,9 @@ LOG_LINES = 500
 NOTE_MAX = 500                      # ghi chú của đợt (dot.json)
 
 
+CLOSING_MSG = "Trang đang đóng (đã bấm Đóng trang rà soát): không ghi thêm được."   # dùng chung review_app, dot_ui, ca_kho
+
+
 class RunError(Exception):
     """Lỗi người dùng sửa được (thiếu file, sai tên...). Thông điệp tiếng Việt, nói rõ cách sửa."""
 

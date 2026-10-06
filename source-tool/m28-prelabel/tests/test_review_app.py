@@ -1,8 +1,9 @@
 """Thử tool/review_app.py (trang rà soát) bằng dữ liệu GIẢ dựng trong tmp_path. Không cần trình duyệt, không cần gradio.
 
-Phần giao diện Gradio (bố cục, phím tắt, nút Xong tự tắt trang) kiểm riêng bằng tests/e2e_review_ui.py (tuỳ chọn).
+Phần giao diện Gradio (bố cục, phím tắt, nút Xong khoá quyết định, nút Đóng trang rà soát) kiểm riêng bằng tests/e2e_review_ui.py (tuỳ chọn).
 """
 import csv
+import html
 import json
 import os
 import subprocess
@@ -883,22 +884,190 @@ def test_decision_without_reason_gets_soft_hint(five):
     assert 'TRƯỚC' in open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()     # nhãn nói rõ thứ tự
 
 
-def test_finished_blocks_other_tabs_and_shows_closing_overlay(five):
+def test_finished_blocks_decisions_in_all_tabs_and_shows_done_bar_not_overlay(five):
     need_pil()
     s = ra.Store(five, 'P2', clock=FakeClock())
     ses = ra.new_session(s)
     other = ra.new_session(s)                                          # tab thứ hai
     decide_all(s)
-    assert 'm28-done' not in ra.make_view(s, ses)['header']
+    assert 'm28-done-bar' not in ra.make_view(s, ses)['header']
     msg, level, ok = ra.act_finish(s, ses)
-    assert ok and s.finished and os.path.exists(s.done_path)
+    assert ok and s.finished and os.path.exists(s.done_path) and not s.closed
+    assert 'done.txt' in msg and 'tự tắt' not in msg                   # Xong không còn tắt trang; e2e chờ #msg chứa done.txt
     v = ra.make_view(s, ses)
-    assert 'm28-done' in v['header'] and 'quay lại cửa sổ cmd' in v['header'] and not v['nhan_ok'] and not v['xong_ok']
-    assert 'm28-done' in ra.make_view(s, other)['header']              # tab kia cũng thấy lớp phủ
+    assert 'class="m28-done-bar"' in v['header'] and 'role="status"' in v['header'] and not v['nhan_ok'] and not v['xong_ok']
+    assert ("Đã ghi xong. Bạn có thể Đẩy lên CVAT, xem Các đợt, xuất Ca khó. "
+            "Xong việc bấm 'Đóng trang rà soát' để quay lại cmd.") in html.unescape(v['header'])
+    # không còn lớp phủ chặn toàn màn hình (class cũ m28-done không còn nghĩa nào, lớp phủ chỉ có sau khi đóng)
+    assert 'class="m28-done"' not in v['header'] and 'm28-closed' not in v['header']
+    assert 'm28-done-bar' in ra.make_view(s, other)['header']          # tab kia cũng thấy dải xanh
+    assert not ra.make_view(s, other)['nhan_ok']                       # và bị khoá quyết định
     n = len(s.rows)
-    assert ra.act_decide(s, other, 'bo', '', other['cur'])[1] == 'info'
+    m1 = ra.act_decide(s, other, 'bo', '', other['cur'])
+    assert m1[1] == 'info' and m1[0] == ra.CLOSED_MSG and 'trang sắp tắt' not in m1[0]
     assert ra.act_undo(s, other, other['cur'])[1] == 'info'
-    assert len(s.rows) == n and os.path.exists(s.done_path)           # done.txt không bị xoá trong 2 giây
+    assert ra.act_finish(s, other)[0] == ra.CLOSED_MSG                 # bấm Xong lần nữa: không ghi lại
+    assert len(s.rows) == n and os.path.exists(s.done_path)           # done.txt không bị xoá
+
+
+def test_done_bar_css_is_inline_not_fullscreen_and_overlay_only_after_close(five):
+    css = ra.CSS
+    bar = css[css.index('.m28-done-bar {'):css.index('}', css.index('.m28-done-bar {'))]
+    assert 'position' not in bar and 'fixed' not in bar and 'var(' in bar          # nằm trong dòng, dùng biến theme
+    assert 'm28-done {' not in css and '.m28-done-box' not in css
+    assert 'position: fixed' in css[css.index('.m28-closed {'):css.index('}', css.index('.m28-closed {'))]
+    assert "'.m28-done-bar'" in ra.PAGE_JS and "'.m28-closed'" in ra.PAGE_JS         # JS: chặn phím tắt sau Xong; chặn hết sau Đóng
+    assert "querySelector('.m28-done')" not in ra.PAGE_JS
+
+
+def test_reload_after_finish_with_new_face_unlocks_and_reopens(five):
+    """Sau Xong, khôi phục ảnh làm lượt có lại mặt chưa rà: mở khoá, mất dải xanh, nút Xong khoá lại kèm 'còn N mặt chưa rà'."""
+    need_pil()
+    import dot_anh
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    dot_anh.soft_delete_image(five, 'F_005')
+    s.exclude('F_005')
+    decide_all(s)
+    ses = ra.new_session(s)
+    assert ra.act_finish(s, ses)[2] and s.finished and os.path.exists(s.done_path)
+    folder = dot_anh.list_trash(five)[0]['folder']
+    res = dot_anh.restore_image(five, folder, reviewer='P2')
+    assert res['mo_lai'] and not os.path.exists(s.done_path)          # dot_anh gỡ done.txt
+    s.reload()
+    assert s.progress()['remaining'] == 1 and not s.finished
+    v = ra.make_view(s, ra.ensure_session(s, ses))
+    assert 'm28-done-bar' not in v['header'] and v['nhan_ok'] and v['tay_ok'] and not v['xong_ok']
+    assert 'còn 1 mặt chưa rà' in v['xong_label']
+    ses2 = ra.ensure_session(s, ses)
+    ra.act_filter(s, ses2, 'chua_ra')
+    assert ses2['cur'] == 'F_005'                                       # lọc 'Chưa rà' đưa tới mặt vừa khôi phục
+    assert ra.act_decide(s, ses2, 'nhan', '', 'F_005')[1] == 'ok'     # ghi được lại
+    assert ra.act_finish(s, ses2)[2] and s.finished                   # rà tiếp rồi bấm Xong lại
+
+
+def test_reload_after_finish_when_soft_delete_keeps_finished(five):
+    """Xoá mềm ảnh sau Xong (lượt vẫn rà hết) thì giữ trạng thái đã xong, done.txt còn."""
+    need_pil()
+    import dot_anh
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    decide_all(s)
+    ses = ra.new_session(s)
+    assert ra.act_finish(s, ses)[2]
+    dot_anh.soft_delete_image(five, 'F_002', reviewer='P2')
+    s.exclude('F_002')
+    s.reload()
+    assert s.finished and os.path.exists(s.done_path) and s.progress()['remaining'] == 0
+    assert 'm28-done-bar' in ra.make_view(s, ra.ensure_session(s, ses))['header']
+
+
+def test_had_done_is_not_locked_and_no_green_bar_until_done_in_this_session(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    decide_all(s)
+    ra.act_finish(s, ra.new_session(s))
+    s2 = ra.Store(five, 'P2', clock=FakeClock())                       # mở lại lượt đã Xong (review_app.py runs\X P2)
+    assert s2.had_done and not s2.finished
+    ses = ra.new_session(s2)
+    v = ra.make_view(s2, ses)
+    assert 'đã bấm Xong trước đó' in v['header'] and 'm28-done-bar' not in v['header'] and v['nhan_ok']
+    ra.act_decide(s2, ses, 'gan_tay', '', ses['cur'])                  # quyết định mới gỡ done.txt như cũ
+    assert not os.path.exists(s2.done_path)
+
+
+# ---------- nút Đóng trang rà soát (logic thuần) ----------
+def busy_job(run='NAP_001'):
+    return types.SimpleNamespace(running=True, run=run, snapshot=lambda: {'state': 'dang_chay', 'run': run}, cancel=lambda: None)
+
+
+def test_close_check_refuses_while_jobs_run_or_switching(five):
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ctx = ra.AppCtx(reviewer='P2', run_dir=five)
+    assert ra.close_check(s, ctx) == (True, '', 'info')
+    assert ra.close_check(None, ctx)[0]                                # chế độ --nap
+    ctx.job = busy_job('NAP_007')
+    ok, msg, lv = ra.close_check(s, ctx)
+    assert not ok and lv == 'warn' and 'Đang chuẩn bị lượt NAP_007' in msg and 'chờ xong hoặc bấm Huỷ' in msg
+    ctx.job = ra.AppCtx(reviewer='P2', run_dir=five).job
+    ctx.push_job = busy_job('R1')
+    ok, msg, lv = ra.close_check(s, ctx)
+    assert not ok and lv == 'warn' and 'đẩy lượt R1 (CVAT)' in msg
+    ctx.push_job = ra.AppCtx(reviewer='P2', run_dir=five).push_job
+    ctx.del_job = busy_job('R2')
+    ok, msg, lv = ra.close_check(s, ctx)
+    assert not ok and 'xoá task của lượt R2 (CVAT)' in msg
+    ctx.del_job = ra.AppCtx(reviewer='P2', run_dir=five).del_job
+    ctx.switch_to = (five, s)
+    ok, msg, lv = ra.close_check(s, ctx)
+    assert not ok and lv == 'warn' and 'chuyển' in msg
+    assert not ctx.begin_close()                                       # đang chuyển lượt: cũng không đặt cờ đóng được
+    ctx.switch_to = None
+    assert ra.close_check(s, ctx)[0]
+
+
+def test_close_flag_is_set_once_and_blocks_every_writer(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ctx = ra.AppCtx(reviewer='P2', run_dir=five)
+    assert ctx.begin_close() is True and ctx.closing
+    assert ctx.begin_close() is False                                  # lần hai (tab khác / bấm đúp): không đặt lại
+    ok, msg, lv = ra.close_check(s, ctx)
+    assert not ok and 'đang đóng' in msg
+    assert not ctx.begin_switch(('x', None))                           # Rà lượt này sau khi đóng: từ chối
+    assert ctx.switch_to is None
+    s.closed = True
+    ses = ra.new_session(s)
+    n = len(s.rows)
+    assert ra.act_decide(s, ses, 'nhan', '', ses['cur'])[0] == ra.CLOSING_MSG
+    assert ra.act_undo(s, ses, ses['cur'])[0] == ra.CLOSING_MSG
+    assert ra.act_finish(s, ses)[0] == ra.CLOSING_MSG
+    assert len(s.rows) == n and not os.path.exists(s.done_path)
+    v = ra.make_view(s, ses)
+    assert not v['nhan_ok'] and not v['tay_ok'] and not v['xong_ok'] and not v['undo_ok']
+
+
+def test_begin_switch_then_close_is_refused_and_keeps_first_target(five):
+    ctx = ra.AppCtx(reviewer='P2', run_dir=five)
+    assert ctx.begin_switch(('A', 1)) and ctx.begin_switch(('B', 2))
+    assert ctx.switch_to == ('A', 1)
+    assert not ctx.begin_close() and not ctx.closing
+
+
+def test_close_prompt_three_cases_plus_nap_and_had_done(five):
+    need_pil()
+    assert ra.close_prompt(None)[0] == 'nap'
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    kind, q, warn = ra.close_prompt(s)                                 # chưa Xong, còn mặt chưa rà
+    assert kind == 'chua_con' and 'chưa bấm Xong, lượt này sẽ còn mặt chưa rà' in warn and '5 mặt' in warn
+    assert 'm28 sẽ dừng ở bước review' in warn and 'gõ lại đúng lệnh' in warn
+    decide_all(s)                                                      # chưa Xong nhưng đã rà hết
+    kind, q, warn = ra.close_prompt(s)
+    assert kind == 'chua_het' and 'chưa bấm Xong: m28 sẽ coi như chưa rà xong; bấm Huỷ rồi bấm Xong trước nếu muốn đi tiếp' in warn
+    ra.act_finish(s, ra.new_session(s))                                # đã Xong
+    kind, q, warn = ra.close_prompt(s)
+    assert kind == 'xong' and q == 'Đóng trang rà soát? Lệnh m28 trong cmd sẽ đi tiếp.' and not warn
+    s2 = ra.Store(five, 'P2', clock=FakeClock())                       # mở lại lượt đã có done.txt (had_done, chưa bấm Xong ở phiên này)
+    assert s2.had_done and not s2.finished and ra.close_prompt(s2)[0] == 'xong'
+    os.remove(s2.done_path)                                            # done.txt không còn trên đĩa: không coi là đã Xong
+    assert ra.close_prompt(s2)[0] == 'chua_het'
+    body = ra.close_body_html(s2)
+    assert 'close-confirm-title' in body and 'role="alert"' in body
+
+
+def test_closed_overlay_exists_only_in_closed_html(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    decide_all(s)
+    ra.act_finish(s, ra.new_session(s))
+    assert 'm28-closed' not in ra.make_view(s, ra.new_session(s))['header']     # sau Xong chưa có lớp phủ
+    assert 'm28-closed' in ra.CLOSED_HTML and 'Đã đóng trang rà soát. ' in ra.CLOSED_HTML.replace('</b><span>', ' ') and 'cmd' in ra.CLOSED_HTML
+
+
+def test_xong_no_longer_closes_server_source():
+    src = open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()
+    body = src[src.index('    def on_xong(ses):'):src.index('    def on_reselect(ses):')]
+    assert 'demo.close' not in body and 'Timer' not in body and 'job.running' not in body    # Xong không tắt gì, không cần từ chối vì job
+    assert src.count('demo.close(verbose=False)') == 3                 # nút Đóng, 'Rà lượt này' (tab Nạp ảnh), KeyboardInterrupt; chuyển lượt từ tab Các đợt nằm ở dot_ui
+    assert 'elem_id="btn-dong"' in src and 'close_once' not in src
 
 
 def test_corrupt_overlay_does_not_break_page(five):
@@ -1241,3 +1410,21 @@ def test_cli_nap_without_name_exits_2(tmp_path):
     assert r.returncode == 2 and 'Cách dùng' in r.stderr and 'Traceback' not in r.stderr
     r = run_app(tmp_path, '--nap', '../x')
     assert r.returncode == 2 and 'không hợp lệ' in r.stderr and not os.path.exists(os.path.join(tmp_path, 'runs'))
+
+
+def test_xong_reloads_page_once_and_new_session_sees_done(five):
+    """Xong ghi done.txt rồi trang tải lại (JS); phiên mới sau tải lại phải thấy dải xanh; JS chỉ tải lại khi lần bấm này vừa ghi done.txt."""
+    need_pil()
+    src = open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()
+    assert 'events[8].then(None, None, None, js=XONG_RELOAD_JS)' in src and 'b_xong.click(on_xong' in src
+    js = ra.XONG_RELOAD_JS
+    assert 'location.reload()' in js and "'done.txt'" in js and '.m28-done-bar' in js          # điều kiện chống vòng lặp
+    assert js.count('location.reload()') == 1
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    decide_all(s)
+    ra.act_finish(s, ra.new_session(s))
+    fresh = ra.new_session(s)                                          # phiên mới sau tải lại
+    v = ra.make_view(s, fresh)
+    assert 'm28-done-bar' in v['header'] and not v['nhan_ok'] and v['msg'] == ''     # không có 'done.txt' trong #msg -> JS không tải lại nữa
+    s2 = ra.Store(five, 'P2', clock=FakeClock())                       # lượt đã có done.txt từ trước: không bar, không tải lại
+    assert 'm28-done-bar' not in ra.make_view(s2, ra.new_session(s2))['header']
