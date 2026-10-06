@@ -258,6 +258,8 @@ def push_panel(gr, demo, store, ctx):
 
     def on_click():
         m = model()
+        if ctx.closing:
+            return render(nap_anh.CLOSING_MSG) + (gr.update(visible=False), "", "")
         if not m["enabled"]:
             gr.Warning(m["reason"] or "Chưa đẩy được.", title="Chưa đẩy được")
             return render(m["reason"]) + (gr.update(visible=False), "", "")
@@ -267,6 +269,8 @@ def push_panel(gr, demo, store, ctx):
     def on_confirm(token):
         it = pending.take(token)
         close = (gr.update(visible=False), "", "")
+        if ctx.closing:
+            return render(nap_anh.CLOSING_MSG) + close
         if it is None or it.get("run") != run:
             return render("Yêu cầu xác nhận đã cũ hoặc không còn hiệu lực: bấm Đẩy lên CVAT lại.") + close
         m = model()
@@ -419,6 +423,8 @@ def dot_tab(gr, demo, store, ctx, deps):
         a = parse_action(raw)
         if a is None:
             return render(s, "Hành động không hợp lệ (bỏ qua).", "warn")
+        if ctx.closing and a["act"] not in ("back", "open", "page"):      # trang đang đóng: chỉ xem được, không ghi/đẩy/chuyển gì
+            return render(s, nap_anh.CLOSING_MSG, "warn")
         try:
             return _dispatch(a, s)
         except RunError as e:
@@ -483,7 +489,8 @@ def dot_tab(gr, demo, store, ctx, deps):
         if dot_anh.run_busy(run_dir):
             raise RunError(f"Đợt {a['run']} đang có việc chạy: chờ xong.")
         new_store = Store(run_dir, reviewer)                                   # dựng TRƯỚC: lỗi thì báo ở đây, chưa đóng gì
-        ctx.switch_to = (run_dir, new_store)
+        if not ctx.begin_switch((run_dir, new_store)):
+            raise RunError(nap_anh.CLOSING_MSG)
         threading.Timer(0.8, lambda: demo.close(verbose=False)).start()
         return render(s, f"Đang chuyển sang đợt {a['run']}: trang mất kết nối 1–3 giây rồi tự tải lại.", "ok", switch="Rà soát M28 · " + a["run"])
 
@@ -584,6 +591,9 @@ def dot_tab(gr, demo, store, ctx, deps):
 
     def on_ok(typed_v, check_v, token, s):
         s = ensure(s)
+        if ctx.closing:
+            pending.cancel()
+            return render(s, nap_anh.CLOSING_MSG, "warn")
         it = pending.item
         if it and token == it.get("token") and it["kind"] == "delrun" and typed_v != it["run"]:
             return render(s, "Tên gõ lại chưa đúng: chưa xoá gì.", "warn")
