@@ -1,5 +1,21 @@
 # Nguồn dữ liệu cho M28
 
+> **ĐỔI NGÀY 6/10/2026 (QĐ-001):** tập chính là **in-cabin: YawDD + DrivFace**; **WFLW không còn dùng** (các mục A bên dưới giữ để tham khảo lịch sử).
+> Dự án phi thương mại: giấy phép "dùng học thuật/nghiên cứu" chấp nhận được; không phát tán, không đăng lại, không giao bên thứ ba.
+
+## Tập chính hiện tại
+
+| Bộ | Nội dung | Giấy phép (ghi ngày 6/10/2026) | Trạng thái |
+|---|---|---|---|
+| **DrivFace** (UCI) | 606 ảnh 640×480 của 4 tài xế (2 nữ, 2 nam) lái xe thật, nhiều ngày, có kính/râu. Đáp án: hộp mặt, mắt phải/trái, mũi, hai khoé miệng; nhãn hướng nhìn 3 lớp (nhìn phải −45..−30°, thẳng −15..15°, nhìn trái 30..45°) | "Free for academic usage" (theo readme); mục đích khác liên hệ tác giả K. Diaz-Chito | **Đã tải thử trên cloud** (26 MB). MediaPipe dò thấy mặt **606/606** khi cắt theo hộp mặt; tâm mắt MediaPipe lệch so với đáp án DrivFace trung vị 5,4% IOD |
+| **YawDD** | 351 video quay trong xe thật (camera gương chiếu hậu và táp-lô), tài xế bình thường/nói/ngáp | Theo IEEE DataPort / UMass (cần kiểm điều khoản và ghi vào đây) | Cần mở host `skuld.cs.umass.edu` trong Network access để tải; chưa tải |
+
+Cách dùng: **không còn đáp án 98 điểm**. 50 điểm đặt trực tiếp lên đỉnh MediaPipe; đáp án để đo chất lượng là nhãn nhóm gán tay trong CVAT (tập vàng G, tập đo). DrivFace cho sẵn nhãn hướng nhìn nên dùng làm cờ "nghiêng"; hộp mặt và 5 điểm mốc dùng để kiểm tra nhanh, không thay đáp án 50 điểm.
+
+Lệnh tải DrivFace (cmd): `curl -L -O https://archive.ics.uci.edu/static/public/378/drivface.zip` (bên trong có `DrivImages.zip`, `drivPoints.txt`, `readme.txt`; tên file ảnh có **dấu cách trước `.jpg`**).
+
+---
+
 Gộp từ lượt tìm ngày 05/10/2026 (bản gốc nằm ở phiên Claude của một thành viên, file `du_lieu_face_landmark.md`).
 "Đã kiểm" nghĩa là đã gửi request thật (lấy 1 byte đầu hoặc kích thước file), **chưa tải trọn file**.
 Lệnh viết cho **cmd** (Windows 10 trở lên có sẵn `curl`). Repo này công khai: file này chỉ chứa link và lệnh;

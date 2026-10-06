@@ -40,18 +40,22 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
 3. Làm đúng việc của ngày đó, đúng tên file và thư mục như kế hoạch. Không tự đổi tên điểm, tên file,
    ngày giao nhận; nếu thấy kế hoạch sai thì nói rõ và đề xuất sửa.
 4. Code chạy trên Windows, Python 3.14, CPU; lệnh viết cho **cmd** (không phải PowerShell). Phiên Claude
-   trên cloud không có CVAT của ai và không có GPU. **Từ 5/10/2026 chủ repo cho phép phiên cloud tải và xử
-   lý ảnh WFLW thật** (chạy `split.py`, `crop.py`, thử `m28.py` trên dữ liệu thật) để tạo gói dữ liệu chia cho
-   cả đội; việc này cần môi trường cloud cho phép các host `wywu.github.io`, `drive.usercontent.google.com`
-   (và `huggingface.co`, `archive.ics.uci.edu` khi cần). Host bị chặn thì báo chủ repo sửa Network access, không
-   vòng qua. Phiên cloud vẫn **không** được xử lý ảnh hay dữ liệu của khách hàng.
+   trên cloud không có CVAT của ai và không có GPU. **Từ 6/10/2026 chủ repo cho phép phiên cloud tải và xử
+   lý ảnh của các bộ in-cabin đã chọn (YawDD, DrivFace)** để dựng gói dữ liệu và thử `m28.py` trên dữ liệu thật; cần môi trường cloud cho phép
+   các host tải (`archive.ics.uci.edu`, `skuld.cs.umass.edu`...). Host bị chặn thì báo chủ repo sửa Network access, không vòng qua.
+   Phiên cloud vẫn **không** được xử lý ảnh hay dữ liệu của khách hàng, hay ảnh người thật ngoài các bộ đã chọn (ảnh đồng đội...).
 
 ## Quyết định đã chốt
+
+- **Đổi dữ liệu và mục đích (6/10/2026, chủ repo; ghi ở `so-quyet-dinh.md` QĐ-001):** tập chính là **in-cabin (ảnh tài xế trong xe): YawDD + DrivFace**;
+  **bỏ hoàn toàn WFLW**; dự án là **phi thương mại** (học tập/nghiên cứu), nên giấy phép "chỉ dùng nghiên cứu/NC" dùng được, nhưng không phát tán dữ liệu
+  và không giao cho bên thứ ba. Hệ quả: không còn đáp án 98 điểm có sẵn; 50 điểm lấy trực tiếp từ đỉnh của MediaPipe (không học trên WFLW), đáp án
+  để đo chất lượng là nhãn do nhóm gán tay trong CVAT. Các phần trong `de-tai-m28/` nói về WFLW là bản chụp cũ, bản Claude Docs cần cập nhật theo.
 
 - Model giao khách: **MediaPipe Face Landmarker** (Tasks API, `vision.FaceLandmarker`, file
   `face_landmarker.task`, Apache-2.0). Không dùng `mp.solutions`. PIPNet (trọng số học trên WFLW) chỉ để
   so sánh nội bộ, không bao giờ nằm trong `tool/`.
-- 50 điểm do nhóm tự chọn từ 98 điểm WFLW (khách hàng chưa có định nghĩa). File cấu hình
+- 50 điểm do nhóm tự chọn (định nghĩa tham khảo bố cục 98 điểm WFLW, nay đặt trực tiếp lên đỉnh MediaPipe; khách hàng chưa có định nghĩa). File cấu hình
   `config/m28_config.json` là nguồn duy nhất cho CVAT, ánh xạ và đánh giá; phần 50 điểm không đổi
   từ 7/10, P1 đóng băng cả file ngày 12/10.
 - **Mỗi người một CVAT tự cài** (v2.77.0, Docker Engine trong Ubuntu WSL2, chỉ mở ở
@@ -65,17 +69,19 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
 
 ## Quy tắc bắt buộc
 
-- **Repo này chuyển sang riêng tư ngày 5/10/2026**, nhưng vẫn không commit ảnh mặt (WFLW, WIDER FACE, ảnh
+- **Repo này chuyển sang riêng tư ngày 5/10/2026**, nhưng vẫn không commit ảnh mặt (YawDD, DrivFace, WFLW cũ, ảnh
   cắt, ảnh chồng), file đáp án, file xuất CVAT, file sao lưu task, `runs/`, trọng số PIPNet hay dữ liệu khách
   hàng vào git. `.gitignore` vẫn chặn các thư mục này; chỉ gỡ khi chủ repo yêu cầu rõ. Gói dữ liệu cho đội
   gửi qua file zip (tải về hoặc Drive riêng tư của đội), không đẩy lên git. Nếu repo bị đổi lại thành công
   khai thì dữ liệu phải ra khỏi repo ngay.
 - Token CVAT được phép nhập ở tab **Cài đặt** của trang rà soát chạy cục bộ (chỉ 127.0.0.1) và có thể lưu ngoài repo trong thư mục người dùng khi người dùng bật "Nhớ trên máy này". Vẫn **không bao giờ** ghi token, mật khẩu, địa chỉ email riêng vào code, repo, chat, log, `runs/`, `outputs/`.
-- Ảnh và đáp án **WFLW** (bộ công khai) được phép xử lý trong phiên Claude cloud của chủ repo, kèm điều kiện
-  ở trên. **Ảnh, đáp án, file xuất CVAT của khách hàng, và ảnh mặt người thật ngoài WFLW** (bộ in-cabin, ảnh
-  đồng đội) không bao giờ được đưa vào chat AI nào (kể cả Gemini trong Colab).
+- Ảnh in-cabin **YawDD** và **DrivFace** (bộ nghiên cứu công khai, có giấy phép dùng học thuật) được phép xử lý trong phiên Claude cloud của chủ repo,
+  kèm điều kiện ở trên. **Ảnh, đáp án, file xuất CVAT của khách hàng, và ảnh mặt người thật ngoài các bộ đã chọn** (ảnh đồng đội, bộ khác)
+  không bao giờ được đưa vào chat AI nào (kể cả Gemini trong Colab). Ảnh người lái xe là dữ liệu nhạy cảm: chỉ dùng nội bộ nhóm, không đăng,
+  không gửi ra ngoài, không đưa vào báo cáo/slide công khai nếu giấy phép bộ đó không cho phép; ghi nguồn khi trích.
 - Trang rà soát chỉ chạy `launch(server_name="127.0.0.1", share=False)`; không `share=True`, không tunnel.
-- Ảnh WFLW theo giấy phép CC BY-NC-ND: chỉ dùng nội bộ, không phát tán, không đăng bản đã sửa.
+- Giấy phép: DrivFace "free for academic usage" (liên hệ tác giả nếu dùng mục đích khác); YawDD theo điều khoản IEEE DataPort/UMass (kiểm và
+  ghi vào `source-tool/m28-prelabel/nguon-du-lieu.md` trước khi dùng). Dự án phi thương mại: không bán, không giao thương mại, không đăng lại dữ liệu.
 
 ## Quy ước của repo (template khoá 4A)
 
