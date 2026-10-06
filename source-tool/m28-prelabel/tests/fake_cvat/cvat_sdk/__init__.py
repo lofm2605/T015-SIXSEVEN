@@ -1,0 +1,361 @@
+"""CVAT GIẢ (chỉ để test, KHÔNG phải cvat-sdk thật). Giữ trạng thái "server" trong bộ nhớ; có M28_FAKE_CVAT_STATE=<file json> thì
+đọc/ghi trạng thái vào file đó (dùng xuyên tiến trình cho e2e). Ghi lại MỌI lời gọi (tên, tham số) để test kiểm không có lời gọi
+nào chạm task không có prefix demo- và để so với chữ ký của cvat-sdk thật (tests/test_push.py::test_signatures_match_real_sdk).
+
+Giả lỗi theo lệnh bằng biến môi trường M28_FAKE_CVAT_CONTROL (JSON) hoặc cvat_sdk.CONTROL.update(...):
+  connect_fail: true            make_client ném lỗi không kết nối được (tên lớp MaxRetryError như urllib3)
+  auth_fail: true               mọi lời gọi sau đăng nhập trả 401
+  version: "2.70.0"             bản server báo về (mặc định 2.77.0)
+  import_fail_times: N          import_annotations ném lỗi 500 N lần đầu (không lưu gì)
+  frames_by_name: true          server xếp frame theo tên file thay vì theo job_file_mapping (để thử ghép id ảnh theo frame thật)
+  drop_point: true              xuất ra thiếu một điểm ở skeleton đầu tiên
+  project_missing_sublabels: N  project tạo ra thiếu N sublabel
+  tasks_without_project: true   task mới không gắn project
+Giả định về hành vi server bám mã nguồn CVAT v2.77.0 (job_file_mapping: frame xếp theo thứ tự mapping, sorting_method phải mặc định).
+"""
+import copy
+import datetime
+import json
+import os
+import zipfile
+import xml.etree.ElementTree as ET
+
+from . import exceptions  # noqa: F401
+from .api_client.exceptions import ApiException
+from .core.proxies.tasks import ResourceType  # noqa: F401
+
+STATE_ENV, CONTROL_ENV = "M28_FAKE_CVAT_STATE", "M28_FAKE_CVAT_CONTROL"
+CONTROL = {}
+_MEM = {}
+VERSION = "2.77.0"
+
+
+class MaxRetryError(Exception):
+    """Tên lớp trùng urllib3.exceptions.MaxRetryError để cvat_io.translate_error nhận ra."""
+
+
+def _control():
+    c = dict(CONTROL)
+    if os.environ.get(CONTROL_ENV):
+        c.update(json.loads(os.environ[CONTROL_ENV]))
+    return c
+
+
+def _blank():
+    return dict(next_project=1, next_task=1, next_job=100, projects=[], tasks=[], calls=[], counters={})
+
+
+def load():
+    path = os.environ.get(STATE_ENV)
+    if path:
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        return _blank()
+    if not _MEM:
+        _MEM.update(_blank())
+    return _MEM
+
+
+def save(st):
+    path = os.environ.get(STATE_ENV)
+    if path:
+        tmp = path + f".tmp{os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(st, f, default=str)
+        os.replace(tmp, path)
+
+
+def reset():
+    _MEM.clear()
+    CONTROL.clear()
+    path = os.environ.get(STATE_ENV)
+    if path and os.path.exists(path):
+        os.remove(path)
+
+
+def calls():
+    return load()["calls"]
+
+
+def _log(method, *args, **kwargs):
+    st = load()
+    st["calls"].append(dict(m=method, args=[str(a) if not isinstance(a, (int, float, bool, type(None), str, list, dict, tuple)) else a for a in args],
+                            kwargs={k: (v if isinstance(v, (int, float, bool, type(None), str, list, dict, tuple)) else str(v))
+                                    for k, v in kwargs.items()}))
+    save(st)
+
+
+def _check_auth(client):
+    if _control().get("auth_fail"):
+        raise ApiException(status=401, reason="Unauthorized")
+    if not client._token:
+        raise ApiException(status=401, reason="Unauthorized")
+
+
+class _V(str):
+    pass
+
+
+class Client:
+    def __init__(self, url, token=None):
+        self.url, self._token, self._org = url, token, None
+
+    @property
+    def organization_slug(self):
+        return self._org
+
+    @organization_slug.setter
+    def organization_slug(self, value):
+        _log("Client.organization_slug", value)
+        self._org = value
+
+    def get_server_version(self):
+        _log("Client.get_server_version")
+        return _V(_control().get("version", VERSION))
+
+    def close(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+    @property
+    def projects(self):
+        return ProjectsRepo(self)
+
+    @property
+    def tasks(self):
+        return TasksRepo(self)
+
+
+def make_client(host, *, port=None, credentials=None, access_token=None):
+    _log("make_client", host, port=port, credentials=None if credentials is None else "<redacted>",
+         access_token=None if access_token is None else "<redacted>")
+    c = _control()
+    if c.get("connect_fail"):
+        raise MaxRetryError(f"HTTPConnectionPool(host='{host}'): Max retries exceeded (NewConnectionError)")
+    return Client(host.rstrip("/"), access_token)
+
+
+class _Model:
+    def __init__(self, d):
+        self.__dict__.update(d)
+
+    def __getitem__(self, k):
+        return self.__dict__[k]
+
+
+class Project:
+    def __init__(self, client, rec):
+        self._c, self._rec = client, rec
+        self.id, self.name = rec["id"], rec["name"]
+
+    def get_labels(self):
+        _log("Project.get_labels")
+        return copy.deepcopy(self._rec["labels"])
+
+
+class ProjectsRepo:
+    def __init__(self, client):
+        self._c = client
+
+    def list(self, *, return_json=False, **kwargs):
+        _log("projects.list", return_json=return_json, **kwargs)
+        _check_auth(self._c)
+        return [Project(self._c, p) for p in load()["projects"]]
+
+    def create(self, spec):
+        _log("projects.create", spec)
+        _check_auth(self._c)
+        st = load()
+        labels = []
+        for lb in spec.get("labels", []):
+            lb = copy.deepcopy(lb)
+            miss = int(_control().get("project_missing_sublabels", 0))
+            if miss and lb.get("sublabels"):
+                lb["sublabels"] = lb["sublabels"][:-miss]
+            for s in lb.get("sublabels", []):
+                s.setdefault("has_parent", True)
+            labels.append(lb)
+        rec = dict(id=st["next_project"], name=spec["name"], labels=labels)
+        st["next_project"] += 1
+        st["projects"].append(rec)
+        save(st)
+        return Project(self._c, rec)
+
+
+class Job:
+    def __init__(self, rec):
+        self.id, self.start_frame, self.stop_frame = rec["id"], rec["start_frame"], rec["stop_frame"]
+        self.stage, self.state = rec["stage"], rec["state"]
+
+
+class Task:
+    def __init__(self, client, rec):
+        self._c, self.id = client, rec["id"]
+        self.name, self.project_id, self.size = rec["name"], rec["project_id"], len(rec["frames"])
+        self.created_date = datetime.datetime.fromisoformat(rec["created"])
+
+    def _rec(self):
+        for t in load()["tasks"]:
+            if t["id"] == self.id:
+                return t
+        raise ApiException(status=404, reason="Not Found")
+
+    def get_jobs(self):
+        _log("Task.get_jobs")
+        return [Job(j) for j in self._rec()["jobs"]]
+
+    def get_frames_info(self):
+        _log("Task.get_frames_info")
+        return [_Model(dict(name=n, width=512, height=512)) for n in self._rec()["frames"]]
+
+    def get_annotations(self):
+        _log("Task.get_annotations")
+        ann = self._rec()["annotations"]
+        return _Model(dict(version=0, tags=[], tracks=[], shapes=[dict(label="face50", frame=i) for i in ann.get("frames", [])] if ann else []))
+
+    def fetch(self):
+        _log("Task.fetch")
+        return self
+
+    def remove(self):
+        _log("Task.remove")
+        st = load()
+        if not any(t["id"] == self.id for t in st["tasks"]):
+            raise ApiException(status=404, reason="Not Found")
+        st["tasks"] = [t for t in st["tasks"] if t["id"] != self.id]
+        save(st)
+
+    def import_annotations(self, format_name, filename, *, conv_mask_to_poly=None, import_mode=None, status_check_period=None, pbar=None):
+        _log("Task.import_annotations", format_name, filename)
+        st = load()
+        c = _control()
+        if format_name != "CVAT 1.1":
+            raise ApiException(status=400, reason="Bad Request", http_resp=_Model(dict(status=400, reason="Bad Request",
+                                                                                        data=f"unknown format {format_name}")))
+        n = st["counters"].get("import_fail", 0)
+        if n < int(c.get("import_fail_times", 0)):
+            st["counters"]["import_fail"] = n + 1
+            save(st)
+            raise ApiException(status=500, reason="Server Error", http_resp=_Model(dict(status=500, reason="Server Error",
+                                                                                         data="import crashed (giả)")))
+        rec = next(t for t in st["tasks"] if t["id"] == self.id)
+        root = ET.parse(filename).getroot()
+        out = {}
+        for im in root.iter("image"):
+            name = im.get("name")
+            if name not in rec["frames"]:
+                raise ApiException(status=400, reason="Bad Request", http_resp=_Model(dict(
+                    status=400, reason="Bad Request", data=f"image {name} not in task")))
+            sks = []
+            for sk in im.findall("skeleton"):
+                pts = []
+                for p in sk.findall("points"):
+                    if p.get("occluded") is None or p.get("outside") is None:
+                        raise ApiException(status=400, reason="Bad Request", http_resp=_Model(dict(
+                            status=400, reason="Bad Request", data="points need occluded and outside")))
+                    pts.append(dict(label=p.get("label"), xy=p.get("points"),
+                                    low_conf=next((a.text for a in p.findall("attribute") if a.get("name") == "low_conf"), None)))
+                sks.append(dict(label=sk.get("label"), points=pts))
+            out[name] = sks
+        rec["annotations"] = dict(by_name=out, frames=[rec["frames"].index(n) for n in out], xml_ids={im.get("name"): im.get("id") for im in root.iter("image")})
+        save(st)
+
+    def export_dataset(self, format_name, filename, *, pbar=None, status_check_period=None, include_images=True, location=None,
+                       cloud_storage_id=None):
+        _log("Task.export_dataset", format_name, filename, include_images=include_images)
+        rec = self._rec()
+        if format_name != "CVAT for images 1.1":
+            raise ApiException(status=400, reason="Bad Request")
+        ann = (rec["annotations"] or {}).get("by_name", {})
+        drop = bool(_control().get("drop_point"))
+        out = ['<?xml version="1.0" encoding="utf-8"?>', "<annotations>", "  <version>1.1</version>"]
+        for i, name in enumerate(rec["frames"]):
+            out.append(f'  <image id="{i}" name="{name}" width="512" height="512">')
+            for sk in ann.get(name, []):
+                out.append(f'    <skeleton label="{sk["label"]}" source="file" occluded="0" z_order="0">')
+                for j, p in enumerate(sk["points"]):
+                    if drop and j == 0:
+                        drop = False
+                        continue
+                    out.append(f'      <points label="{p["label"]}" source="file" outside="0" occluded="0" keyframe="1" '
+                               f'points="{p["xy"]}" z_order="0">')
+                    if p["low_conf"] is not None:
+                        out.append(f'        <attribute name="low_conf">{p["low_conf"]}</attribute>')
+                    out.append("      </points>")
+                out.append("    </skeleton>")
+            out.append("  </image>")
+        out.append("</annotations>")
+        with zipfile.ZipFile(filename, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("annotations.xml", "\n".join(out))
+        return filename
+
+
+class TasksRepo:
+    def __init__(self, client):
+        self._c = client
+
+    def list(self, *, return_json=False, **kwargs):
+        _log("tasks.list", return_json=return_json, **kwargs)
+        _check_auth(self._c)
+        return [Task(self._c, t) for t in load()["tasks"]]
+
+    def retrieve(self, obj_id):
+        _log("tasks.retrieve", obj_id)
+        _check_auth(self._c)
+        for t in load()["tasks"]:
+            if t["id"] == obj_id:
+                return Task(self._c, t)
+        raise ApiException(status=404, reason="Not Found")
+
+    def remove_by_ids(self, task_ids):
+        _log("tasks.remove_by_ids", list(task_ids))
+        st = load()
+        st["tasks"] = [t for t in st["tasks"] if t["id"] not in set(task_ids)]
+        save(st)
+
+    def create_from_data(self, spec, resources, *, resource_type=ResourceType.LOCAL, data_params=None, annotation_path="",
+                         annotation_format="CVAT XML 1.1", status_check_period=None, pbar=None):
+        _log("tasks.create_from_data", spec, [str(r) for r in resources], resource_type=str(resource_type), data_params=data_params or {},
+             annotation_path=annotation_path)
+        _check_auth(self._c)
+        if spec.get("labels"):
+            raise ApiException(status=400, reason="Bad Request")         # task trong project không được có labels (như SDK thật)
+        params = data_params or {}
+        names = [os.path.basename(str(r)) for r in resources]
+        if len(set(names)) != len(names):
+            raise ApiException(status=400, reason="Bad Request")
+        if any(k in params for k in ("sorting_method", "segment_size")):
+            raise ApiException(status=400, reason="job_file_mapping cannot be used with sorting_method")
+        mapping = params.get("job_file_mapping")
+        if mapping is not None:
+            flat = [n for g in mapping for n in g]
+            if sorted(flat) != sorted(names):
+                raise ApiException(status=400, reason="Bad Request", http_resp=_Model(dict(
+                    status=400, reason="Bad Request", data="job_file_mapping files must be a subset of the input files")))
+            frames = sorted(flat) if _control().get("frames_by_name") else flat
+            sizes = [len(g) for g in mapping]
+        else:
+            frames, sizes = sorted(names), [len(names)]
+        st = load()
+        tid = st["next_task"]
+        st["next_task"] += 1
+        jobs, start = [], 0
+        for n in sizes:
+            jobs.append(dict(id=st["next_job"], start_frame=start, stop_frame=start + n - 1, stage="annotation", state="new"))
+            st["next_job"] += 1
+            start += n
+        rec = dict(id=tid, name=spec["name"], project_id=None if _control().get("tasks_without_project") else spec.get("project_id"),
+                   frames=frames, jobs=jobs, annotations=None, files=[str(r) for r in resources],
+                   created=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"))
+        st["tasks"].append(rec)
+        save(st)
+        return Task(self._c, rec)
+
+
+__all__ = ["make_client", "Client", "reset", "calls", "CONTROL"]
