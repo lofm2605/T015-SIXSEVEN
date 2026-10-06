@@ -81,6 +81,16 @@ Trình duyệt tự mở http://127.0.0.1:7860 (chỉ máy bạn truy cập đư
 Rà hết thì bấm **Xong**, cửa sổ tự đóng. Kết quả nằm ở `runs\F5\review\triage_P1.csv`. Chỉ mở **một tab**. Không chia sẻ cổng này cho ai.
 Không có Gradio hoặc trang lỗi: dùng `--review excel` (mở `runs\F5\autoqc\autoqc.csv` bằng Excel, điền cột `decision` = nhan / gan_tay / bo, lưu CSV UTF-8 thành `runs\F5\review\triage_P1.csv`).
 
+### Có ảnh mới, chưa có lượt nào: kéo thả ảnh (tab Nạp ảnh)
+Cần `face_landmarker.task` (mục 3, cùng thư mục chạy lệnh) và `config\m28_config.json`, `config\map_mp50.json`.
+```bat
+python tool\review_app.py --nap P1
+```
+Trình duyệt mở http://127.0.0.1:7860. Ở tab **Nạp ảnh**: kéo thả ảnh .jpg/.jpeg/.png (tối đa 25 MB mỗi ảnh, 200 ảnh mỗi lần) vào ô lớn, kiểm danh sách ảnh bị loại,
+bấm **Bắt đầu chuẩn bị**, chờ thanh tiến độ xong (có nút Huỷ, Thử lại), rồi bấm **Rà lượt này**: trang tự chuyển sang rà, không gõ lệnh nào.
+Ảnh nằm ở `runs\NAP_001\inbox` (tên đã làm sạch; tên gốc ở `runs\NAP_001\nap_ten_goc.csv`, log ở `runs\NAP_001\nap_log.txt`). Đang rà dở lượt khác thì vẫn nạp được:
+lượt cũ không bị đụng, mở lại bằng lệnh cmd in ra (ví dụ `python tool\review_app.py runs\F5 P1`). Ảnh mặt người thật chỉ xử lý trên máy bạn, không đưa vào chat AI.
+
 ## 7. Nhập vào CVAT (khi đã có CVAT trên máy)
 Cài CVAT theo `de-tai-m28\huong-dan-chung.md` (mục cài CVAT). Token chỉ đặt trong biến môi trường, không ghi vào file hay chat:
 ```bat

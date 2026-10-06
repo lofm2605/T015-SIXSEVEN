@@ -1,0 +1,644 @@
+"""Tab "Nạp ảnh" của trang rà soát M28: logic thuần (kiểm ảnh, đặt tên, chạy prepare bằng tiến trình con, đọc kết quả).
+
+Người dùng kéo thả ảnh .jpg/.jpeg/.png vào trang; mỗi lần nạp là một LƯỢT MỚI (runs/<lượt>/inbox/) rồi chạy
+`python tool\\m28.py prepare --run <lượt> --images runs\\<lượt>\\inbox --box auto` bằng tiến trình con, xong thì rà lượt đó.
+
+Quy ước (giống review_app.py):
+  * Chỉ thư viện chuẩn; PIL nạp lười trong hàm. Không import gradio, torch, mediapipe, cv2 (kiểm cài đặt bằng importlib.util.find_spec).
+  * Chỉ ghi dưới runs/<lượt>/ (mọi đường dẫn đích kiểm bằng realpath + commonpath). Không chạy qua shell, không gọi mạng.
+  * Ảnh được chép NGUYÊN BYTE vào inbox/ với tên đã làm sạch; tên gốc ghi ở nap_ten_goc.csv (ngoài inbox/).
+  * Ảnh người thật chỉ xử lý trên máy này; không đưa ảnh hay ảnh chụp trang vào chat AI.
+
+Phần Gradio nằm ở review_app.py (`_nap_tab`); ở đây có cả mô hình hiển thị thuần (HTML tóm tắt, tiến độ) để test không cần gradio.
+"""
+import collections
+import csv
+import hashlib
+import html
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import unicodedata
+import warnings
+
+TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ---------- hằng số ----------
+PREPARE = ["crop", "mediapipe", "map50", "flags", "autoqc", "overlays"]      # chép từ m28.PREPARE (test so khớp)
+MAX_BYTES = 25 * 1024 * 1024        # mỗi ảnh
+MAX_FILES = 200                     # mỗi lần nạp
+MIN_SIDE = 32                       # cạnh ngắn nhất (px)
+MAX_PIXELS = 50_000_000
+MAX_STEM = 60
+EXTS = (".jpg", ".jpeg", ".png")
+REAL_FORMATS = {"JPEG": ".jpg", "MPO": ".jpg", "PNG": ".png"}     # định dạng thật -> đuôi lưu (luôn chữ thường)
+RUN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
+WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+NAP_DIR = "_nap"                    # runs/_nap/: thư mục tạm của trang khi chưa có lượt nào (--nap)
+MODEL_NAME = "face_landmarker.task"
+MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+NO_FACE_VI = {"khong_thay_mat": "MediaPipe không thấy mặt", "khong_doc_duoc_anh": "không đọc được ảnh"}
+STEP_VI = {"xong": "xong", "bo_qua": "bỏ qua (đã xong từ trước)", "dung": "dừng giữa chừng", "loi": "lỗi", None: "chưa chạy"}
+MULTI_FACE_NOTE = ("Ảnh nhiều mặt: `--box auto` chỉ lấy **mặt lớn nhất**; cần mặt khác thì Gán tay trong CVAT.")
+LOG_LINES = 500
+
+
+class RunError(Exception):
+    """Lỗi người dùng sửa được (thiếu file, sai tên...). Thông điệp tiếng Việt, nói rõ cách sửa."""
+
+
+# ---------- tên ----------
+def clean_stem(name):
+    """Tên sạch ASCII cho ảnh: phần sau dấu / hoặc \\ cuối, bỏ đuôi ảnh, bỏ dấu tiếng Việt, ký tự lạ -> _, tối đa 60 ký tự."""
+    base = re.split(r"[\\/]", str(name))[-1]
+    stem, ext = os.path.splitext(base)
+    if ext.lower() not in EXTS:
+        stem = base
+    stem = stem.replace("đ", "d").replace("Đ", "D")
+    stem = "".join(c for c in unicodedata.normalize("NFKD", stem) if not unicodedata.combining(c))
+    stem = re.sub(r"[^A-Za-z0-9_-]", "_", stem)
+    stem = re.sub(r"_+", "_", stem).strip("_-.")[:MAX_STEM].strip("_-.")
+    if not stem:
+        return "anh"
+    if stem.upper() in WIN_RESERVED:
+        stem += "_anh"
+    return stem
+
+
+def unique_stems(stems):
+    """Đánh số _2, _3... cho tên trùng, so KHÔNG phân biệt hoa thường (Windows, CVAT, steps._unique).
+    Ví dụ a, A, a_2 -> a, A_2, a_2_2."""
+    used, out = set(), []
+    for s in stems:
+        cand, k = s, 1
+        while cand.lower() in used:
+            k += 1
+            suffix = f"_{k}"
+            cand = s[:MAX_STEM - len(suffix)] + suffix if len(s) + len(suffix) > MAX_STEM else s + suffix
+        used.add(cand.lower())
+        out.append(cand)
+    return out
+
+
+def _mb(n):
+    return f"{n / 1048576:.1f}".replace(".", ",") + " MB" if n >= 1048576 else f"{max(1, round(n / 1024))} KB"
+
+
+def _orig(path):
+    return re.split(r"[\\/]", str(path))[-1]
+
+
+# ---------- kiểm ảnh ----------
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for blk in iter(lambda: f.read(1 << 20), b""):
+            h.update(blk)
+    return h.hexdigest()
+
+
+def check_image(path, max_bytes=MAX_BYTES, min_side=MIN_SIDE, max_pixels=MAX_PIXELS):
+    """(thông tin, None) nếu nhận, (None, lý do tiếng Việt) nếu loại. Không tin đuôi file: phải mở được bằng PIL
+    (open + verify, mở lại đọc kích thước) và định dạng thật là JPEG/MPO/PNG. Thông tin: bytes, w, h, ext, format."""
+    ext = os.path.splitext(str(path))[1].lower()
+    if ext not in EXTS:
+        return None, "đuôi file không phải .jpg, .jpeg hoặc .png"
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return None, "không đọc được file"
+    if size <= 0:
+        return None, "file rỗng"
+    if size > max_bytes:
+        return None, f"file {_mb(size)}, lớn hơn giới hạn {_mb(max_bytes)} mỗi ảnh"
+    try:
+        from PIL import Image
+    except ImportError:
+        return None, "thiếu thư viện pillow để kiểm ảnh (pip install -r requirements-ui.txt)"
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(path) as im:
+                fmt, (w, h) = im.format, im.size
+                if fmt not in REAL_FORMATS:
+                    return None, f"file này thật ra là {fmt or 'không phải ảnh'}, chỉ nhận JPG hoặc PNG"
+                if w * h > max_pixels:
+                    return None, f"ảnh {w}x{h} quá lớn (tối đa {max_pixels // 1_000_000} triệu điểm ảnh)"
+                im.verify()
+            with Image.open(path) as im:
+                w, h = im.size
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        return None, f"ảnh quá lớn (tối đa {max_pixels // 1_000_000} triệu điểm ảnh)"
+    except Exception:                                   # UnidentifiedImageError, ảnh hỏng/cắt dở, file text đổi đuôi...
+        return None, "không mở được như một ảnh JPG/PNG hợp lệ (file hỏng hoặc không phải ảnh)"
+    if min(w, h) < min_side:
+        return None, f"ảnh {w}x{h} quá nhỏ (cạnh ngắn phải từ {min_side} px)"
+    return dict(bytes=size, w=w, h=h, ext=REAL_FORMATS[fmt], format=fmt), None
+
+
+def plan_upload(paths, max_bytes=MAX_BYTES, max_files=MAX_FILES, min_side=MIN_SIDE, max_pixels=MAX_PIXELS):
+    """Duyệt các file người dùng thả vào. Trả dict(ok=[...], rejected=[(tên gốc, lý do)]).
+    Mỗi ảnh nhận: orig, stem, ext, bytes, w, h, sha256, src. Ảnh quá giới hạn số lượng, trùng nội dung (sha256) hoặc lỗi bị loại."""
+    ok, rejected, seen = [], [], {}
+    for p in paths or []:
+        orig = _orig(p)
+        if len(ok) >= max_files:
+            rejected.append((orig, f"vượt {max_files} ảnh mỗi lần"))
+            continue
+        info, why = check_image(p, max_bytes, min_side, max_pixels)
+        if why:
+            rejected.append((orig, why))
+            continue
+        try:
+            sha = _sha256(p)
+        except OSError:
+            rejected.append((orig, "không đọc được file"))
+            continue
+        if sha in seen:
+            rejected.append((orig, f"trùng nội dung với {seen[sha]}"))
+            continue
+        seen[sha] = orig
+        ok.append(dict(orig=orig, stem="", ext=info["ext"], bytes=info["bytes"], w=info["w"], h=info["h"], sha256=sha,
+                       src=str(p)))
+    for it, stem in zip(ok, unique_stems([clean_stem(it["orig"]) for it in ok])):
+        it["stem"] = stem
+    return dict(ok=ok, rejected=rejected)
+
+
+def new_name(item):
+    return item["stem"] + item["ext"]
+
+
+# ---------- tên lượt, thư mục ----------
+def _listing(runs_root):
+    try:
+        return os.listdir(runs_root)
+    except OSError:
+        return []
+
+
+def next_run_name(runs_root):
+    """NAP_001, NAP_002... : số lớn nhất trong các thư mục runs/NAP_<số> (không phân biệt hoa thường) + 1."""
+    names = _listing(runs_root)
+    n = 0
+    for d in names:
+        m = re.fullmatch(r"NAP_(\d+)", d, re.IGNORECASE)
+        if m and os.path.isdir(os.path.join(runs_root, d)):
+            n = max(n, int(m.group(1)))
+    taken = {d.lower() for d in names}
+    n += 1
+    while f"nap_{n:03d}" in taken:
+        n += 1
+    return f"NAP_{n:03d}"
+
+
+def check_run_name(name, runs_root):
+    """Tên lượt hợp lệ (đã bỏ khoảng trắng hai đầu) hoặc RunError. Không trùng thư mục/file có sẵn (so không phân biệt hoa thường)."""
+    name = (name or "").strip()
+    if not RUN_RE.fullmatch(name):
+        raise RunError(f"Tên lượt {name!r} không hợp lệ: chỉ dùng chữ không dấu, số, gạch dưới, gạch ngang, bắt đầu bằng chữ hoặc số, "
+                       "tối đa 32 ký tự (ví dụ NAP_001, KHACH_A).")
+    if name.upper() in WIN_RESERVED:
+        raise RunError(f"Tên lượt {name} là tên dành riêng của Windows (CON, PRN, AUX, NUL, COM1-9, LPT1-9): đặt tên khác.")
+    if name.lower() in {d.lower() for d in _listing(runs_root)}:
+        raise RunError(f"Lượt {name} đã có trong {os.path.normpath(runs_root)}: nạp ảnh luôn tạo lượt mới, hãy đặt tên khác "
+                       "hoặc để trống để tự đặt NAP_xxx.")
+    return name
+
+
+def runs_layout(run_dir):
+    """(runs_root, project_root, lỗi|None). m28 dùng đường dẫn tương đối runs/ từ thư mục chạy nên runs_root phải tên `runs`."""
+    runs_root = os.path.dirname(os.path.abspath(run_dir))
+    project_root = os.path.dirname(runs_root)
+    if os.path.basename(runs_root).lower() != "runs":
+        return runs_root, project_root, ("Tab Nạp ảnh chưa dùng được: chạy trang từ thư mục source-tool\\m28-prelabel "
+                                         "(có thư mục runs\\), ví dụ python tool\\review_app.py --nap P2.")
+    return runs_root, project_root, None
+
+
+def _inside(path, base):
+    try:
+        p, b = os.path.realpath(path), os.path.realpath(base)
+        return os.path.commonpath([p, b]) == b
+    except ValueError:                                   # khác ổ đĩa
+        return False
+
+
+def stage_upload(runs_root, run, plan, cleanup_root=None):
+    """Tạo runs/<lượt>/inbox/ (giữ chỗ nguyên tử), chép NGUYÊN BYTE các ảnh nhận, ghi nap_ten_goc.csv. Trả đường dẫn runs/<lượt>.
+    Lượt đã có -> RunError, không bao giờ ghi vào lượt cũ. cleanup_root: xoá (best effort) bản tạm trong thư mục này sau khi chép."""
+    run = check_run_name(run, runs_root)
+    if not plan["ok"]:
+        raise RunError("Chưa có ảnh hợp lệ nào để nạp.")
+    os.makedirs(runs_root, exist_ok=True)
+    run_dir = os.path.join(runs_root, run)
+    try:
+        os.mkdir(run_dir)                                # mkdir nguyên tử: FileExistsError nếu lượt đã có
+        inbox = os.path.join(run_dir, "inbox")
+        os.mkdir(inbox)
+    except FileExistsError:
+        raise RunError(f"Lượt {run} đã có: nạp ảnh luôn tạo lượt mới, đặt tên khác.")
+    except OSError as e:
+        raise RunError(f"Không tạo được thư mục lượt {run} ({e}).")
+    try:
+        if not _inside(run_dir, runs_root):
+            raise RunError("Đường dẫn lượt nằm ngoài thư mục runs: từ chối.")
+        rows = []
+        for it in plan["ok"]:
+            dest = os.path.join(inbox, new_name(it))
+            if not _inside(dest, run_dir):
+                raise RunError(f"Đường dẫn đích của {it['orig']} nằm ngoài runs\\{run}: từ chối.")
+            try:
+                shutil.copyfile(it["src"], dest)
+                if _sha256(dest) != it["sha256"]:
+                    raise RunError(f"Bản chép của {it['orig']} khác bản gốc (file bị đổi trong lúc nạp): thả lại ảnh.")
+            except OSError as e:
+                raise RunError(f"Không chép được {it['orig']} ({e}): thả lại ảnh.")
+            rows.append([it["orig"], new_name(it), it["bytes"], it["sha256"]])
+        csv_path = os.path.join(run_dir, "nap_ten_goc.csv")
+        if not _inside(csv_path, run_dir):
+            raise RunError("Đường dẫn nap_ten_goc.csv nằm ngoài lượt: từ chối.")
+        with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:      # BOM để Excel đọc đúng chữ có dấu
+            w = csv.writer(f)
+            w.writerow(["ten_goc", "ten_moi", "bytes", "sha256"])
+            w.writerows(rows)
+    except BaseException:
+        shutil.rmtree(run_dir, ignore_errors=True)       # lượt vừa tạo dở ở trên, chưa ai dùng
+        raise
+    if cleanup_root:
+        for it in plan["ok"]:
+            if _inside(it["src"], cleanup_root) and os.path.realpath(it["src"]) != os.path.realpath(cleanup_root):
+                try:
+                    os.remove(it["src"])
+                except OSError:
+                    pass
+    return run_dir
+
+
+def make_upload_thumb(src, out_dir, key, size=160):
+    """Ảnh nhỏ JPEG ~size px cho lưới xem trước (đã xoay theo EXIF). Trả đường dẫn hoặc None nếu lỗi."""
+    try:
+        from PIL import Image, ImageOps
+        os.makedirs(out_dir, exist_ok=True)
+        out = os.path.join(out_dir, re.sub(r"[^\w.-]", "_", key) + ".jpg")
+        if os.path.exists(out):
+            return out
+        with Image.open(src) as im:
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im.thumbnail((size, size), Image.Resampling.LANCZOS)
+            tmp = out + f".tmp{os.getpid()}"
+            im.save(tmp, format="JPEG", quality=85)
+        os.replace(tmp, out)
+        return out
+    except Exception:
+        return None
+
+
+# ---------- kiểm môi trường, lệnh ----------
+def preflight(project_root, tool_dir=None):
+    """Danh sách lỗi (tiếng Việt, kèm cách sửa) trước khi chạy prepare; rỗng = ổn."""
+    tool_dir = TOOL_DIR if tool_dir is None else tool_dir
+    errs = []
+    for rel, who in (("m28_config.json", "file cấu hình 50 điểm của P3"), ("map_mp50.json", "file ánh xạ 478 -> 50 điểm của P3")):
+        p = os.path.join(project_root, "config", rel)
+        if not os.path.isfile(p):
+            errs.append(f"Thiếu config\\{rel} ({who}) trong {os.path.normpath(project_root)}: "
+                        "chạy trang từ thư mục source-tool\\m28-prelabel hoặc lấy lại file từ repo (git checkout config).")
+    if not any(os.path.isfile(os.path.join(d, MODEL_NAME)) for d in (project_root, tool_dir)):
+        errs.append(f"Thiếu {MODEL_NAME} (model MediaPipe, khoảng 3,7 MB): trong cmd, ở thư mục chạy lệnh, gõ "
+                    f"curl -L -o {MODEL_NAME} {MODEL_URL} (xem HUONG-DAN-WINDOWS mục 3).")
+    for mod, pip in (("mediapipe", "mediapipe"), ("cv2", "opencv-python")):
+        try:
+            found = importlib.util.find_spec(mod) is not None
+        except (ImportError, ValueError):
+            found = False
+        if not found:
+            errs.append(f"Chưa cài {mod}: gõ python -m pip install -r requirements.txt (gói {pip}).")
+    return errs
+
+
+def prepare_cmd(run, tool_dir=None, python=None):
+    """Lệnh chạy prepare (list đối số, không shell). Chạy với cwd = thư mục cha của runs/."""
+    tool_dir = TOOL_DIR if tool_dir is None else tool_dir
+    return [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "prepare", "--run", run,
+            "--images", os.path.join("runs", run, "inbox"), "--box", "auto"]
+
+
+def child_env(environ=None):
+    """Bản sao môi trường cho tiến trình con. UTF-8 bắt buộc: trên Windows stdout là pipe (cp1252) và m28 in chữ có dấu."""
+    env = dict(os.environ if environ is None else environ)
+    env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
+    return env
+
+
+# ---------- tiến độ ----------
+def parse_progress(lines, n_inbox=0, n_crop_files=None):
+    """Tiến độ từ các dòng m28 in ra: dòng bắt đầu bằng "<bước>:" hoặc "bỏ qua <bước>" = bước xong. Trong bước crop, tiến độ con
+    = số ảnh cắt đã có / số ảnh trong inbox (n_crop_files=None: không biết hoặc crop đã xong từ trước).
+    Trả dict(done, total, current, frac, label, steps=[(bước, "xong"|"dang_chay"|"cho")])."""
+    done = []
+    for ln in lines:
+        s = ln.strip()
+        for step in PREPARE:
+            if (s.startswith(step + ":") or s.startswith("bỏ qua " + step)) and step not in done:
+                done.append(step)
+    total = len(PREPARE)
+    cur = next((s for s in PREPARE if s not in done), None)
+    sub = 0.0
+    if cur == "crop" and n_crop_files is not None and n_inbox:
+        sub = min(0.95, n_crop_files / n_inbox)
+    frac = (len(done) + sub) / total
+    if cur is None:
+        label = f"Xong {total}/{total} bước"
+    elif not lines and not (cur == "crop" and sub):
+        label = "Đang nạp MediaPipe…"
+    else:
+        label = f"Bước {len(done) + 1}/{total} · {cur}"
+        if cur == "crop" and n_crop_files is not None and n_inbox:
+            label += f" ({min(n_crop_files, n_inbox)}/{n_inbox} ảnh)"
+    steps = [(s, "xong" if s in done else "dang_chay" if s == cur else "cho") for s in PREPARE]
+    return dict(done=len(done), total=total, current=cur, frac=frac, label=label, steps=steps)
+
+
+def count_files(path, exts=EXTS):
+    try:
+        return sum(1 for f in os.listdir(path) if f.lower().endswith(exts))
+    except OSError:
+        return 0
+
+
+def job_progress(run_dir, lines):
+    """parse_progress cho một lượt trên đĩa (đếm ảnh inbox và ảnh cắt)."""
+    n_inbox = count_files(os.path.join(run_dir, "inbox"))
+    crop_done = os.path.exists(os.path.join(run_dir, "crop", "done.txt"))
+    n_crop = None if crop_done else count_files(os.path.join(run_dir, "crop", "images"), (".png",))
+    return parse_progress(lines, n_inbox, n_crop)
+
+
+# ---------- tiến trình con ----------
+class PrepareJob:
+    """Một lần chạy prepare bằng tiến trình con, một job một lúc. Luồng nền đọc stdout (UTF-8), giữ 500 dòng cuối
+    và nối vào runs/<lượt>/nap_log.txt (log còn sau lỗi/huỷ/tải lại trang). state: chua | dang_chay | xong | loi | da_huy.
+    popen thay được khi test (nhận như subprocess.Popen)."""
+
+    def __init__(self, popen=subprocess.Popen):
+        self._popen = popen
+        self._lock = threading.RLock()
+        self.state, self.returncode, self.run, self.run_dir = "chua", None, None, None
+        self.lines = collections.deque(maxlen=LOG_LINES)
+        self._proc = self._thread = None
+        self._cancelled = False
+        self._t0 = self._t1 = None
+
+    @property
+    def running(self):
+        return self.state == "dang_chay"
+
+    def start(self, run, runs_root, project_root, tool_dir=None, python=None):
+        """Chạy prepare cho lượt `run` (thư mục runs_root/run đã có inbox/). Đang chạy thì RunError. Chạy lại được sau loi/da_huy."""
+        with self._lock:
+            if self.running:
+                raise RunError(f"Đang chuẩn bị lượt {self.run}: chờ xong hoặc bấm Huỷ.")
+            run_dir = os.path.join(runs_root, run)
+            if not _inside(run_dir, runs_root) or not os.path.isdir(os.path.join(run_dir, "inbox")):
+                raise RunError(f"Lượt {run} chưa có thư mục inbox: không chạy được.")
+            self.run, self.run_dir = run, run_dir
+            self.lines.clear()
+            self.returncode, self._cancelled = None, False
+            self._t0, self._t1 = time.monotonic(), None
+            cmd = prepare_cmd(run, tool_dir, python)
+            log_path = os.path.join(run_dir, "nap_log.txt")
+            try:
+                with open(log_path, "a", encoding="utf-8", newline="\n") as f:
+                    f.write(f"=== {time.strftime('%Y-%m-%d %H:%M:%S')} prepare --run {run} ===\n")
+                self._proc = self._popen(cmd, cwd=project_root, env=child_env(), stdin=subprocess.DEVNULL,
+                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            except OSError as e:
+                self.lines.append(f"Không chạy được tiến trình prepare: {e}")
+                self.state, self._t1 = "loi", time.monotonic()
+                return
+            self.state = "dang_chay"
+            self._thread = threading.Thread(target=self._read, args=(self._proc, log_path), daemon=True)
+            self._thread.start()
+
+    def _read(self, proc, log_path):
+        try:
+            with open(log_path, "a", encoding="utf-8", newline="\n") as log:
+                for raw in iter(proc.stdout.readline, b""):
+                    line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                    self.lines.append(line)
+                    log.write(line + "\n")
+                    log.flush()
+        except (OSError, ValueError):
+            pass
+        rc = proc.wait()
+        with self._lock:
+            self.returncode = rc
+            self.state = "xong" if rc == 0 else "da_huy" if self._cancelled else "loi"
+            self._t1 = time.monotonic()
+
+    def cancel(self):
+        """terminate(), chờ 5 giây, rồi kill(). Trả True nếu có job đang chạy để huỷ."""
+        with self._lock:
+            proc = self._proc
+            if not self.running or proc is None:
+                return False
+            self._cancelled = True
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+        except OSError:
+            pass
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        return True
+
+    def snapshot(self):
+        with self._lock:
+            end = self._t1 if self._t1 is not None else time.monotonic()
+            return dict(state=self.state, returncode=self.returncode, run=self.run, run_dir=self.run_dir,
+                        lines=list(self.lines), elapsed=0.0 if self._t0 is None else end - self._t0,
+                        cancelling=self._cancelled and self.state == "dang_chay")
+
+
+# ---------- đọc kết quả prepare ----------
+def _jload(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _orig_names(run_dir):
+    """{tên mới không đuôi: tên gốc} từ nap_ten_goc.csv."""
+    out = {}
+    try:
+        with open(os.path.join(run_dir, "nap_ten_goc.csv"), encoding="utf-8-sig", newline="") as f:
+            for r in csv.DictReader(f):
+                out[os.path.splitext(r["ten_moi"])[0]] = r["ten_goc"]
+    except (OSError, KeyError, csv.Error):
+        pass
+    return out
+
+
+def _step_status(run_dir):
+    st = {s: None for s in PREPARE}
+    try:
+        with open(os.path.join(run_dir, "log.txt"), encoding="utf-8") as f:
+            for ln in f:
+                p = ln.rstrip("\n").split("\t")
+                if len(p) >= 3 and p[1] in st:
+                    st[p[1]] = p[2]
+    except OSError:
+        pass
+    return st
+
+
+def read_prepare_result(run_dir, read_no_face=None):
+    """Kết quả prepare của một lượt: số ảnh, số mặt dùng được (khoá flags.json), mặt không dùng được (tách bước crop và
+    bước mediapipe), số mặt vào hàng đợi rà, trạng thái từng bước. read_no_face(run_dir) -> {tên: (lý do, bước)} (mặc định
+    review_app._read_no_face)."""
+    if read_no_face is None:
+        from review_app import _read_no_face as read_no_face
+    flags = {}
+    fpath = os.path.join(run_dir, "flags", "flags.json")
+    if os.path.isfile(fpath):
+        try:
+            data = _jload(fpath)
+            flags = data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            flags = {}
+    origs = _orig_names(run_dir)
+    crop_dir = os.path.join(run_dir, "crop", "images")
+    no_crop, no_draft = [], []
+    for name, (why, step) in sorted(read_no_face(run_dir).items()):
+        if name in flags:
+            continue
+        row = dict(name=name, orig=origs.get(name, name), reason=NO_FACE_VI.get(why, why or "không rõ"), step=step)
+        (no_draft if os.path.isfile(os.path.join(crop_dir, name + ".png")) else no_crop).append(row)
+    return dict(run=os.path.basename(os.path.normpath(run_dir)), n_inbox=count_files(os.path.join(run_dir, "inbox")),
+                n_faces=len(flags), no_crop=no_crop, no_draft=no_draft, n_queue=len(flags) + len(no_draft),
+                steps=_step_status(run_dir))
+
+
+# ---------- mô hình hiển thị (HTML thuần) ----------
+def push_command(run, reviewer):
+    return f"python tool\\m28.py push --run {run} --task demo-{run} --review-file triage_{reviewer}.csv"
+
+
+def reopen_command(run_dir, reviewer):
+    return f"python tool\\review_app.py runs\\{os.path.basename(os.path.normpath(run_dir))} {reviewer}"
+
+
+def _e(x):
+    return html.escape(str(x))
+
+
+def preflight_html(errors, layout_error=None):
+    errs = ([layout_error] if layout_error else []) + list(errors)
+    if not errs:
+        return '<div class="nap-box nap-ok" role="status"><b>Đủ model và cấu hình.</b> Có thể nạp ảnh.</div>'
+    items = "".join(f"<li>{_e(e)}</li>" for e in errs)
+    return (f'<div class="nap-box nap-err" role="alert"><b>Chưa nạp ảnh được:</b><ul>{items}</ul></div>')
+
+
+def count_html(plan):
+    if not plan or (not plan["ok"] and not plan["rejected"]):
+        return '<div class="nap-count">Chưa chọn ảnh nào.</div>'
+    return (f'<div class="nap-count"><b>{len(plan["ok"])}</b> ảnh hợp lệ · '
+            f'<b>{len(plan["rejected"])}</b> bị loại</div>')
+
+
+def rejected_html(plan):
+    rej = plan["rejected"] if plan else []
+    if not rej:
+        return ""
+    items = "".join(f"<li><b>{_e(o)}</b>: {_e(why)}</li>" for o, why in rej)
+    return f'<div class="nap-box nap-warn"><b>Bị loại ({len(rej)}):</b><ul>{items}</ul></div>'
+
+
+def gallery_items(plan, thumb_dir):
+    """[(đường dẫn ảnh nhỏ, chú thích "tên mới · 1,2 MB")] cho gr.Gallery."""
+    out = []
+    for it in plan["ok"] if plan else []:
+        t = make_upload_thumb(it["src"], thumb_dir, f"{it['sha256'][:12]}_{it['stem']}")
+        if t:
+            out.append((t, f"{new_name(it)} · {_mb(it['bytes'])}"))
+    return out
+
+
+STATE_VI = {"chua": "Chưa chạy", "dang_chay": "Đang chạy", "xong": "Xong", "loi": "Lỗi", "da_huy": "Đã huỷ"}
+
+
+def _mmss(sec):
+    sec = int(sec)
+    return f"{sec // 60:02d}:{sec % 60:02d}"
+
+
+def progress_html(snap, prog):
+    """Thanh tiến độ (kiểu .m28-bar) + dòng trạng thái."""
+    st = snap["state"]
+    if st == "chua":
+        return ""
+    pct = 100 if st == "xong" else round(100 * prog["frac"])
+    label = prog["label"] if st == "dang_chay" else STATE_VI[st] + (
+        f" (mã thoát {snap['returncode']})" if st == "loi" and snap["returncode"] is not None else "")
+    if st == "dang_chay" and snap.get("cancelling"):
+        label = "Đang huỷ…"
+    cls = {"xong": "nap-st-ok", "loi": "nap-st-err", "da_huy": "nap-st-warn"}.get(st, "")
+    return (f'<div class="nap-prog {cls}"><div class="nap-prog-top"><span class="nap-run">Lượt <b>{_e(snap["run"])}</b></span>'
+            f'<span class="nap-label">{_e(label)}</span><span class="nap-time">{_mmss(snap["elapsed"])}</span></div>'
+            f'<div class="m28-bar" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100">'
+            f'<i style="width:{pct}%"></i></div></div>')
+
+
+def _note_md(text):
+    """Chỉ đổi **đậm** và `mã` sang thẻ HTML (sau khi escape)."""
+    t = _e(text)
+    t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+    return re.sub(r"`(.+?)`", r"<code>\1</code>", t)
+
+
+def summary_html(res, reviewer, snap=None):
+    """Tóm tắt kết quả prepare: thẻ số, danh sách mặt không dùng được, ghi chú nhiều mặt, lệnh push gợi ý."""
+    run = res["run"]
+    cards = "".join(f'<div class="nap-card"><b>{v}</b><span>{_e(t)}</span></div>' for t, v in (
+        ("Mặt dùng được", res["n_faces"]), ("Không thấy mặt", len(res["no_crop"]) + len(res["no_draft"])),
+        ("Vào hàng đợi rà", res["n_queue"])))
+    out = [f'<div class="nap-sum"><div class="nap-sum-title">Kết quả lượt <b>{_e(run)}</b> · {res["n_inbox"]} ảnh đã nạp</div>'
+           f'<div class="nap-cards">{cards}</div>']
+    if res["no_crop"]:
+        items = "".join(f"<li><b>{_e(r['orig'])}</b>: {_e(r['reason'])}</li>" for r in res["no_crop"])
+        out.append(f'<div class="nap-box nap-warn"><b>Bước crop: không có ảnh cắt ({len(res["no_crop"])}), '
+                   f'push tự xếp vào Bỏ:</b><ul>{items}</ul></div>')
+    if res["no_draft"]:
+        items = "".join(f"<li><b>{_e(r['orig'])}</b>: {_e(r['reason'])}</li>" for r in res["no_draft"])
+        out.append(f'<div class="nap-box nap-warn"><b>Bước mediapipe: không có nháp ({len(res["no_draft"])}), '
+                   f'vẫn vào hàng đợi rà (chỉ Gán tay hoặc Bỏ):</b><ul>{items}</ul></div>')
+    bad = [(s, v) for s, v in res["steps"].items() if v not in ("xong", "bo_qua")]
+    if bad:
+        out.append('<div class="nap-box nap-warn">Trạng thái bước (log.txt): ' + ", ".join(f"{_e(s)}: {_e(STEP_VI.get(v, v))}" for s, v in bad) + "</div>")
+    out.append(f'<div class="nap-note">{_note_md(MULTI_FACE_NOTE)}</div>')
+    out.append('<div class="nap-note">Sau khi rà xong, đẩy lên CVAT bằng lệnh (cmd, từ thư mục source-tool\\m28-prelabel; ảnh gốc lấy từ '
+               f'<code>crop\\meta.json</code>):<br><code class="nap-cmd">{_e(push_command(run, reviewer))}</code></div></div>')
+    return "".join(out)
+
+
+def failure_html(snap):
+    st = snap["state"]
+    if st == "loi":
+        return ('<div class="nap-box nap-err" role="alert"><b>prepare dừng với lỗi'
+                + (f" (mã {snap['returncode']})" if snap["returncode"] is not None else "")
+                + '.</b> Xem dòng cuối của log bên trên, sửa nguyên nhân rồi bấm <b>Thử lại</b> (bước đã xong được bỏ qua).</div>')
+    if st == "da_huy":
+        return ('<div class="nap-box nap-warn" role="status"><b>Đã huỷ.</b> Ảnh vẫn nằm trong inbox của lượt; bấm <b>Thử lại</b> để chạy tiếp '
+                "(lượt dở nằm trong runs\\, xoá tay nếu không cần).</div>")
+    return ""

@@ -83,6 +83,8 @@ python -m pip install -r requirements-ui.txt
 python tool\m28.py review --run R1610 --reviewer P5
 rem hoặc chạy thẳng, không qua m28:
 python tool\review_app.py runs\R1610 P5
+rem chưa có lượt nào (nạp ảnh bằng kéo thả, xem "Tab Nạp ảnh"):
+python tool\review_app.py --nap P5
 ```
 - Mở địa chỉ cmd in ra (http://127.0.0.1:7860; trình duyệt tự mở). `set M28_NO_BROWSER=1` để không tự mở, `set GRADIO_SERVER_PORT=7861` để đổi cổng.
   Cổng cố định: mở bản thứ hai khi bản cũ còn chạy thì báo "Cổng 7860 bận" (tránh hai bản cùng ghi một `triage_<Pk>.csv`). **Chỉ mở một tab.**
@@ -115,13 +117,40 @@ python tool\review_app.py runs\R1610 P5
 - Không dùng được trang (không cài được Gradio, trình duyệt lỗi): `--review excel` (xem mục Các lệnh).
 - Ảnh tạm và ảnh nhỏ nằm trong `runs\<run>\_tmp`; dọn bằng `rmdir /s /q runs\R1610\_tmp`.
 
+### Tab Nạp ảnh (kéo thả ảnh, không gõ lệnh prepare)
+Trang có hai tab: **Rà soát** (như trên) và **Nạp ảnh**. Dùng khi có ảnh mới (ảnh khách, ảnh thử) mà chưa có lượt `runs\<lượt>`:
+```bat
+python tool\review_app.py --nap P2
+rem hoặc từ trang đang rà dở: bấm tab Nạp ảnh
+```
+- Cách dùng: kéo thả nhiều ảnh vào vùng thả (hoặc bấm để chọn) → xem lưới ảnh nhỏ và danh sách ảnh bị loại → (tuỳ chọn) gõ tên lượt, để trống thì tự đặt
+  `NAP_001`, `NAP_002`… → **Bắt đầu chuẩn bị**. Trang chạy `python tool\m28.py prepare --run <lượt> --images runs\<lượt>\inbox --box auto` bằng tiến trình con,
+  hiện bước (1–6/6), thanh tiến độ và log. **Huỷ** dừng tiến trình; **Thử lại** chạy lại đúng lệnh trên lượt đó (bước đã xong được bỏ qua).
+  Xong thì hiện tóm tắt (mặt dùng được, không thấy mặt, vào hàng đợi rà, lệnh `push` gợi ý) và nút **Rà lượt này**: trang tự chuyển sang rà lượt mới.
+- Mỗi lần nạp là **một lượt mới**; lượt đang rà dở không bị đụng tới. Ảnh chép nguyên byte vào `runs\<lượt>\inbox\` với tên đã làm sạch (bỏ dấu, ký tự lạ thành `_`,
+  tên trùng, không phân biệt hoa thường, thêm `_2`, `_3`…; đuôi theo định dạng thật: `.jpg` hoặc `.png`). Bảng tên gốc → tên mới ở `runs\<lượt>\nap_ten_goc.csv`,
+  log của tiến trình con ở `runs\<lượt>\nap_log.txt` (còn sau lỗi/huỷ). Trang chỉ ghi dưới `runs\`.
+- Giới hạn: đuôi `.jpg/.jpeg/.png` **và** phải mở được như ảnh JPEG/PNG (không tin đuôi: file chữ đổi tên `.jpg` bị loại); tối đa 25 MB mỗi ảnh, 200 ảnh mỗi lần,
+  cạnh ngắn từ 32 px, tối đa 50 triệu điểm ảnh; ảnh trùng nội dung (sha256) trong cùng lần bị loại. Mỗi ảnh bị loại có lý do ghi trên trang.
+- `--box auto` chỉ lấy **mặt lớn nhất** của mỗi ảnh; cần mặt khác thì Gán tay trong CVAT. Mặt không có ảnh cắt: `push` tự xếp Bỏ; mặt MediaPipe không thấy: vẫn vào hàng đợi nhưng không có nháp.
+- Cần `face_landmarker.task` (ở thư mục chạy lệnh hoặc `tool\`), `config\m28_config.json`, `config\map_mp50.json`, và đã cài mediapipe, opencv. Thiếu thì khung đỏ ở đầu tab
+  nói rõ cách sửa và nút Bắt đầu bị khoá. Chạy trang từ thư mục có `runs\` (tab Nạp ảnh báo lỗi nếu thư mục lượt không nằm trong một thư mục tên `runs`).
+- **Chuyển lượt**: bấm Rà lượt này thì trang dựng lại và mở lại trên **cùng cổng, cùng tiến trình** (mất kết nối 1–3 giây, trình duyệt tự tải lại; cmd in lượt cũ còn bao nhiêu mặt chưa rà và lệnh mở lại,
+  ví dụ `python tool\review_app.py runs\F5 P2`). Các lần bấm của lượt cũ đã ghi từng dòng nên không mất. Nếu bạn mở trang bằng `m28.py review --run <cũ>` thì lệnh đó sẽ báo chưa bấm Xong
+  cho lượt cũ: gõ lại sau. Bấm **Xong** khi đang chuẩn bị bị từ chối (Xong tắt trang và giết prepare). File tạm/ảnh nhỏ sau khi chuyển vẫn nằm ở `_tmp` của lượt đầu tiên
+  (Gradio chỉ đọc `GRADIO_TEMP_DIR` lúc import); vẫn dưới `runs\`, ngoài git.
+- `--nap`: chưa có lượt nào thì chạy `python tool\review_app.py --nap <người rà>` (tạo `runs\` nếu chưa có, tab Rà soát chỉ ghi "Chưa có lượt nào").
+- **Ảnh mặt người thật chỉ xử lý trên máy này (127.0.0.1)**: không đưa ảnh khách hàng, ảnh chụp màn hình trang, file kết quả vào chat AI hay dịch vụ ngoài. Server vẫn chỉ phát file trong
+  `overlays`, `crop\images`, `_tmp` của lượt đang rà (không bao giờ `inbox\` hay cả `runs\`).
+
 ## Chạy test
 ```bat
 python -m pytest tests -q
 ```
 Test chỉ dùng dữ liệu giả (ảnh ngẫu nhiên, landmarker/mapping/push/collect giả); không cần mediapipe, CVAT hay mạng.
 `tests\test_review_app.py` thử phần logic của trang rà soát mà không cần gradio hay trình duyệt. Kiểm thử trên trình duyệt thật
-(tuỳ chọn, cần playwright, không nằm trong requirements): `python tests\e2e_review_ui.py --work <thư mục có runs\F5 và runs\ALL616> --shots <thư mục ảnh chụp>`.
+(tuỳ chọn, cần playwright, không nằm trong requirements): `python tests\e2e_review_ui.py --work <thư mục có runs\F5 và runs\ALL616> --shots <thư mục ảnh chụp>`
+(pha F thử tab Nạp ảnh bằng ảnh WFLW thật: thêm `--wflw <WFLW_images>` nếu không nằm cạnh thư mục work).
 
 ## Giao diện m28 giả định từ P2/P3/P4
 Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nhận**. Ai thấy khác thì sửa bảng này hoặc báo P1.
@@ -179,6 +208,10 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
   lỗi ghi file (giả lập), nút Xong tự tắt trang (mã thoát 0) và đi tiếp trong `m28.py review` rồi `push --dry-run`, không có request ra ngoài 127.0.0.1 dù đặt proxy chết.
   Số đo trên 616 mặt (CPU cloud, lúc nguội, chưa có ảnh nhỏ nào): từ lệnh chạy đến khi lưới hiện ảnh khoảng 6,5 giây (nạp Gradio chiếm khoảng 4,5 giây), mỗi quyết định
   trung vị 0,11 giây, đổi trang lần đầu tối đa 0,61 giây. `tests\e2e_review_ui.py` tự đo lại các số này.
+- **Tab Nạp ảnh** (6/10/2026, `tool/nap_anh.py` + `review_app.py`): Linux cloud, Python 3.11, Gradio 6.29.1, mediapipe 1.0.1, Chromium qua Playwright. Pha F của `tests\e2e_review_ui.py`:
+  thả 12 file (6 ảnh WFLW thật, tên có dấu/đuôi hoa, hai ảnh cùng tên, PNG xám, file chữ đổi đuôi, ảnh trùng; `set_input_files`, không phải kéo chuột thật), prepare thật bằng MediaPipe, Huỷ/Thử lại,
+  "Rà lượt này" (relaunch cùng cổng, lượt cũ y nguyên), thiếu model, chế độ `--nap`. **Chưa thử**: Windows/cmd, Python 3.14, relaunch cùng cổng trên Windows, kéo thả bằng chuột thật,
+  ảnh > 25 MB thật, đường dẫn dự án có dấu tiếng Việt (`cv2.imread` trên Windows không đọc được đường dẫn Unicode; tên ảnh đã ASCII nhưng thư mục dự án thì không).
 - **Chưa chạy**: `autoqc` của P4, `push` thật, `collect`, trang rà soát trên Windows/Python 3.14/trình duyệt thật có giao diện/máy có proxy công ty/Excel khoá file thật, Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả nhập được XML `<skeleton>` không), CSV do Excel lưu.
 - Cập nhật sau thí nghiệm 14–15/10 và lượt chạy tập R (16–18/10): thời gian trước/sau, số nháp hỏng trang rà soát bắt được.
 

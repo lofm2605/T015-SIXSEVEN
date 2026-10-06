@@ -5,6 +5,10 @@ Sửa điểm không làm ở đây (làm trong CVAT).
 
     python tool\\review_app.py runs\\F5 P2            # chạy thẳng, từ thư mục source-tool\\m28-prelabel
     python tool\\m28.py review --run F5 --reviewer P2  # qua m28 (bước review --review ui)
+    python tool\\review_app.py --nap P2              # chưa có lượt nào: chỉ mở tab "Nạp ảnh" (kéo thả ảnh -> prepare -> rà)
+
+Trang có hai tab: "Rà soát" (như cũ) và "Nạp ảnh" (logic ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng
+tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà không gõ lệnh).
 
 Đọc  runs/<run>/flags/flags.json, overlays/, autoqc/autoqc.csv, no_face.csv, map50/mp50.json, crop/images/.
 Ghi  runs/<run>/review/triage_<người rà>.csv (name,decision,reason,seconds; chỉ nối thêm dòng, mỗi dòng fsync)
@@ -14,6 +18,10 @@ Quy ước:
   * Đầu module không nạp gradio, cũng không bao giờ nạp torch: phần logic thuần (hàng đợi, đọc/ghi CSV, hoàn tác,
     ảnh chồng, ảnh nhỏ) chỉ dùng thư viện chuẩn và PIL (nạp lười), test không cần trình duyệt.
   * Chỉ launch(server_name="127.0.0.1", share=False). Không tunnel, không Colab/Kaggle, không gọi mạng.
+  * Chuyển sang lượt mới = dựng lại Blocks và launch lại trên CÙNG cổng, CÙNG tiến trình (xem main). Lý do không đổi Store tại chỗ:
+    `store` nằm trong mọi closure của build_ui; allowed_paths (overlays, crop/images, _tmp của lượt) chỉ đặt lúc launch; tiêu đề
+    trang, notes_html, had_done tính một lần. Đổi tại chỗ phải sửa mọi handler và chọc vào thuộc tính nội bộ của Gradio. Tự sinh
+    tiến trình mới thì rối cửa sổ cmd (Windows) và tiến trình cha `m28.py review`. Cái giá: trang mất kết nối 1-3 giây.
   * Đóng ngang chừng không mất gì: mỗi lần bấm là một dòng CSV đã fsync; mở lại thì làm tiếp.
 """
 import csv
@@ -31,7 +39,9 @@ import time
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 if TOOL_DIR not in sys.path:
     sys.path.insert(0, TOOL_DIR)
+import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
 from m28core.steps import DECISIONS, _stem  # noqa: E402  (dùng chung quy ước tên/quyết định với push)
+from nap_anh import NO_FACE_VI, RunError  # noqa: E402,F401  (RunError dùng chung với nap_anh)
 
 # ---------- hằng số (P5 chốt guideline_triage.md thì sửa ở đây) ----------
 REASONS = [
@@ -49,7 +59,6 @@ REASON_CODES = [c for c, _ in REASONS]
 LABELS = {"nhan": "Nhận", "gan_tay": "Gán tay", "bo": "Bỏ ảnh"}
 SUG_VI = {"on": "ổn", "can_xem": "cần xem", "nen_gan_tay": "nên gán tay", "": "chưa có autoqc"}
 PROBLEMS_VI = {"diem_ngoai_anh": "điểm ra ngoài ảnh", "diem_khong_hop_le": "điểm không hợp lệ"}
-NO_FACE_VI = {"khong_thay_mat": "MediaPipe không thấy mặt", "khong_doc_duoc_anh": "không đọc được ảnh"}
 EMPTY_VI = {"tat_ca": "Không có mặt nào trong lượt này.", "chua_ra": "Đã rà hết: không còn mặt chưa rà. Bấm Xong ở cột bên phải.",
             "dang_ngo": "Không có mặt đáng ngờ nào.", "da_ra": "Chưa rà mặt nào."}
 DEFAULT_PORT = 7860
@@ -63,11 +72,8 @@ STATUS_COLOR = {"": "#9ca3af", "nhan": "#16a34a", "gan_tay": "#d97706", "bo": "#
 STATUS_LETTER = {"": "", "nhan": "N", "gan_tay": "G", "bo": "B"}
 RED, GREEN = (255, 0, 0), (0, 200, 0)     # như steps.overlays (BGR 0,0,255 và 0,200,0), ở đây là RGB
 NOTEBOOK_VARS = ("COLAB_RELEASE_TAG", "COLAB_GPU", "KAGGLE_KERNEL_RUN_TYPE", "SPACE_ID")
-VI_USAGE = "Cách dùng: python tool\\review_app.py <thư mục lượt chạy> <người rà>, ví dụ python tool\\review_app.py runs\\R1610 P5"
-
-
-class RunError(Exception):
-    """Lỗi người dùng sửa được (thiếu file, sai tên...). Thông điệp tiếng Việt, nói rõ cách sửa."""
+VI_USAGE = ("Cách dùng: python tool\\review_app.py <thư mục lượt chạy> <người rà>, ví dụ python tool\\review_app.py runs\\R1610 P5; "
+            "chưa có lượt nào thì python tool\\review_app.py --nap <người rà> (chỉ tab Nạp ảnh), ví dụ python tool\\review_app.py --nap P5")
 
 
 # ---------- kiểm tra đầu vào ----------
@@ -1045,6 +1051,72 @@ CSS = """
 kbd { display: inline-block; min-width: 20px; padding: 0 5px; text-align: center; font: 600 12px var(--font-mono);
   border: 1px solid var(--border-color-primary); border-bottom-width: 2px; border-radius: 5px;
   background: var(--background-fill-secondary); color: var(--body-text-color); }
+/* ---------- hai tab: Rà soát / Nạp ảnh ---------- */
+#tabs { margin-top: 4px; }
+#tabs > .tab-wrapper button, #tabs > .tab-container button { font-size: 15px; font-weight: 700; padding: 6px 16px; }
+#tab-ra, #tab-nap { padding: 8px 0 0 !important; }
+#tab-nap { max-width: 1120px; margin: 0 auto; width: 100%; gap: 10px; }
+#nap-warn, #nap-env, #nap-count, #nap-rejected, #nap-msg, #nap-prog, #nap-summary, #nap-oldnote { padding: 0 !important; }
+.nap-box { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5; color: var(--body-text-color);
+  border: 1px solid var(--bc, #9ca3af); background: color-mix(in srgb, var(--bc, #9ca3af) 14%, transparent); }
+.nap-box ul { margin: 6px 0 0 20px; padding: 0; }
+.nap-box li { overflow-wrap: anywhere; }
+.nap-ok { --bc: #16a34a; } .nap-err { --bc: #dc2626; } .nap-warn { --bc: #d97706; }
+#nap-drop { border: 2px dashed var(--border-color-primary) !important; border-radius: 14px; min-height: 200px;
+  background: var(--background-fill-secondary); transition: border-color .15s, background .15s; }
+#nap-drop:hover, #nap-drop:focus-within { border-color: #16a34a !important;
+  background: color-mix(in srgb, #16a34a 8%, var(--background-fill-secondary)); }
+#nap-drop [data-testid="upload-text"] { font-size: 0 !important; color: var(--body-text-color); }
+#nap-drop [data-testid="upload-text"] .or { display: none; }
+#nap-drop [data-testid="upload-text"]::after { content: "Kéo thả ảnh vào đây\\A hoặc bấm để chọn"; white-space: pre; display: block;
+  font-size: 20px; font-weight: 700; line-height: 1.5; text-align: center; margin-top: 8px; }
+#nap-drop .file-preview, #nap-drop table { font-size: 13px; }
+.nap-count { font-size: 15px; color: var(--body-text-color-subdued); }
+.nap-count b { color: var(--body-text-color); font-size: 17px; }
+#nap-list { padding: 0 !important; border: 0 !important; background: transparent !important; }
+#nap-list .gallery-container, #nap-list .grid-wrap { height: auto !important; min-height: 0 !important; max-height: 340px !important;
+  overflow-y: auto !important; }
+#nap-list .grid-container { grid-template-columns: repeat(auto-fill, minmax(150px, 160px)) !important; gap: 8px !important; }
+#nap-list .thumbnail-item { height: 160px !important; border-radius: 8px !important; overflow: hidden; padding: 0 !important; border: 0 !important;
+  background: var(--background-fill-secondary); box-shadow: none !important; }
+#nap-list .thumbnail-item img { width: 100% !important; height: 100% !important; object-fit: contain !important; }
+#nap-list .caption-label { left: 3px !important; right: 3px !important; bottom: 3px !important; width: auto !important; max-width: none !important;
+  white-space: normal !important; text-align: left !important; font-size: 10px !important; line-height: 1.15 !important;
+  padding: 1px 4px !important; border-radius: 4px !important; overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--block-background-fill) 90%, transparent) !important; color: var(--body-text-color) !important; }
+#nap-btns { gap: 10px; flex-wrap: wrap; }
+#nap-btns button { min-height: 48px; font-size: 16px; font-weight: 800; min-width: 140px !important; }
+#nap-start:not(:disabled) { background: #16a34a !important; border-color: #15803d !important; color: #fff !important; }
+#nap-start:disabled, #nap-retry:disabled, #nap-cancel:disabled, #nap-go:disabled { opacity: .45; cursor: not-allowed; }
+#nap-retry { background: var(--background-fill-secondary) !important; color: var(--body-text-color) !important;
+  border: 1px solid var(--border-color-primary) !important; }
+#nap-go { min-height: 56px; font-size: 18px; font-weight: 800; }
+#nap-go:not(:disabled) { background: #16a34a !important; border-color: #15803d !important; color: #fff !important; }
+#nap-log textarea { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.4; }
+.nap-prog { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-radius: 10px;
+  background: var(--block-background-fill); border: 1px solid var(--border-color-primary); }
+.nap-prog-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font-size: 14px; }
+.nap-label { font-weight: 800; font-size: 16px; }
+.nap-time { margin-left: auto; font-family: var(--font-mono); color: var(--body-text-color-subdued); }
+.nap-prog .m28-bar { flex: none; width: 100%; }
+.nap-st-err .m28-bar > i { background: #dc2626; } .nap-st-warn .m28-bar > i { background: #d97706; }
+.nap-sum { display: flex; flex-direction: column; gap: 10px; }
+.nap-sum-title { font-size: 16px; }
+.nap-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.nap-card { display: flex; flex-direction: column; align-items: center; padding: 10px 6px; border-radius: 12px;
+  border: 1px solid var(--border-color-primary); background: var(--block-background-fill); }
+.nap-card b { font-size: 30px; line-height: 1.1; } .nap-card span { font-size: 13px; color: var(--body-text-color-subdued); text-align: center; }
+.nap-note { font-size: 13.5px; line-height: 1.55; color: var(--body-text-color-subdued); overflow-wrap: anywhere; }
+.nap-note code, .nap-cmd { font-family: var(--font-mono); font-size: 12.5px; }
+.nap-cmd { display: block; margin-top: 4px; padding: 6px 10px; border-radius: 8px; background: var(--background-fill-secondary);
+  color: var(--body-text-color); user-select: all; }
+@media (max-width: 600px) {
+  #nap-btns button { flex: 1 1 100% !important; }
+  .nap-cards { grid-template-columns: 1fr; }
+  .nap-card { flex-direction: row; justify-content: space-between; padding: 8px 14px; }
+  #nap-list .grid-container { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #nap-list .thumbnail-item { height: auto !important; aspect-ratio: 1; }
+}
 """
 
 PAGE_JS = r"""() => {
@@ -1064,6 +1136,9 @@ PAGE_JS = r"""() => {
   };
   const onDecide = (t) => !!(t && t.closest && t.closest(DECIDE));
   document.addEventListener('keydown', (e) => {
+    // Phím tắt chỉ chạy khi tab "Rà soát" đang hiện (tab "Nạp ảnh" có ô gõ tên lượt, ô thả file, nút riêng).
+    const mainEl = document.getElementById('main');
+    if (!mainEl || mainEl.offsetParent === null) { return; }
     if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || typing(e.target)) { return; }
     if (document.querySelector('.m28-done')) { e.preventDefault(); return; }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -1116,13 +1191,8 @@ def prepare_env(run_dir, environ=None):
         env[k] = ",".join(have + [h for h in ("localhost", "127.0.0.1") if h not in have])
 
 
-def build_ui(store):
-    """Dựng Blocks. Chỉ gọi sau khi đã đặt biến môi trường an toàn (xem prepare_env)."""
-    import gradio as gr
-
-    run = run_name(store.run_dir)
-    theme = gr.themes.Soft(primary_hue="emerald", font=["ui-sans-serif", "system-ui", "Segoe UI", "sans-serif"],
-                           font_mono=["ui-monospace", "Consolas", "monospace"])
+def _review_tab(gr, demo, store, ctx, header):
+    """Tab "Rà soát" (bố cục và sự kiện như trước khi có tab Nạp ảnh; mọi elem_id giữ nguyên). `header` là thanh #progress đặt trên các tab."""
     close_once = {"started": False}
 
     def apply(v, reset_reason):
@@ -1140,115 +1210,401 @@ def build_ui(store):
                 gr.update(value=v["xong_label"], interactive=v["xong_ok"]),
                 v["shown"], v["msg"])
 
-    with gr.Blocks(title=f"Rà soát M28 · {run}", fill_width=True) as demo:
-        ses_state = gr.State(None)
-        shown = gr.Textbox(visible="hidden", elem_id="shown")
-        header = gr.HTML(elem_id="progress", apply_default_css=False)
-        with gr.Row(elem_id="main", equal_height=False):
-            with gr.Column(scale=4, min_width=400, elem_id="left"):
-                flt = gr.Radio(choices=[(t, m) for m, t in FILTERS], value="tat_ca", label="Lọc", show_label=False,
-                               elem_id="filter")
-                with gr.Row(elem_id="pager"):
-                    b_pp = gr.Button("‹ Trang trước", elem_id="btn-pageprev", size="sm")
-                    page_lbl = gr.HTML(elem_id="pagelbl", apply_default_css=False)
-                    b_pn = gr.Button("Trang sau ›", elem_id="btn-pagenext", size="sm")
-                grid = gr.Gallery(show_label=False, allow_preview=False, columns=4, object_fit="contain", buttons=[],
-                                  elem_id="grid", height="auto")
-            with gr.Column(scale=5, min_width=400, elem_id="center"):
-                big = gr.Image(type="filepath", interactive=False, buttons=[], elem_id="big",
-                               show_label=False)
-                with gr.Row(elem_id="decide"):
-                    b_nhan = gr.Button("Nhận (N)", variant="primary", elem_id="btn-nhan")
-                    b_tay = gr.Button("Gán tay (G)", elem_id="btn-gantay")
-                    b_bo = gr.Button("Bỏ ảnh (B)", variant="stop", elem_id="btn-bo")
-                reason = gr.Radio(choices=[(f"{i} · {t}" if c else t, c) for i, (c, t) in enumerate(REASONS)],
-                                  value="", label="Lý do: chọn TRƯỚC khi bấm Gán tay / Bỏ ảnh (phím 0–8)", elem_id="reason")
-                with gr.Row(elem_id="nav"):
-                    b_prev = gr.Button("← Trước", elem_id="btn-prev")
-                    b_undo = gr.Button("Hoàn tác (Z)", elem_id="btn-undo")
-                    b_next = gr.Button("Sau →", elem_id="btn-next")
-            with gr.Column(scale=3, min_width=340, elem_id="side"):
-                info = gr.HTML(elem_id="info", apply_default_css=False)
-                gr.HTML(LEGEND_HTML, elem_id="legend", apply_default_css=False)
-                msg = gr.HTML(elem_id="msg", apply_default_css=False)
-                b_xong = gr.Button("Xong", variant="primary", elem_id="btn-xong", interactive=False)
-                gr.HTML(GUIDE_HTML, elem_id="guide", apply_default_css=False)
-                gr.HTML(KEYS_HTML, elem_id="keys", apply_default_css=False)
-                gr.HTML(notes_html(store), elem_id="notes", apply_default_css=False)
+    ses_state = gr.State(None)
+    shown = gr.Textbox(visible="hidden", elem_id="shown")
+    with gr.Row(elem_id="main", equal_height=False):
+        with gr.Column(scale=4, min_width=400, elem_id="left"):
+            flt = gr.Radio(choices=[(t, m) for m, t in FILTERS], value="tat_ca", label="Lọc", show_label=False,
+                           elem_id="filter")
+            with gr.Row(elem_id="pager"):
+                b_pp = gr.Button("‹ Trang trước", elem_id="btn-pageprev", size="sm")
+                page_lbl = gr.HTML(elem_id="pagelbl", apply_default_css=False)
+                b_pn = gr.Button("Trang sau ›", elem_id="btn-pagenext", size="sm")
+            grid = gr.Gallery(show_label=False, allow_preview=False, columns=4, object_fit="contain", buttons=[],
+                              elem_id="grid", height="auto")
+        with gr.Column(scale=5, min_width=400, elem_id="center"):
+            big = gr.Image(type="filepath", interactive=False, buttons=[], elem_id="big",
+                           show_label=False)
+            with gr.Row(elem_id="decide"):
+                b_nhan = gr.Button("Nhận (N)", variant="primary", elem_id="btn-nhan")
+                b_tay = gr.Button("Gán tay (G)", elem_id="btn-gantay")
+                b_bo = gr.Button("Bỏ ảnh (B)", variant="stop", elem_id="btn-bo")
+            reason = gr.Radio(choices=[(f"{i} · {t}" if c else t, c) for i, (c, t) in enumerate(REASONS)],
+                              value="", label="Lý do: chọn TRƯỚC khi bấm Gán tay / Bỏ ảnh (phím 0–8)", elem_id="reason")
+            with gr.Row(elem_id="nav"):
+                b_prev = gr.Button("← Trước", elem_id="btn-prev")
+                b_undo = gr.Button("Hoàn tác (Z)", elem_id="btn-undo")
+                b_next = gr.Button("Sau →", elem_id="btn-next")
+        with gr.Column(scale=3, min_width=340, elem_id="side"):
+            info = gr.HTML(elem_id="info", apply_default_css=False)
+            gr.HTML(LEGEND_HTML, elem_id="legend", apply_default_css=False)
+            msg = gr.HTML(elem_id="msg", apply_default_css=False)
+            b_xong = gr.Button("Xong", variant="primary", elem_id="btn-xong", interactive=False)
+            gr.HTML(GUIDE_HTML, elem_id="guide", apply_default_css=False)
+            gr.HTML(KEYS_HTML, elem_id="keys", apply_default_css=False)
+            gr.HTML(notes_html(store), elem_id="notes", apply_default_css=False)
 
-        outs = [header, flt, grid, page_lbl, b_pp, b_pn, big, info, reason, b_nhan, b_tay, b_bo, b_undo, b_prev, b_next,
-                b_xong, shown, msg]
-        opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="m28")
+    outs = [header, flt, grid, page_lbl, b_pp, b_pn, big, info, reason, b_nhan, b_tay, b_bo, b_undo, b_prev, b_next,
+            b_xong, shown, msg]
+    opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="m28")
 
-        def render(ses, m="", level="info", reset=True):
-            v = make_view(store, ses, m, level)
-            if level == "warn" and m:
-                gr.Warning(m, title="Cảnh báo")
-            return (ses,) + apply(v, reset)
+    def render(ses, m="", level="info", reset=True):
+        v = make_view(store, ses, m, level)
+        if level == "warn" and m:
+            gr.Warning(m, title="Cảnh báo")
+        return (ses,) + apply(v, reset)
 
-        all_outs = [ses_state] + outs
+    all_outs = [ses_state] + outs
 
-        def on_load():
-            return render(new_session(store))
+    def on_load():
+        return render(new_session(store))
 
-        def on_select(ses, evt: gr.SelectData):
+    def on_select(ses, evt: gr.SelectData):
+        ses = ensure_session(store, ses)
+        m, lv = act_select(store, ses, evt.index)
+        return render(ses, m, lv)
+
+    def on_filter(mode, ses):
+        ses = ensure_session(store, ses)
+        m, lv = act_filter(store, ses, mode)
+        return render(ses, m, lv)
+
+    def on_page(delta):
+        def h(ses):
             ses = ensure_session(store, ses)
-            m, lv = act_select(store, ses, evt.index)
-            return render(ses, m, lv)
-
-        def on_filter(mode, ses):
-            ses = ensure_session(store, ses)
-            m, lv = act_filter(store, ses, mode)
-            return render(ses, m, lv)
-
-        def on_page(delta):
-            def h(ses):
-                ses = ensure_session(store, ses)
-                m, lv = act_page(store, ses, delta)
-                return render(ses, m, lv, reset=False)
-            return h
-
-        def on_step(delta):
-            def h(ses):
-                ses = ensure_session(store, ses)
-                m, lv = act_step(store, ses, delta)
-                return render(ses, m, lv)
-            return h
-
-        def on_decide(decision):
-            def h(why, sh, ses):
-                ses = ensure_session(store, ses)
-                m, lv, reset = act_decide(store, ses, decision, why, sh)
-                return render(ses, m, lv, reset)
-            return h
-
-        def on_undo(sh, ses):
-            ses = ensure_session(store, ses)
-            m, lv, reset = act_undo(store, ses, sh)
-            return render(ses, m, lv, reset)
-
-        def on_xong(ses):
-            ses = ensure_session(store, ses)
-            m, lv, ok = act_finish(store, ses)
-            if ok and not close_once["started"]:
-                close_once["started"] = True
-                threading.Timer(2.0, lambda: demo.close(verbose=False)).start()
+            m, lv = act_page(store, ses, delta)
             return render(ses, m, lv, reset=False)
+        return h
 
-        demo.load(on_load, None, all_outs, **opts)
-        grid.select(on_select, [ses_state], all_outs, **opts)
-        flt.input(on_filter, [flt, ses_state], all_outs, **opts)
-        b_pp.click(on_page(-1), [ses_state], all_outs, trigger_mode="multiple", **opts)
-        b_pn.click(on_page(1), [ses_state], all_outs, trigger_mode="multiple", **opts)
-        b_prev.click(on_step(-1), [ses_state], all_outs, trigger_mode="multiple", **opts)
-        b_next.click(on_step(1), [ses_state], all_outs, trigger_mode="multiple", **opts)
-        b_nhan.click(on_decide("nhan"), [reason, shown, ses_state], all_outs, **opts)
-        b_tay.click(on_decide("gan_tay"), [reason, shown, ses_state], all_outs, **opts)
-        b_bo.click(on_decide("bo"), [reason, shown, ses_state], all_outs, **opts)
-        b_undo.click(on_undo, [shown, ses_state], all_outs, **opts)
-        b_xong.click(on_xong, [ses_state], all_outs, **opts)
+    def on_step(delta):
+        def h(ses):
+            ses = ensure_session(store, ses)
+            m, lv = act_step(store, ses, delta)
+            return render(ses, m, lv)
+        return h
+
+    def on_decide(decision):
+        def h(why, sh, ses):
+            ses = ensure_session(store, ses)
+            m, lv, reset = act_decide(store, ses, decision, why, sh)
+            return render(ses, m, lv, reset)
+        return h
+
+    def on_undo(sh, ses):
+        ses = ensure_session(store, ses)
+        m, lv, reset = act_undo(store, ses, sh)
+        return render(ses, m, lv, reset)
+
+    def on_xong(ses):
+        ses = ensure_session(store, ses)
+        if ctx.job.running:                     # Xong tắt server và sẽ giết prepare đang chạy ở tab Nạp ảnh
+            return render(ses, f"Đang chuẩn bị lượt {ctx.job.run}: chờ xong hoặc bấm Huỷ.", "warn", reset=False)
+        m, lv, ok = act_finish(store, ses)
+        if ok and not close_once["started"]:
+            close_once["started"] = True
+            threading.Timer(2.0, lambda: demo.close(verbose=False)).start()
+        return render(ses, m, lv, reset=False)
+
+    demo.load(on_load, None, all_outs, **opts)
+    grid.select(on_select, [ses_state], all_outs, **opts)
+    flt.input(on_filter, [flt, ses_state], all_outs, **opts)
+    b_pp.click(on_page(-1), [ses_state], all_outs, trigger_mode="multiple", **opts)
+    b_pn.click(on_page(1), [ses_state], all_outs, trigger_mode="multiple", **opts)
+    b_prev.click(on_step(-1), [ses_state], all_outs, trigger_mode="multiple", **opts)
+    b_next.click(on_step(1), [ses_state], all_outs, trigger_mode="multiple", **opts)
+    b_nhan.click(on_decide("nhan"), [reason, shown, ses_state], all_outs, **opts)
+    b_tay.click(on_decide("gan_tay"), [reason, shown, ses_state], all_outs, **opts)
+    b_bo.click(on_decide("bo"), [reason, shown, ses_state], all_outs, **opts)
+    b_undo.click(on_undo, [shown, ses_state], all_outs, **opts)
+    b_xong.click(on_xong, [ses_state], all_outs, **opts)
+
+
+NAP_WARN_HTML = ('<div class="nap-box nap-warn"><b>Ảnh mặt người thật chỉ xử lý trên máy này (127.0.0.1).</b> Không đưa ảnh khách hàng, '
+                 'ảnh chụp màn hình trang này hay file kết quả vào chat AI hay dịch vụ ngoài nào.<br>'
+                 f'Nhận .jpg, .jpeg, .png; tối đa {nap_anh.MAX_BYTES // 1048576} MB mỗi ảnh và {nap_anh.MAX_FILES} ảnh mỗi lần. '
+                 'Mỗi lần nạp tạo một lượt mới trong <code>runs\\</code>; lượt đang rà dở không bị đụng tới.</div>')
+NO_RUN_HTML = ('<div class="m28-empty">Chưa có lượt nào: nạp ảnh ở tab <b>Nạp ảnh</b>, rồi bấm <b>Rà lượt này</b>.</div>')
+HEAD_NAP_HTML = ('<div class="m28-head"><div class="m28-top"><div class="m28-title">Rà soát nhãn nháp M28</div>'
+                 '<div class="m28-sub">chưa có lượt nào · người rà <b>{rev}</b></div></div></div>')
+
+# Chờ trang mới (cùng cổng) dựng xong rồi tải lại: hỏi /config của Gradio, so tiêu đề với lượt mới.
+NAP_SWITCH_JS = r"""(title) => {
+  if (!title) { return; }
+  const t0 = Date.now();
+  const giveUp = () => {
+    const box = document.getElementById('tab-nap') || document.body;
+    const d = document.createElement('div');
+    d.className = 'm28-msg m-warn';
+    d.textContent = 'Chưa thấy trang mới sau 40 giây. Xem cửa sổ cmd, rồi mở lại ' + location.origin + ' để tải lại.';
+    box.appendChild(d);
+  };
+  const tick = async () => {
+    try {
+      const r = await fetch('/config', { cache: 'no-store' });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && j.title === title) { location.reload(); return; }
+      }
+    } catch (err) { /* server cũ đã tắt, server mới chưa lên */ }
+    if (Date.now() - t0 > 40000) { giveUp(); return; }
+    setTimeout(tick, 500);
+  };
+  setTimeout(tick, 1000);
+}"""
+
+
+@dataclasses.dataclass
+class AppCtx:
+    """Phần dùng chung của một lần dựng trang: nơi chạy, người rà, job prepare, đích chuyển lượt.
+    run_dir = lượt đang rà (hoặc runs/_nap khi chưa có lượt nào, chế độ --nap)."""
+    reviewer: str
+    run_dir: str
+    nap_only: bool = False
+    job: object = None
+    switch_to: object = None           # (run_dir, Store) khi bấm "Rà lượt này"
+    demo: object = None
+    tmp_dir: str = ""
+    runs_root: str = ""
+    project_root: str = ""
+    layout_error: object = None
+
+    def __post_init__(self):
+        if self.job is None:
+            self.job = nap_anh.PrepareJob()
+        self.runs_root, self.project_root, self.layout_error = nap_anh.runs_layout(self.run_dir)
+        self.tmp_dir = os.environ.get("GRADIO_TEMP_DIR") or os.path.abspath(os.path.join(self.run_dir, "_tmp"))
+
+
+def _nap_tab(gr, demo, store, ctx):
+    """Tab "Nạp ảnh": kéo thả -> kiểm file -> tạo lượt mới -> prepare (tiến trình con) -> Rà lượt này. Sự kiện dùng concurrency_id
+    "nap" / "nap_tick" / "nap_huy", KHÔNG dùng "m28", để rà tiếp được trong lúc prepare chạy."""
+    job = ctx.job
+    thumb_dir = os.path.join(ctx.tmp_dir, "nap_thumbs")
+    env = {"errs": [] if ctx.layout_error else nap_anh.preflight(ctx.project_root)}
+
+    gr.HTML(NAP_WARN_HTML, elem_id="nap-warn", apply_default_css=False)
+    env_html = gr.HTML(nap_anh.preflight_html(env["errs"], ctx.layout_error), elem_id="nap-env", apply_default_css=False)
+    drop = gr.File(label="Kéo thả ảnh vào đây hoặc bấm để chọn", file_count="multiple", file_types=[".jpg", ".jpeg", ".png"],
+                   type="filepath", elem_id="nap-drop", height=220)
+    count = gr.HTML(nap_anh.count_html(None), elem_id="nap-count", apply_default_css=False)
+    gal = gr.Gallery(show_label=False, allow_preview=False, columns=6, object_fit="contain", buttons=[], elem_id="nap-list",
+                     height="auto", visible=False, interactive=False)
+    rej = gr.HTML(elem_id="nap-rejected", apply_default_css=False)
+    name_tb = gr.Textbox(label="Tên lượt (để trống = tự đặt NAP_001, NAP_002…)", placeholder=nap_anh.next_run_name(ctx.runs_root),
+                         max_lines=1, elem_id="nap-name")
+    with gr.Row(elem_id="nap-btns"):
+        b_start = gr.Button("Bắt đầu chuẩn bị", variant="primary", elem_id="nap-start", interactive=False)
+        b_cancel = gr.Button("Huỷ", variant="stop", elem_id="nap-cancel", interactive=False)
+        b_retry = gr.Button("Thử lại", elem_id="nap-retry", interactive=False)
+    msg = gr.HTML(elem_id="nap-msg", apply_default_css=False)
+    prog = gr.HTML(elem_id="nap-prog", apply_default_css=False)
+    log_tb = gr.Textbox(label="Log prepare", lines=10, max_lines=14, interactive=False, autoscroll=True, elem_id="nap-log")
+    summary = gr.HTML(elem_id="nap-summary", apply_default_css=False)
+    old_note = gr.HTML(elem_id="nap-oldnote", apply_default_css=False)
+    b_go = gr.Button("Rà lượt này", variant="primary", elem_id="nap-go", interactive=False)
+    target = gr.Textbox(visible="hidden", elem_id="nap-target")
+    timer = gr.Timer(1.0, active=False)
+    plan_state = gr.State(None)
+
+    opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1)
+    job_outs = [prog, log_tb, summary, b_start, b_cancel, b_retry, b_go, old_note, timer]
+
+    def note_old():
+        """Ghi chú về lượt đang rà dở (nằm cạnh nút Rà lượt này)."""
+        if store is None:
+            return ""
+        old, p = run_name(store.run_dir), store.progress()
+        return ('<div class="nap-note">Lượt <b>%s</b> còn <b>%d</b> mặt chưa rà; các lần bấm đã lưu trong <code>triage_%s.csv</code> '
+                'nên không mất gì. Mở lại bằng lệnh <code>%s</code>.<br>Nếu bạn mở trang bằng <code>m28.py review --run %s</code> thì lệnh đó '
+                'sẽ báo chưa bấm Xong cho lượt cũ: gõ lại sau.</div>'
+                % (html.escape(old), p["remaining"], html.escape(store.reviewer),
+                   html.escape(nap_anh.reopen_command(store.run_dir, store.reviewer)), html.escape(old)))
+
+    def job_update(snap, n_ok):
+        """Tuple cập nhật đúng thứ tự job_outs từ ảnh chụp của job."""
+        st, run_dir = snap["state"], snap["run_dir"]
+        prog_v = nap_anh.job_progress(run_dir, snap["lines"]) if run_dir else None
+        res, go_ok, extra = None, False, ""
+        if st == "xong":
+            res = nap_anh.read_prepare_result(run_dir, _read_no_face)
+            go_ok = res["n_queue"] > 0
+            extra = nap_anh.summary_html(res, ctx.reviewer)
+            if not go_ok:
+                extra += '<div class="nap-box nap-err" role="alert">Lượt này không có mặt nào để rà (xem danh sách không thấy mặt ở trên).</div>'
+        elif st in ("loi", "da_huy"):
+            extra = nap_anh.failure_html(snap)
+        running = st == "dang_chay"
+        usable = not ctx.layout_error and not env["errs"]
+        return (nap_anh.progress_html(snap, prog_v) if prog_v else "", "\n".join(snap["lines"]), extra,
+                gr.update(interactive=usable and n_ok > 0 and not running),
+                gr.update(interactive=running and not snap.get("cancelling")),
+                gr.update(interactive=usable and st in ("loi", "da_huy") and not running),
+                gr.update(interactive=go_ok and not running), note_old(), gr.Timer(active=running))
+
+    def box(text, level="info"):
+        return f'<div class="m28-msg m-{level}" role="status">{html.escape(text)}</div>' if text else ""
+
+    def n_ok_of(plan_st):
+        return len(plan_st["plan"]["ok"]) if plan_st else 0
+
+    def on_load(plan_st):
+        env["errs"] = [] if ctx.layout_error else nap_anh.preflight(ctx.project_root)
+        return ((nap_anh.preflight_html(env["errs"], ctx.layout_error),
+                 gr.update(placeholder=nap_anh.next_run_name(ctx.runs_root))) + job_update(job.snapshot(), n_ok_of(plan_st)))
+
+    def paths_of(files):
+        if not files:
+            return []
+        return [f if isinstance(f, str) else getattr(f, "name", str(f)) for f in (files if isinstance(files, list) else [files])]
+
+    def plan_for(files, plan_st):
+        paths = tuple(paths_of(files))
+        if plan_st and plan_st.get("key") == paths:
+            return plan_st
+        return dict(key=paths, plan=nap_anh.plan_upload(list(paths)))
+
+    def on_files(files, plan_st):
+        plan_st = plan_for(files, plan_st) if files else None
+        plan = plan_st["plan"] if plan_st else None
+        items = nap_anh.gallery_items(plan, thumb_dir)
+        usable = not ctx.layout_error and not env["errs"]
+        return (plan_st, gr.update(value=items, visible=bool(items)), nap_anh.rejected_html(plan), nap_anh.count_html(plan),
+                gr.update(interactive=usable and bool(plan and plan["ok"]) and not job.running))
+
+    def on_start(files, name, plan_st):
+        def refuse(text):
+            gr.Warning(text, title="Chưa bắt đầu được")
+            return ((gr.update(), plan_st, gr.update(), gr.update(), gr.update(), gr.update(), box(text, "warn"))
+                    + job_update(job.snapshot(), n_ok_of(plan_st)))
+        if job.running:
+            return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Huỷ.")
+        if ctx.layout_error:
+            return refuse(ctx.layout_error)
+        env["errs"] = nap_anh.preflight(ctx.project_root)
+        if env["errs"]:
+            return refuse("Thiếu model hoặc cấu hình, xem khung đỏ ở đầu tab: " + env["errs"][0])
+        try:
+            plan_st = plan_for(files, plan_st)
+            run = nap_anh.check_run_name(name, ctx.runs_root) if (name or "").strip() else nap_anh.next_run_name(ctx.runs_root)
+            nap_anh.stage_upload(ctx.runs_root, run, plan_st["plan"], cleanup_root=ctx.tmp_dir)
+            job.start(run, ctx.runs_root, ctx.project_root)
+        except RunError as e:
+            return refuse(str(e))
+        text = f"Đã nạp {len(plan_st['plan']['ok'])} ảnh vào runs\\{run}\\inbox, đang chạy prepare."
+        return ((gr.update(value=None), None, gr.update(value=[], visible=False), "", nap_anh.count_html(None),
+                 gr.update(value="", placeholder=nap_anh.next_run_name(ctx.runs_root)), box(text, "ok"))
+                + job_update(job.snapshot(), 0))
+
+    def on_retry(plan_st):
+        def refuse(text):
+            gr.Warning(text, title="Chưa chạy lại được")
+            return (box(text, "warn"),) + job_update(job.snapshot(), n_ok_of(plan_st))
+        if job.running:
+            return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Huỷ.")
+        if job.state not in ("loi", "da_huy") or not job.run:
+            return refuse("Chưa có lượt nào bị lỗi hoặc bị huỷ để thử lại.")
+        env["errs"] = nap_anh.preflight(ctx.project_root)
+        if env["errs"]:
+            return refuse("Thiếu model hoặc cấu hình, xem khung đỏ ở đầu tab: " + env["errs"][0])
+        try:
+            job.start(job.run, ctx.runs_root, ctx.project_root)
+        except RunError as e:
+            return refuse(str(e))
+        return (box(f"Chạy lại lượt {job.run} (bước đã xong được bỏ qua).", "ok"),) + job_update(job.snapshot(), n_ok_of(plan_st))
+
+    def on_tick(plan_st):
+        return job_update(job.snapshot(), n_ok_of(plan_st))
+
+    def on_cancel(plan_st):
+        job.cancel()
+        return (box("Đã huỷ prepare." if job.state == "da_huy" else "", "warn"),) + job_update(job.snapshot(), n_ok_of(plan_st))
+
+    def on_go(plan_st):
+        def refuse(text):
+            gr.Warning(text, title="Chưa chuyển được")
+            return box(text, "warn"), ""
+        if ctx.switch_to is not None:
+            return box("Đang chuyển sang lượt mới…", "ok"), "Rà soát M28 · " + run_name(ctx.switch_to[0])
+        snap = job.snapshot()
+        if snap["state"] == "dang_chay":
+            return refuse(f"Đang chuẩn bị lượt {snap['run']}: chờ xong hoặc bấm Huỷ.")
+        if snap["state"] != "xong":
+            return refuse("Chưa chuẩn bị xong lượt nào: bấm Bắt đầu chuẩn bị (hoặc Thử lại) và chờ xong.")
+        res = nap_anh.read_prepare_result(snap["run_dir"], _read_no_face)
+        if not res["n_queue"]:
+            return refuse("Lượt này không có mặt nào để rà.")
+        try:
+            new_store = Store(snap["run_dir"], ctx.reviewer)           # dựng TRƯỚC: lỗi thì báo ở đây, chưa đóng gì
+        except RunError as e:
+            return refuse(str(e))
+        ctx.switch_to = (snap["run_dir"], new_store)
+        threading.Timer(0.8, lambda: demo.close(verbose=False)).start()
+        return box(f"Đang chuyển sang lượt {snap['run']}: trang mất kết nối 1–3 giây rồi tự tải lại.", "ok"), "Rà soát M28 · " + snap["run"]
+
+    start_outs = [drop, plan_state, gal, rej, count, name_tb, msg] + job_outs
+    nap = dict(opts, concurrency_id="nap")
+    demo.load(on_load, [plan_state], [env_html, name_tb] + job_outs, **dict(opts, concurrency_id="nap"))
+    drop.change(on_files, [drop, plan_state], [plan_state, gal, rej, count, b_start], **nap)
+    b_start.click(on_start, [drop, name_tb, plan_state], start_outs, **nap)
+    b_retry.click(on_retry, [plan_state], [msg] + job_outs, **nap)
+    b_cancel.click(on_cancel, [plan_state], [msg] + job_outs, **dict(opts, concurrency_id="nap_huy"))
+    timer.tick(on_tick, [plan_state], job_outs, **dict(opts, concurrency_id="nap_tick"))
+    b_go.click(on_go, [plan_state], [msg, target], **nap).then(None, [target], None, js=NAP_SWITCH_JS)
+
+
+def build_ui(store, ctx=None):
+    """Dựng Blocks. Chỉ gọi sau khi đã đặt biến môi trường an toàn (xem prepare_env).
+    store=None: chưa có lượt nào (chế độ --nap), tab Rà soát chỉ có lời nhắc."""
+    import gradio as gr
+
+    if ctx is None:
+        ctx = AppCtx(reviewer=store.reviewer, run_dir=store.run_dir)
+    title = f"Rà soát M28 · {run_name(store.run_dir)}" if store is not None else "Rà soát M28 · Nạp ảnh"
+    theme = gr.themes.Soft(primary_hue="emerald", font=["ui-sans-serif", "system-ui", "Segoe UI", "sans-serif"],
+                           font_mono=["ui-monospace", "Consolas", "monospace"])
+    with gr.Blocks(title=title, fill_width=True) as demo:
+        ctx.demo = demo
+        header = gr.HTML(HEAD_NAP_HTML.format(rev=html.escape(ctx.reviewer)) if store is None else "", elem_id="progress",
+                         apply_default_css=False)
+        with gr.Tabs(elem_id="tabs", selected="ra" if store is not None else "nap"):
+            with gr.Tab("Rà soát", id="ra", elem_id="tab-ra"):
+                if store is None:
+                    gr.HTML(NO_RUN_HTML, apply_default_css=False)
+                else:
+                    _review_tab(gr, demo, store, ctx, header)
+            with gr.Tab("Nạp ảnh", id="nap", elem_id="tab-nap"):
+                _nap_tab(gr, demo, store, ctx)
     demo.queue(default_concurrency_limit=1)
     return demo, theme
+
+
+def parse_argv(argv):
+    """("run", thư mục lượt, người rà) | ("nap", None, người rà) | None nếu sai cú pháp."""
+    if len(argv) != 2:
+        return None
+    return ("nap", None, argv[1]) if argv[0] == "--nap" else ("run", argv[0], argv[1])
+
+
+def _launch(demo, theme, ctx, port, allowed, inbrowser, retry_s=0):
+    """launch như cũ; retry_s > 0 (chuyển lượt cùng cổng): thử lại khi cổng chưa kịp nhả."""
+    from starlette.middleware import Middleware
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+    # Chỉ nhận Host là localhost/127.0.0.1: chặn DNS rebinding từ trang web lạ đọc ảnh mặt qua 127.0.0.1.
+    guard = [Middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])]
+    t_end = time.time() + retry_s
+    while True:
+        try:
+            # share=False và 127.0.0.1: chỉ máy này vào được. Gradio có in dòng gợi ý tạo public link: KHÔNG làm theo,
+            # nên quiet=True để tắt dòng đó và tự in địa chỉ bằng tiếng Việt.
+            return demo.launch(server_name="127.0.0.1", server_port=port, share=False, ssr_mode=False,
+                               mcp_server=False, pwa=False, enable_monitoring=False, footer_links=[],
+                               show_error=True, quiet=True, allowed_paths=allowed, inbrowser=inbrowser,
+                               theme=theme, css=CSS, js=PAGE_JS, prevent_thread_lock=True, max_file_size="25mb",
+                               app_kwargs={"middleware": guard})
+        except OSError:
+            if time.time() >= t_end:
+                raise
+            time.sleep(0.5)
 
 
 def main(argv=None):
@@ -1258,56 +1614,77 @@ def main(argv=None):
         except (AttributeError, ValueError):
             pass
     argv = sys.argv[1:] if argv is None else list(argv)
-    if len(argv) != 2:
+    parsed = parse_argv(argv)
+    if parsed is None:
         print(VI_USAGE, file=sys.stderr)
         return 2
-    run_dir, reviewer = argv
+    mode, run_dir, reviewer = parsed
     try:
         check_reviewer(reviewer)
         bad = notebook_env()
         if bad:
             raise RunError(bad)
-        store = Store(run_dir, reviewer)
+        if mode == "nap":
+            run_dir, store = os.path.join("runs", nap_anh.NAP_DIR), None
+            os.makedirs("runs", exist_ok=True)
+        else:
+            store = Store(run_dir, reviewer)
         prepare_env(run_dir)
     except RunError as e:
         print(f"Lỗi: {e}", file=sys.stderr)
         return 2
-    demo, theme = build_ui(store)
+    except OSError as e:
+        print(f"Lỗi: không tạo được thư mục runs ({e}).", file=sys.stderr)
+        return 2
     inbrowser = os.environ.get("M28_NO_BROWSER") != "1"
     try:                                                  # cổng cố định: bản thứ hai không tự nhảy sang cổng khác
         port = int(os.environ.get("GRADIO_SERVER_PORT") or DEFAULT_PORT)
     except ValueError:
         print(f"Lỗi: GRADIO_SERVER_PORT={os.environ.get('GRADIO_SERVER_PORT')!r} không phải số.", file=sys.stderr)
         return 2
-    from starlette.middleware import Middleware
-    from starlette.middleware.trustedhost import TrustedHostMiddleware
-    # Chỉ nhận Host là localhost/127.0.0.1: chặn DNS rebinding từ trang web lạ đọc ảnh mặt qua 127.0.0.1.
-    guard = [Middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])]
-    allowed = [os.path.abspath(os.path.join(run_dir, d)) for d in ("overlays", os.path.join("crop", "images"), "_tmp")]
-    # share=False và 127.0.0.1: chỉ máy này vào được. Gradio có in dòng gợi ý tạo public link: KHÔNG làm theo,
-    # nên quiet=True để tắt dòng đó và tự in địa chỉ bằng tiếng Việt.
+    ctx = AppCtx(reviewer=reviewer, run_dir=run_dir, nap_only=store is None)
+    demo, first = None, True
     try:
-        _app, url, _share = demo.launch(server_name="127.0.0.1", server_port=port, share=False, ssr_mode=False,
-                                        mcp_server=False, pwa=False, enable_monitoring=False, footer_links=[],
-                                        show_error=True, quiet=True, allowed_paths=allowed, inbrowser=inbrowser,
-                                        theme=theme, css=CSS, js=PAGE_JS, prevent_thread_lock=True,
-                                        app_kwargs={"middleware": guard})
-    except OSError as e:
-        print(f"Lỗi: không mở được trang rà soát ({e}). Cổng {port} bận: có thể trang rà soát cũ còn mở (đóng nó trước, "
-              "tránh hai bản cùng ghi một file) hoặc chương trình khác dùng cổng; đổi cổng bằng set GRADIO_SERVER_PORT=7861.",
-              file=sys.stderr)
-        return 2
-    p = store.progress()
-    print(f"Trang rà soát lượt {run_name(run_dir)}, người rà {reviewer}: còn {p['remaining']}/{p['total']} mặt chưa rà.\n"
-          f"Mở {url} nếu trình duyệt chưa tự mở (chỉ máy này vào được). Rà xong bấm Xong, trang tự tắt; "
-          "Ctrl+C để đóng giữa chừng (gõ lại đúng lệnh để làm tiếp).", flush=True)
-    try:
-        while demo.is_running:                    # bấm Xong thì demo.close() chạy và vòng này kết thúc
-            time.sleep(0.2)
+        while True:
+            demo, theme = build_ui(store, ctx)
+            # Chỉ phát file của lượt đang rà (overlays, crop/images, _tmp); không bao giờ inbox/ hay cả runs/.
+            allowed = [os.path.abspath(os.path.join(ctx.run_dir, d)) for d in ("overlays", os.path.join("crop", "images"), "_tmp")]
+            try:
+                _app, url, _share = _launch(demo, theme, ctx, port, allowed, inbrowser and first, 0 if first else 10)
+            except OSError as e:
+                print(f"Lỗi: không mở được trang rà soát ({e}). Cổng {port} bận: có thể trang rà soát cũ còn mở (đóng nó trước, "
+                      "tránh hai bản cùng ghi một file) hoặc chương trình khác dùng cổng; đổi cổng bằng set GRADIO_SERVER_PORT=7861.",
+                      file=sys.stderr)
+                return 2
+            if store is None:
+                print(f"Trang rà soát (chưa có lượt nào), người rà {reviewer}: nạp ảnh ở tab Nạp ảnh.\n"
+                      f"Mở {url} nếu trình duyệt chưa tự mở (chỉ máy này vào được). Ctrl+C để đóng.", flush=True)
+            else:
+                p = store.progress()
+                print(f"Trang rà soát lượt {run_name(ctx.run_dir)}, người rà {reviewer}: còn {p['remaining']}/{p['total']} mặt chưa rà.\n"
+                      f"Mở {url} nếu trình duyệt chưa tự mở (chỉ máy này vào được). Rà xong bấm Xong, trang tự tắt; "
+                      "Ctrl+C để đóng giữa chừng (gõ lại đúng lệnh để làm tiếp).", flush=True)
+            while demo.is_running:                    # bấm Xong (hoặc Rà lượt này) thì demo.close() chạy và vòng này kết thúc
+                time.sleep(0.2)
+            if ctx.switch_to is None:
+                return 0
+            new_dir, new_store = ctx.switch_to
+            if store is not None:
+                left = store.progress()["remaining"]
+                print(f"Chuyển sang lượt {run_name(new_dir)}. Lượt {run_name(store.run_dir)} còn {left} mặt chưa rà "
+                      f"(các lần bấm đã lưu); mở lại bằng: {nap_anh.reopen_command(store.run_dir, reviewer)}", flush=True)
+            else:
+                print(f"Chuyển sang lượt {run_name(new_dir)}.", flush=True)
+            store, first = new_store, False
+            ctx = AppCtx(reviewer=reviewer, run_dir=new_dir)       # job mới, ctx mới (lượt đã chuyển không giữ job cũ)
     except KeyboardInterrupt:
         print("Đã đóng trang rà soát (chưa bấm Xong).", flush=True)
-        demo.close(verbose=False)
-    return 0
+        if demo is not None:
+            demo.close(verbose=False)
+        return 0
+    finally:
+        if ctx.job.running:
+            ctx.job.cancel()
 
 
 if __name__ == "__main__":
