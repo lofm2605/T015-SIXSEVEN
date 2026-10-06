@@ -1,4 +1,5 @@
 """Chia tập WFLW và ghi manifest.csv (P1, 6/10). Chỉ cần file đáp án, không cần ảnh.
+WFLW cũ, sẽ thay ở giai đoạn 2 (QĐ-001: tập chính là in-cabin YawDD + DrivFace).
 
     python tool\\split.py --annotations <thư mục list_98pt_rect_attr_train_test> --out data\\manifest.csv --seed 5
 

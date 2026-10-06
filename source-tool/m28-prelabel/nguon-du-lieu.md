@@ -7,10 +7,26 @@
 
 | Bộ | Nội dung | Giấy phép (ghi ngày 6/10/2026) | Trạng thái |
 |---|---|---|---|
-| **DrivFace** (UCI) | 606 ảnh 640×480 của 4 tài xế (2 nữ, 2 nam) lái xe thật, nhiều ngày, có kính/râu. Đáp án: hộp mặt, mắt phải/trái, mũi, hai khoé miệng; nhãn hướng nhìn 3 lớp (nhìn phải −45..−30°, thẳng −15..15°, nhìn trái 30..45°) | "Free for academic usage" (theo readme); mục đích khác liên hệ tác giả K. Diaz-Chito | **Đã tải thử trên cloud** (26 MB). MediaPipe dò thấy mặt **606/606** khi cắt theo hộp mặt; tâm mắt MediaPipe lệch so với đáp án DrivFace trung vị 5,4% IOD |
-| **YawDD** | 351 video quay trong xe thật (camera gương chiếu hậu và táp-lô), tài xế bình thường/nói/ngáp | Theo IEEE DataPort / UMass (cần kiểm điều khoản và ghi vào đây) | Cần mở host `skuld.cs.umass.edu` trong Network access để tải; chưa tải |
+| **DrivFace** (UCI) | 606 ảnh 640×480 của 4 tài xế (2 nữ, 2 nam; readme không nói người nào là nữ nên `gender = unknown`) lái xe thật, nhiều ngày, có kính/râu (không ghi theo từng người nên `glasses = unknown`). Đáp án: hộp mặt, mắt phải/trái, mũi, hai khoé miệng; nhãn hướng nhìn 3 lớp (nhìn phải −45..−30°, thẳng −15..15°, nhìn trái 30..45°) | "This database is free for academic usage" (theo `readme.txt` của bộ); mục đích khác liên hệ tác giả (địa chỉ ở readme). Trích dẫn: Diaz-Chito, Hernández-Sabaté, López, *A reduced feature set for driver head pose estimation*, Applied Soft Computing 45 (2016) 98-107 (file `.bib` đi kèm bộ) | **Đã tải trên cloud** (26 MB). MediaPipe dò thấy mặt **606/606**; tâm mắt MediaPipe lệch so với đáp án DrivFace trung vị 5,4% IOD |
+| **YawDD** | **349 video** quay trong xe thật, 640×480, 30 fps, không tiếng: **Mirror** (camera dưới gương chiếu hậu) 320 video = 156 `Female_mirror` + 164 `Male_mirror Avi Videos`, mỗi người 3-4 video (Normal / Talking / Yawning, đôi khi Talking&Yawning); **Dash** (camera táp-lô) 29 video = 13 `Female` + 16 `Male`, mỗi người một video chứa cả lái xe thường, nói và ngáp. Có kính thuốc / kính râm / không kính, râu, nhiều nền tộc người. (Readme nói 322 + 29; bản tải có 320 + 29.) | Theo `Readme_YawDD.pdf` trong bộ: video **chỉ cho mục đích phi thương mại và nghiên cứu**; dùng được trong bài báo học thuật; chỉ được đăng ảnh chụp màn hình của video có cột "Allow Researchers to use picture in their paper" = **Yes** trong `Table1.pdf` (Mirror) / `Table2.pdf` (Dash); video có "No" thì không được đăng ảnh. Bắt buộc trích dẫn: S. Abtahi, M. Omidyeganeh, S. Shirmohammadi, B. Hariri, "YawDD: A Yawning Detection Dataset", Proc. ACM Multimedia Systems, Singapore, 19-21/3/2014. Giấy phép chính thức trên IEEE DataPort: chưa xác minh | **Đã tải trên cloud** (5,3 GB, 6/10/2026), `cv2.VideoCapture` đọc được; MediaPipe dò thấy mặt ~98% khung |
+
+Tên video YawDD (cần biết khi viết code): Dash `1-FemaleNoGlasses.avi`, `13-MaleNoGlasses .avi` (**dấu cách trước đuôi**), có chỗ `.avi.avi`;
+Mirror `1-FemaleNoGlasses-Normal.avi` (trạng thái `Normal|Talking|Yawning|Talking&Yawning`; có chỗ `GlassesBeard`, `Glassesmoustache`, `Talking&yawning` viết thường);
+kính `Glasses|NoGlasses|SunGlasses`. Thư mục `Male_mirror Avi Videos` **có dấu cách**. Người ở Dash và Mirror cùng giới + cùng số: tài liệu không nói là cùng hay khác người
+(xem `README.md`, mục "Mã người"), nên mã người **gộp** (`yd_M004` dùng chung cho cả hai).
+
+**Tải YawDD (6/10/2026, đã chạy trên cloud).** Dùng **HTTPS** (HTTP cổng 80 bị chặn trên cloud). Link đúng là `user06.tar` (**không phải** `user02`):
+```bat
+curl -L -o user06.tar https://skuld.cs.umass.edu/traces/mmsys/2014/user06.tar
+```
+`user06.tar` (5,3 GB) chứa `YawDD dataset.rar`. Giải nén: `tar -xf user06.tar` ra `user06\YawDD dataset.rar`, rồi **rar** giải bằng `bsdtar` (gói `libarchive-tools` trên Linux:
+`bsdtar -xf "YawDD dataset.rar" -C <thư mục>`); `7z` và `unrar-free` trên Linux **không** giải được phương pháp nén của file này. Trên Windows dùng **7-Zip bản mới hoặc WinRAR**
+(`tar -xf` có sẵn của Windows 10/11 có thể giải được rar vì cùng libarchive: **chưa thử**). Ra thư mục `YawDD dataset\` có `Dash\`, `Mirror\`, `Readme_YawDD.pdf`, `Table1.pdf`, `Table2.pdf`.
+Cần Network access của môi trường cloud cho phép `skuld.cs.umass.edu`; bị chặn thì báo chủ repo, không vòng qua.
 
 Cách dùng: **không còn đáp án 98 điểm**. 50 điểm đặt trực tiếp lên đỉnh MediaPipe; đáp án để đo chất lượng là nhãn nhóm gán tay trong CVAT (tập vàng G, tập đo). DrivFace cho sẵn nhãn hướng nhìn nên dùng làm cờ "nghiêng"; hộp mặt và 5 điểm mốc dùng để kiểm tra nhanh, không thay đáp án 50 điểm.
+
+**Gói dữ liệu cho đội** dựng từ hai bộ này bằng `tool\\inc_ingest.py` (xem `README.md`, mục "Dữ liệu in-cabin"): 616 mặt `F/Tdev/Ttest/G/P/X/D`, tách theo người.
 
 Lệnh tải DrivFace (cmd): `curl -L -O https://archive.ics.uci.edu/static/public/378/drivface.zip` (bên trong có `DrivImages.zip`, `drivPoints.txt`, `readme.txt`; tên file ảnh có **dấu cách trước `.jpg`**).
 
@@ -38,7 +54,7 @@ Mỗi dòng nhãn gốc có 207 trường: 196 toạ độ của 98 điểm, 4 s
 **Giấy phép:** WFLW không có giấy phép riêng; ảnh lấy từ WIDER FACE (CC BY-NC-ND) → chỉ dùng nghiên cứu/nội bộ,
 không phát tán, không đăng bản đã sửa. Nhãn "Apache 2.0" trên Kaggle do người đăng lại tự gắn, không đổi điều này.
 
-## B. Dữ liệu in-cabin (mặt tài xế) — ngoài phạm vi kế hoạch M28
+## B. Dữ liệu in-cabin (mặt tài xế) — nay là tập chính (YawDD, DrivFace); các bộ còn lại chỉ để tham khảo
 
 Không bộ nào quay ở Việt Nam, không bộ nào có sẵn 98 điểm kiểu WFLW. Nếu dùng thì chỉ để **thử thêm**
 xem model có chạy ổn trên mặt tài xế (góc nghiêng, đeo kính, hồng ngoại ban đêm). Đây là ảnh người thật:
@@ -47,7 +63,7 @@ tải về máy, không đưa lên repo công khai, không đưa vào chat AI. M
 | Bộ | Nội dung | Tải / liên hệ | Thương mại |
 |---|---|---|---|
 | [DrivFace](https://archive.ics.uci.edu/dataset/378/drivface) | 606 ảnh 640×480 của 4 tài xế, có hộp mặt và điểm mắt/mũi/miệng | `curl -L -O https://archive.ics.uci.edu/static/public/378/drivface.zip` (đã kiểm) | chưa rõ |
-| [YawDD](https://ieee-dataport.org/open-access/yawdd-yawning-detection-dataset) | 322 video gương chiếu hậu + 29 video táp-lô | ví dụ `curl -L -o user06.tar http://skuld.cs.umass.edu/traces/mmsys/2014/user06.tar` (5,3 GB, đã kiểm) | chưa rõ |
+| [YawDD](https://ieee-dataport.org/open-access/yawdd-yawning-detection-dataset) | 320 video gương chiếu hậu + 29 video táp-lô (bản đã tải; readme ghi 322 + 29) | ví dụ `curl -L -o user06.tar https://skuld.cs.umass.edu/traces/mmsys/2014/user06.tar` (5,3 GB, đã kiểm) | chưa rõ |
 | [akahana/Driver-Drowsiness-Dataset](https://huggingface.co/datasets/akahana/Driver-Drowsiness-Dataset) | 41.793 ảnh mặt buồn ngủ/không (parquet), 2,76 GB | file thử 277 MB: `.../resolve/main/data/test-00000-of-00002.parquet` (đã kiểm) | chưa rõ (nhiều khả năng trích từ UTA-RLDD) |
 | [Drive&Act](https://driveandact.com/) | 12 giờ video cabin, pose 3D; Đức | `a_column_driver.zip` 2,67 GB (đã kiểm) | không |
 | [DriverMVT](https://zenodo.org/records/6542011) | 1.506 video, 9 tài xế, ~150 GB; Nga | Zenodo, 4 phần zip (đã kiểm HEAD) | được (CC BY 4.0) |

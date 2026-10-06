@@ -1,4 +1,5 @@
 """Đo cờ low_conf (P2, 8/10 và 10/10): cờ bắt được bao nhiêu điểm sai? Chỉ dùng numpy, chỉ chạy trên T-dev.
+WFLW cũ, sẽ thay ở giai đoạn 2 (QĐ-001: tập chính là in-cabin YawDD + DrivFace).
 
     python tool\\flag_eval.py --run <run có pred478 cho Tdev> [--tol 3.0] [--set Tdev]
 

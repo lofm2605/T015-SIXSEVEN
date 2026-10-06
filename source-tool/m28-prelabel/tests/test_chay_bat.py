@@ -29,3 +29,14 @@ def test_menu_covers_choice_range_and_safe_launch():
     assert 'share=' not in t.lower() and 'CVAT_ACCESS_TOKEN' not in t    # không đụng token, không chia sẻ
     assert 'findstr /V /I "torch"' in t                             # không cài torch
     assert 'rmdir /s /q ".venv"' in t and 'rmdir /s /q "runs' not in t    # chỉ xoá .venv, không bao giờ xoá runs\
+
+
+def test_thu5_uses_incabin_package_only():
+    """Mục 3 chạy thử 5 mặt F chỉ từ gói in-cabin: không hỏi thư mục WFLW, dùng ảnh cắt data\\crops."""
+    t = _text()
+    block = t.split('\n:thu5', 1)[1].split('\n:smoke', 1)[0]
+    assert 'WFLW' not in block and 'wflw_image' not in block and 'D:\\' not in block
+    assert "w.writerow(['image','face_idx','seed'])" in block and "x['image'],x['face_idx']" in block
+    assert '--images data\\crops' in block and '--box wflw' in block and '--dry-run' in block
+    menu = t.split(':menu', 1)[1].split(':hoi_nguoi', 1)[0]
+    assert 'in-cabin' in menu and 'WFLW' not in menu

@@ -1,4 +1,5 @@
 """Khớp phép đổi 478 -> N điểm (config) và ghi config/map_mp50.json, data/mp50.json (P3, 7/10). Chỉ dùng numpy.
+WFLW cũ, sẽ thay ở giai đoạn 2 (QĐ-001: tập chính là in-cabin YawDD + DrivFace).
 
     python tool\\fit_map.py --run <run đã chạy crop+mediapipe cho tập F> [--manifest data\\manifest.csv --gt98 data\\gt98.json]
 

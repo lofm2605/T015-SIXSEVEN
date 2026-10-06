@@ -88,7 +88,9 @@ def _need_file(path, why):
     return path
 
 
-def make_landmarker(model_path, num_faces=5):
+def make_landmarker(model_path, num_faces=5, outputs=False):
+    """outputs=True: lấy thêm ma trận biến đổi mặt và blendshapes (inc_ingest.py dùng để đo tư thế, độ há miệng).
+    Mặc định False: cùng hành vi như trước."""
     alt = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), os.path.basename(model_path))
     if not os.path.exists(model_path) and os.path.exists(alt):      # gói giao khách: model nằm cạnh m28.py
         model_path = alt
@@ -97,7 +99,8 @@ def make_landmarker(model_path, num_faces=5):
     from mediapipe.tasks.python import vision
     opts = vision.FaceLandmarkerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=model_path),
-        running_mode=vision.RunningMode.IMAGE, num_faces=num_faces)
+        running_mode=vision.RunningMode.IMAGE, num_faces=num_faces,
+        output_face_blendshapes=outputs, output_facial_transformation_matrixes=outputs)
     return vision.FaceLandmarker.create_from_options(opts)
 
 
@@ -147,14 +150,33 @@ def _read_csv(path):
         return list(csv.DictReader(f))
 
 
+def _ident(row):
+    """Khoá một mặt trong CSV: (image, face_idx) với manifest in-cabin, (wflw_image, wflw_line) với manifest WFLW cũ."""
+    if "image" in row and "face_idx" in row:
+        return row["image"], int(row["face_idx"])
+    if "wflw_image" in row and "wflw_line" in row:
+        return row["wflw_image"], int(row["wflw_line"])
+    raise SystemExit("CSV cần cột image, face_idx (mới) hoặc wflw_image, wflw_line (cũ).")
+
+
+def _crop_only_box(m):
+    """Hộp mặt theo toạ độ ẢNH CẮT 512 từ manifest: ((x0-left)*k, (y0-top)*k, (x1-left)*k, (y1-top)*k)."""
+    left, top, k = float(m["left"]), float(m["top"]), float(m["k"])
+    return ((float(m["x0"]) - left) * k, (float(m["y0"]) - top) * k,
+            (float(m["x1"]) - left) * k, (float(m["y1"]) - top) * k)
+
+
 def load_items(args):
-    """Danh sách mặt của lượt chạy: dict(name, path, rel, box|None). rel = đường dẫn ảnh gốc tính từ --images."""
+    """Danh sách mặt của lượt chạy: dict(name, path, rel, box|None). rel = đường dẫn ảnh gốc tính từ --images.
+
+    Người trong đội chỉ có gói (ảnh cắt data/crops + manifest, không có khung gốc): khi <images>/<image> không có mà
+    <images>/<file> có, dùng chính ảnh cắt (rel = file) và với --box wflw đổi hộp sang toạ độ ảnh cắt."""
     manifest = {}
     if os.path.exists(args.manifest):
         for m in _read_csv(args.manifest):
-            manifest[(m["wflw_image"], int(m["wflw_line"]))] = m
+            manifest[_ident(m)] = m
     if args.list:
-        wanted = [(r["wflw_image"], int(r["wflw_line"])) for r in _read_csv(args.list)]
+        wanted = [_ident(r) for r in _read_csv(args.list)]
     elif args.set:
         if not manifest:
             raise SystemExit(f"--set cần {args.manifest} (không thấy file)")
@@ -171,7 +193,7 @@ def load_items(args):
     else:
         raise SystemExit("Cần --images (thư mục ảnh), hoặc --list kèm --images, hoặc --set.")
     if not args.images:
-        raise SystemExit("Cần --images (thư mục WFLW_images hoặc ảnh khách).")
+        raise SystemExit("Cần --images (thư mục ảnh gốc, hoặc data\\crops nếu chỉ có gói).")
     items, gone = [], _excluded(args)
     for key in wanted:
         m = manifest.get(key)
@@ -182,8 +204,13 @@ def load_items(args):
         name = m["file"][:-4] if m else os.path.splitext(os.path.basename(key[0]))[0]
         if name in gone:
             continue
+        path = os.path.join(args.images, *key[0].split("/"))
+        rel = key[0]
         box = tuple(float(m[c]) for c in ("x0", "y0", "x1", "y1")) if m else None
-        items.append(dict(name=name, path=os.path.join(args.images, *key[0].split("/")), box=box, rel=key[0]))
+        if m and not os.path.exists(path) and os.path.exists(os.path.join(args.images, m["file"])):
+            path, rel = os.path.join(args.images, m["file"]), m["file"]       # chỉ có gói: dùng ảnh cắt
+            box = _crop_only_box(m) if all(c in m for c in ("left", "top", "k")) else None
+        items.append(dict(name=name, path=path, box=box, rel=rel))
     return _unique(items)
 
 
