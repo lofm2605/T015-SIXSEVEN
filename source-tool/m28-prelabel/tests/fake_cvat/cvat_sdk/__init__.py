@@ -15,6 +15,7 @@ Giả định về hành vi server bám mã nguồn CVAT v2.77.0 (job_file_mappi
 """
 import copy
 import datetime
+import functools
 import json
 import os
 import zipfile
@@ -86,6 +87,17 @@ def _log(method, *args, **kwargs):
     save(st)
 
 
+def logged(name):
+    """Ghi lời gọi NGUYÊN VĂN (tham số như người gọi viết) trước khi chạy, để so với chữ ký của cvat-sdk thật."""
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(self, *a, **kw):
+            _log(name, *a, **kw)
+            return fn(self, *a, **kw)
+        return wrapper
+    return deco
+
+
 def _check_auth(client):
     if _control().get("auth_fail"):
         raise ApiException(status=401, reason="Unauthorized")
@@ -110,8 +122,8 @@ class Client:
         _log("Client.organization_slug", value)
         self._org = value
 
+    @logged("Client.get_server_version")
     def get_server_version(self):
-        _log("Client.get_server_version")
         return _V(_control().get("version", VERSION))
 
     def close(self):
@@ -154,8 +166,8 @@ class Project:
         self._c, self._rec = client, rec
         self.id, self.name = rec["id"], rec["name"]
 
+    @logged("Project.get_labels")
     def get_labels(self):
-        _log("Project.get_labels")
         return copy.deepcopy(self._rec["labels"])
 
 
@@ -163,13 +175,13 @@ class ProjectsRepo:
     def __init__(self, client):
         self._c = client
 
+    @logged("projects.list")
     def list(self, *, return_json=False, **kwargs):
-        _log("projects.list", return_json=return_json, **kwargs)
         _check_auth(self._c)
         return [Project(self._c, p) for p in load()["projects"]]
 
+    @logged("projects.create")
     def create(self, spec):
-        _log("projects.create", spec)
         _check_auth(self._c)
         st = load()
         labels = []
@@ -206,33 +218,33 @@ class Task:
                 return t
         raise ApiException(status=404, reason="Not Found")
 
+    @logged("Task.get_jobs")
     def get_jobs(self):
-        _log("Task.get_jobs")
         return [Job(j) for j in self._rec()["jobs"]]
 
+    @logged("Task.get_frames_info")
     def get_frames_info(self):
-        _log("Task.get_frames_info")
         return [_Model(dict(name=n, width=512, height=512)) for n in self._rec()["frames"]]
 
+    @logged("Task.get_annotations")
     def get_annotations(self):
-        _log("Task.get_annotations")
         ann = self._rec()["annotations"]
         return _Model(dict(version=0, tags=[], tracks=[], shapes=[dict(label="face50", frame=i) for i in ann.get("frames", [])] if ann else []))
 
+    @logged("Task.fetch")
     def fetch(self):
-        _log("Task.fetch")
         return self
 
+    @logged("Task.remove")
     def remove(self):
-        _log("Task.remove")
         st = load()
         if not any(t["id"] == self.id for t in st["tasks"]):
             raise ApiException(status=404, reason="Not Found")
         st["tasks"] = [t for t in st["tasks"] if t["id"] != self.id]
         save(st)
 
+    @logged("Task.import_annotations")
     def import_annotations(self, format_name, filename, *, conv_mask_to_poly=None, import_mode=None, status_check_period=None, pbar=None):
-        _log("Task.import_annotations", format_name, filename)
         st = load()
         c = _control()
         if format_name != "CVAT 1.1":
@@ -266,9 +278,9 @@ class Task:
         rec["annotations"] = dict(by_name=out, frames=[rec["frames"].index(n) for n in out], xml_ids={im.get("name"): im.get("id") for im in root.iter("image")})
         save(st)
 
+    @logged("Task.export_dataset")
     def export_dataset(self, format_name, filename, *, pbar=None, status_check_period=None, include_images=True, location=None,
                        cloud_storage_id=None):
-        _log("Task.export_dataset", format_name, filename, include_images=include_images)
         rec = self._rec()
         if format_name != "CVAT for images 1.1":
             raise ApiException(status=400, reason="Bad Request")
@@ -300,29 +312,28 @@ class TasksRepo:
     def __init__(self, client):
         self._c = client
 
+    @logged("tasks.list")
     def list(self, *, return_json=False, **kwargs):
-        _log("tasks.list", return_json=return_json, **kwargs)
         _check_auth(self._c)
         return [Task(self._c, t) for t in load()["tasks"]]
 
+    @logged("tasks.retrieve")
     def retrieve(self, obj_id):
-        _log("tasks.retrieve", obj_id)
         _check_auth(self._c)
         for t in load()["tasks"]:
             if t["id"] == obj_id:
                 return Task(self._c, t)
         raise ApiException(status=404, reason="Not Found")
 
+    @logged("tasks.remove_by_ids")
     def remove_by_ids(self, task_ids):
-        _log("tasks.remove_by_ids", list(task_ids))
         st = load()
         st["tasks"] = [t for t in st["tasks"] if t["id"] not in set(task_ids)]
         save(st)
 
+    @logged("tasks.create_from_data")
     def create_from_data(self, spec, resources, *, resource_type=ResourceType.LOCAL, data_params=None, annotation_path="",
                          annotation_format="CVAT XML 1.1", status_check_period=None, pbar=None):
-        _log("tasks.create_from_data", spec, [str(r) for r in resources], resource_type=str(resource_type), data_params=data_params or {},
-             annotation_path=annotation_path)
         _check_auth(self._c)
         if spec.get("labels"):
             raise ApiException(status=400, reason="Bad Request")         # task trong project không được có labels (như SDK thật)

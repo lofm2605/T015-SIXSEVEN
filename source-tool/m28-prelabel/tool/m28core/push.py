@@ -352,6 +352,7 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
     doing("tìm project")
     groups, kinds = plan_jobs(nhan_imgs, tay_imgs, pipe["job_size"])
     if mode == "resume":
+        doing("lấy lại task theo id")
         task = _verify_identity(client, st, prefix, project)
         _say(3, f"project {project} (id {task.project_id}), làm tiếp task id {task.id}")
         _say(4, f"bỏ qua tạo task (đã có id {task.id})")

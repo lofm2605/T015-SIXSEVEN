@@ -22,12 +22,14 @@ from xml.sax.saxutils import quoteattr
 
 import numpy as np
 
+from m28core import loai_tru, phan_loai  # noqa: E402
 from wflw import SIDE_SCALE, square_crop
 
 OUT = 512
 IMG_EXT = (".png", ".jpg", ".jpeg")
 NEN_GAN_TAY = ("guong", "don_cuc", "diem_khong_hop_le")   # mã lỗi autoqc làm gợi ý "nên gán tay" (giả định, chờ P4)
-DECISIONS = ("nhan", "gan_tay", "bo")
+DECISIONS = phan_loai.DECISIONS
+DEFAULT_PIPELINE_PATH = os.path.join("config", "pipeline.json")
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
 
 
@@ -44,6 +46,31 @@ def _jsave(path, obj):
 
 def _run_dir(args):
     return os.path.join("runs", args.run)
+
+
+def _excluded(args):
+    """Mặt bị xoá mềm của lượt (runs/<lượt>/excluded.txt): mọi chỗ đọc mặt của lượt phải trừ tập này."""
+    return loai_tru.read_excluded(_run_dir(args)) if getattr(args, "run", None) else set()
+
+
+def _keep_old(args, path, new):
+    """Chạy lại một bước (--force) chỉ ghi mặt còn sống; mặt bị xoá mềm giữ nguyên mục cũ trong file kết quả
+    (file kết quả không bị sửa vì xoá mềm, nên khôi phục là gỡ tên khỏi excluded.txt)."""
+    gone = _excluded(args)
+    if gone and os.path.exists(path):
+        try:
+            old = _jload(path)
+        except (OSError, ValueError):
+            return new
+        for n in gone:
+            if n in old and n not in new:
+                new[n] = old[n]
+    return new
+
+
+def _alive(d, args):
+    """Bỏ khỏi dict/danh sách các mặt đã xoá mềm (không sửa file kết quả: chỉ là bộ lọc lúc đọc)."""
+    return loai_tru.keep(d, _excluded(args))
 
 
 def _need(module, why):
@@ -137,13 +164,15 @@ def load_items(args):
             raise SystemExit("--box wflw cần --list (hoặc --set) để lấy hộp mặt từ manifest.csv")
         files = sorted(g for ext in ("jpg", "jpeg", "png")
                        for g in glob.glob(os.path.join(args.images, "**", f"*.{ext}"), recursive=True))
-        return _unique([dict(name=os.path.splitext(os.path.basename(p))[0], path=p, box=None,
-                             rel=os.path.relpath(p, args.images).replace(os.sep, "/")) for p in files])
+        gone = _excluded(args)
+        return _unique([it for it in (dict(name=os.path.splitext(os.path.basename(p))[0], path=p, box=None,
+                                           rel=os.path.relpath(p, args.images).replace(os.sep, "/")) for p in files)
+                        if it["name"] not in gone])
     else:
         raise SystemExit("Cần --images (thư mục ảnh), hoặc --list kèm --images, hoặc --set.")
     if not args.images:
         raise SystemExit("Cần --images (thư mục WFLW_images hoặc ảnh khách).")
-    items = []
+    items, gone = [], _excluded(args)
     for key in wanted:
         m = manifest.get(key)
         if args.set and (m is None or m["set"] not in args.set):
@@ -151,6 +180,8 @@ def load_items(args):
         if args.box == "wflw" and m is None:
             raise SystemExit(f"--box wflw cần {args.manifest} có dòng {key}")
         name = m["file"][:-4] if m else os.path.splitext(os.path.basename(key[0]))[0]
+        if name in gone:
+            continue
         box = tuple(float(m[c]) for c in ("x0", "y0", "x1", "y1")) if m else None
         items.append(dict(name=name, path=os.path.join(args.images, *key[0].split("/")), box=box, rel=key[0]))
     return _unique(items)
@@ -199,7 +230,7 @@ def crop(args, out, landmarker_factory=None):
     finally:
         if lm is not None and hasattr(lm, "close"):
             lm.close()
-    _jsave(os.path.join(out, "meta.json"), meta)
+    _jsave(os.path.join(out, "meta.json"), _keep_old(args, os.path.join(out, "meta.json"), meta))
     with open(os.path.join(out, "box.txt"), "w", encoding="utf-8") as f:      # push cần biết XML theo ảnh cắt hay ảnh gốc
         f.write(args.box)
     _write_no_face(args, no_face, "crop")
@@ -223,7 +254,7 @@ def _write_no_face(args, rows, step):
 def mediapipe(args, out, landmarker_factory=None):
     import cv2
     rd = _run_dir(args)
-    meta = _jload(os.path.join(rd, "crop", "meta.json"))
+    meta = _alive(_jload(os.path.join(rd, "crop", "meta.json")), args)
     pred, no_face = {}, []
     lm = (landmarker_factory or make_landmarker)(args.model)
     try:
@@ -237,7 +268,7 @@ def mediapipe(args, out, landmarker_factory=None):
     finally:
         if hasattr(lm, "close"):
             lm.close()
-    _jsave(os.path.join(out, "pred478.json"), pred)
+    _jsave(os.path.join(out, "pred478.json"), _keep_old(args, os.path.join(out, "pred478.json"), pred))
     _write_no_face(args, no_face, "mediapipe")
     print(f"mediapipe: {len(pred)} mặt, {len(no_face)} không thấy mặt")
     return True
@@ -248,7 +279,7 @@ def map50(args, out):
     cfg = _jload(_need_file(args.config, "m28_config.json của P3, đóng băng 12/10"))
     mp_map = _jload(_need_file(args.map, "map_mp50.json của P3"))
     names = [p["name"] for p in cfg["points"]]
-    pred = _jload(os.path.join(_run_dir(args), "mediapipe", "pred478.json"))
+    pred = _alive(_jload(os.path.join(_run_dir(args), "mediapipe", "pred478.json")), args)
 
     def conv(pts, flipped):
         r = mapping.apply_map(np.asarray(pts, float), mp_map, cfg, flipped=flipped)
@@ -259,7 +290,7 @@ def map50(args, out):
 
     res = {n: dict(orig=conv(p["orig"], False), flip=conv(p["flip"], True) if p["flip"] else None)
            for n, p in pred.items()}
-    _jsave(os.path.join(out, "mp50.json"), res)
+    _jsave(os.path.join(out, "mp50.json"), _keep_old(args, os.path.join(out, "mp50.json"), res))
     print(f"map50: {len(res)} mặt")
     return True
 
@@ -271,7 +302,7 @@ def flags(args, out):
     names = [p["name"] for p in cfg["points"]]
     eye_r, eye_l = cfg["iod_points"]
     t = cfg.get("t_flip")
-    mp50 = _jload(os.path.join(_run_dir(args), "map50", "mp50.json"))
+    mp50 = _alive(_jload(os.path.join(_run_dir(args), "map50", "mp50.json")), args)
     res = {}
     for name, p in mp50.items():
         if t is None:
@@ -283,7 +314,7 @@ def flags(args, out):
             f = np.array([p["flip"][n] for n in names], float)
             iod = np.linalg.norm(np.array(p["orig"][eye_r]) - np.array(p["orig"][eye_l])) or 1.0
             res[name] = [bool(v) for v in np.linalg.norm(o - f, axis=1) / iod > float(t)]
-    _jsave(os.path.join(out, "flags.json"), res)
+    _jsave(os.path.join(out, "flags.json"), _keep_old(args, os.path.join(out, "flags.json"), res))
     n = np.mean([sum(v) for v in res.values()]) if res else 0
     print(f"flags: trung bình {n:.1f} cờ/mặt" + (" (t_flip = null nên mọi cờ = false)" if t is None else ""))
     return True
@@ -301,8 +332,8 @@ def autoqc(args, out):
     cfg = _jload(args.config)
     names = [p["name"] for p in cfg["points"]]
     rd = _run_dir(args)
-    mp50 = _jload(os.path.join(rd, "map50", "mp50.json"))
-    fl = _jload(os.path.join(rd, "flags", "flags.json"))
+    mp50 = _alive(_jload(os.path.join(rd, "map50", "mp50.json")), args)
+    fl = _alive(_jload(os.path.join(rd, "flags", "flags.json")), args)
     rows = []
     for name, p in mp50.items():
         a = np.array([p["orig"][n] for n in names], float)
@@ -316,7 +347,12 @@ def autoqc(args, out):
         nf = sum(fl[name])
         sug = "nen_gan_tay" if any(w.startswith(NEN_GAN_TAY) for w in why) else "can_xem" if why or nf else "on"
         rows.append([name + ".png", sug, nf, "", "", "", ";".join(why)])
-    with open(os.path.join(out, "autoqc.csv"), "w", encoding="utf-8", newline="") as f:
+    old_csv, gone = os.path.join(out, "autoqc.csv"), _excluded(args)
+    if gone and os.path.exists(old_csv):                       # giữ dòng cũ của mặt đã xoá mềm (khôi phục thì còn gợi ý)
+        have = {r[0] for r in rows}
+        rows += [[r["name"], r["suggestion"], r["n_flags"], r["decision"], r["reason"], r["seconds"], r["problems"]]
+                 for r in _read_csv(old_csv) if _stem(r["name"]) in gone and r["name"] not in have]
+    with open(old_csv, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["name", "suggestion", "n_flags", "decision", "reason", "seconds", "problems"])
         w.writerows(rows)
@@ -330,8 +366,8 @@ def overlays(args, out):
     cfg = _jload(args.config)
     names = [p["name"] for p in cfg["points"]]
     rd = _run_dir(args)
-    mp50 = _jload(os.path.join(rd, "map50", "mp50.json"))
-    fl = _jload(os.path.join(rd, "flags", "flags.json"))
+    mp50 = _alive(_jload(os.path.join(rd, "map50", "mp50.json")), args)
+    fl = _alive(_jload(os.path.join(rd, "flags", "flags.json")), args)
     for name, p in mp50.items():
         img = cv2.imread(os.path.join(rd, "crop", "images", name + ".png"))
         for i, n in enumerate(names):
@@ -353,7 +389,7 @@ def _autoqc_rows(rd):
 
 def _queue(args):
     rd = _run_dir(args)
-    fl = _jload(os.path.join(rd, "flags", "flags.json"))
+    fl = _alive(_jload(os.path.join(rd, "flags", "flags.json")), args)
     sug = _autoqc_rows(rd)
     rank = {"nen_gan_tay": 0, "can_xem": 1}
     names = sorted(fl, key=lambda n: (rank.get(sug.get(n), 2), -sum(fl[n]), n))   # đáng ngờ lên đầu
@@ -362,8 +398,7 @@ def _queue(args):
 
 def _no_face(args):
     """{tên: lý do} từ no_face.csv (một tên chỉ một dòng, dù nằm ở bước nào)."""
-    path = os.path.join(_run_dir(args), "no_face.csv")
-    return {r["name"]: r["reason"] for r in reversed(_read_csv(path))} if os.path.exists(path) else {}
+    return _alive(phan_loai.read_no_face(_run_dir(args)), args)
 
 
 def triage_path(args, rd):
@@ -378,23 +413,8 @@ def triage_path(args, rd):
 
 
 def read_triage(path):
-    """{tên không đuôi: (quyết định, lý do)}. Chịu BOM, dấu ; của Excel, có/không dòng tiêu đề; dòng sau đè dòng trước."""
-    with open(path, encoding="utf-8-sig", newline="") as f:
-        text = f.read()
-    first = text.splitlines()[0] if text.strip() else ""
-    delim = ";" if first.count(";") > first.count(",") else ","
-    rows = [r for r in csv.reader(io.StringIO(text), delimiter=delim) if any(c.strip() for c in r)]
-    ci, di, ri = 0, 1, 2
-    if rows and "decision" in [c.strip().lower() for c in rows[0]]:
-        h = [c.strip().lower() for c in rows.pop(0)]
-        ci, di, ri = h.index("name") if "name" in h else 0, h.index("decision"), h.index("reason") if "reason" in h else -1
-    latest = {}
-    for r in rows:
-        if r[0].strip().lower() == "name":
-            continue
-        get = lambda i: r[i].strip() if 0 <= i < len(r) else ""      # noqa: E731
-        latest[_stem(r[ci])] = (get(di).lower(), get(ri))
-    return latest
+    """{tên không đuôi: (quyết định, lý do)}: dùng chung với trang rà soát và hộp xác nhận đẩy (m28core.phan_loai.read_triage)."""
+    return phan_loai.read_triage(path)
 
 
 def review(args, out):
@@ -485,31 +505,35 @@ def build_xml(mode, nhan, meta, mp50, fl, cfg, path):
         f.write("\n".join(parts))
 
 
+def push_plan(triage, meta, mp50, no_face, excluded=frozenset()):
+    """Phân loại mặt để đẩy: dùng chung với trang rà soát (xem m28core.phan_loai.classify)."""
+    return phan_loai.classify(triage, meta, mp50, no_face, excluded)
+
+
 def push(args, out):
     rd = _run_dir(args)
     cfg = _jload(args.config)
     pipe = _jload(args.pipeline) if os.path.exists(args.pipeline) else {}
     triage = read_triage(_need_file(triage_path(args, rd), "kết quả bước review"))
-    meta = _jload(os.path.join(rd, "crop", "meta.json"))
-    mp50 = _jload(os.path.join(rd, "map50", "mp50.json"))
-    fl = _jload(os.path.join(rd, "flags", "flags.json"))
+    meta_all = _jload(os.path.join(rd, "crop", "meta.json"))
+    excluded = _excluded(args)
+    meta = _alive(meta_all, args)
+    mp50 = _alive(_jload(os.path.join(rd, "map50", "mp50.json")), args)
+    fl = _alive(_jload(os.path.join(rd, "flags", "flags.json")), args)
     box_file = os.path.join(rd, "crop", "box.txt")
     mode = open(box_file, encoding="utf-8").read().strip() if os.path.exists(box_file) else args.box
     if len(args.task) > 1:
         raise SystemExit("push chỉ nhận một --task")
-    dec = lambda n: triage.get(n, ("", ""))[0]                    # noqa: E731
-    nhan = [n for n in meta if dec(n) == "nhan" and n in mp50]
-    tay = [n for n in meta if dec(n) == "gan_tay" or (dec(n) == "nhan" and n not in mp50)]
-    for n in meta:
-        if dec(n) == "nhan" and n not in mp50:
-            print(f"Cảnh báo: {n} được chọn Nhận nhưng MediaPipe không thấy mặt, đưa vào Gán tay.")
     no_face = _no_face(args)
-    lost = [n for n in no_face if n not in meta and dec(n) == "gan_tay"]
+    plan = push_plan(triage, meta_all, mp50, phan_loai.read_no_face(rd), excluded)       # classify tự trừ mặt xoá mềm và ghi chúng vào removed
+    nhan, tay = plan["nhan"], plan["tay"]
+    for n in plan["nhan_khong_nhap"]:
+        print(f"Cảnh báo: {n} được chọn Nhận nhưng MediaPipe không thấy mặt, đưa vào Gán tay.")
+    lost = plan["lost"]
     if lost:
         print(f"Cảnh báo: {len(lost)} mặt chọn Gán tay nhưng không có ảnh cắt (không đọc được/không thấy mặt ở bước crop), "
               f"không tải lên được: {lost[:3]}")
-    rejected = [(n, triage[n][1]) for n in triage if dec(n) == "bo"] + \
-               [(n, why) for n, why in no_face.items() if dec(n) not in DECISIONS]
+    rejected, removed = plan["rejected"], plan["removed"]
     if not nhan and not tay:
         raise SystemExit("Không có mặt nào để đẩy lên (cả nhóm nhận và gán tay đều trống).")
     files = {}
@@ -524,10 +548,11 @@ def push(args, out):
     with open(os.path.join(out, "rejected.csv"), "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["name", "reason"])
-        w.writerows(rejected)
+        w.writerows(rejected + removed)                            # mặt xoá mềm ghi lý do da_xoa (không tải lên)
     xml_path = os.path.join(rd, "xml", "prelabel.xml")
     build_xml(mode, nhan, meta, mp50, fl, cfg, xml_path)
-    print(f"push: {len(nhan)} mặt nhận, {len(tay)} mặt gán tay, {len(rejected)} bỏ, XML ({mode}): {xml_path}")
+    print(f"push: {len(nhan)} mặt nhận, {len(tay)} mặt gán tay, {len(rejected)} bỏ"
+          + (f", {len(removed)} đã xoá mềm" if removed else "") + f", XML ({mode}): {xml_path}")
     if args.dry_run:
         print("Chạy thử (--dry-run): đã ghi XML, không đẩy lên CVAT.")
         return False
@@ -538,8 +563,24 @@ def push(args, out):
         raise SystemExit(f"Không thấy {len(gone)} ảnh để tải lên, ví dụ {gone[0]}. Thêm --images <thư mục ảnh gốc> đúng máy này.")
     mod = _need("m28core.push", "P4: push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, label_json)")
     task_name = args.task[0] if args.task else f"{pipe.get('prefix', 'demo-')}{args.run}"
+    extra = {}                                                     # chỉ truyền khi khác mặc định (push giả trong test không nhận thêm)
+    if getattr(args, "resume", False):
+        extra["resume"] = True
+    if args.pipeline != DEFAULT_PIPELINE_PATH:
+        extra["pipeline"] = args.pipeline
     mod.push(rd, task_name, nhan_imgs, tay_imgs, xml_path, project=pipe.get("project", "m28"),
-             prefix=pipe.get("prefix", "demo-"), label_json=os.path.join("config", "face50_label.json"))
+             prefix=pipe.get("prefix", "demo-"), label_json=os.path.join("config", "face50_label.json"), **extra)
+    return True
+
+
+def cleanup(args):
+    """push --cleanup: xoá đúng task trong push.json trên CVAT (cần --confirm-name <tên task>) rồi đánh dấu task_deleted.
+    Không ghi done.txt; trả True khi không có lỗi."""
+    pipe = _jload(args.pipeline) if os.path.exists(args.pipeline) else {}
+    mod = _need("m28core.push", "P4: cleanup(run_dir, prefix, confirm_name=...)")
+    extra = {} if args.pipeline == DEFAULT_PIPELINE_PATH else {"pipeline": args.pipeline}
+    mod.cleanup(_run_dir(args), prefix=pipe.get("prefix", "demo-"), project=pipe.get("project", "m28"),
+                confirm_name=getattr(args, "confirm_name", None), **extra)
     return True
 
 

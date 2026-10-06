@@ -7,8 +7,10 @@ Sửa điểm không làm ở đây (làm trong CVAT).
     python tool\\m28.py review --run F5 --reviewer P2  # qua m28 (bước review --review ui)
     python tool\\review_app.py --nap P2              # chưa có lượt nào: chỉ mở tab "Nạp ảnh" (kéo thả ảnh -> prepare -> rà)
 
-Trang có hai tab: "Rà soát" (như cũ) và "Nạp ảnh" (logic ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng
-tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà không gõ lệnh).
+Trang có ba tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
+ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà
+không gõ lệnh) và "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT).
+Trang KHÔNG gọi mạng: đẩy lên CVAT và xoá task chạy bằng tiến trình con `m28.py push ...`; CVAT_URL/CVAT_ACCESS_TOKEN chỉ đọc từ biến môi trường.
 
 Đọc  runs/<run>/flags/flags.json, overlays/, autoqc/autoqc.csv, no_face.csv, map50/mp50.json, crop/images/.
 Ghi  runs/<run>/review/triage_<người rà>.csv (name,decision,reason,seconds; chỉ nối thêm dòng, mỗi dòng fsync)
@@ -35,11 +37,15 @@ import re
 import sys
 import threading
 import time
+import types
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 if TOOL_DIR not in sys.path:
     sys.path.insert(0, TOOL_DIR)
+import dot_anh  # noqa: E402
+import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
+from m28core import loai_tru  # noqa: E402  (danh sách mặt xoá mềm excluded.txt)
 from m28core.steps import DECISIONS, _stem  # noqa: E402  (dùng chung quy ước tên/quyết định với push)
 from nap_anh import NO_FACE_VI, RunError  # noqa: E402,F401  (RunError dùng chung với nap_anh)
 
@@ -194,6 +200,8 @@ def _load(run_dir):
     if not isinstance(fl, dict) or any(not isinstance(v, list) for v in fl.values()):
         raise RunError(f"{_shown(fpath)} sai định dạng (cần {{tên mặt: [cờ low_conf của 50 điểm]}}): chạy lại "
                        f"python tool\\m28.py prepare --run {run} ... --force flags.")
+    gone = loai_tru.read_excluded(run_dir)                  # mặt xoá mềm: bộ lọc lúc đọc, file kết quả không bị sửa
+    fl = {k: v for k, v in fl.items() if k not in gone}
     qc, nf = _read_autoqc(run_dir), _read_no_face(run_dir)
 
     def path_of(sub, name):
@@ -208,7 +216,7 @@ def _load(run_dir):
                           fl_b, sum(fl_b), sug, probs, None))
     unusable = 0
     for name, (why, _step) in nf.items():
-        if name in fl:
+        if name in fl or name in gone:
             continue
         crop = path_of(os.path.join("crop", "images"), name)
         if crop is None:
@@ -218,6 +226,7 @@ def _load(run_dir):
     faces.sort(key=lambda f: (f.rank, -f.n_flags, f.name))
     if not faces:
         raise RunError(f"Hàng đợi rỗng: {_shown(fpath)} không có mặt nào"
+                       + (f" (còn lại sau khi trừ {len(gone)} mặt đã xoá mềm)" if gone else "")
                        + (f" và {unusable} mặt trong no_face.csv không có ảnh cắt" if unusable else "")
                        + f". Kiểm lại bước prepare của lượt {run}.")
     notes = []
@@ -462,6 +471,28 @@ class Store:
     def can_finish(self):
         with self.lock:
             return self.progress()["remaining"] == 0
+
+    def exclude(self, name):
+        """Xoá mềm một mặt của lượt đang rà: bỏ khỏi hàng đợi và ngăn hoàn tác liên quan (excluded.txt do dot_anh ghi trước).
+        Trả True nếu mặt có trong hàng đợi. Không bao giờ làm hàng đợi rỗng (ValueError)."""
+        with self.lock:
+            if name not in self.by_name:
+                return False
+            if len(self.faces) <= 1:
+                raise ValueError("Hàng đợi chỉ còn một mặt: không xoá được.")
+            self.faces = [f for f in self.faces if f.name != name]
+            self.by_name = {f.name: f for f in self.faces}
+            self.undo_stack = [u for u in self.undo_stack if u[0] != name]
+            return True
+
+    def reload(self):
+        """Đọc lại hàng đợi từ đĩa (sau khi khôi phục ảnh). Giữ nguyên quyết định đã có; mặt chưa rà thì done.txt đã bị gỡ bởi dot_anh."""
+        with self.lock:
+            self.faces, self.notes = _load(self.run_dir)
+            self.by_name = {f.name: f for f in self.faces}
+            self.undo_stack = [u for u in self.undo_stack if u[0] in self.by_name]
+            if self.progress()["remaining"] and os.path.exists(self.done_path):
+                self._reopen()
 
     def write_done(self):
         """Ghi review/done.txt nguyên tử (file tạm rồi os.replace). Còn mặt chưa rà thì từ chối."""
@@ -1139,6 +1170,7 @@ PAGE_JS = r"""() => {
     // Phím tắt chỉ chạy khi tab "Rà soát" đang hiện (tab "Nạp ảnh" có ô gõ tên lượt, ô thả file, nút riêng).
     const mainEl = document.getElementById('main');
     if (!mainEl || mainEl.offsetParent === null) { return; }
+    if (document.querySelector('.m28-modal')) { return; }          // hộp xác nhận đang mở: không phím tắt nào ngoài Esc/Tab/Enter của hộp
     if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || typing(e.target)) { return; }
     if (document.querySelector('.m28-done')) { e.preventDefault(); return; }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -1177,6 +1209,8 @@ PAGE_JS = r"""() => {
     .observe(document.body, { childList: true, subtree: true, characterData: true });
   mark();
 }"""
+PAGE_JS = PAGE_JS[:-1] + dot_ui.JS_BODY + "}"          # JS của hộp xác nhận và tab Các đợt chạy một lần, cùng hàm với phím tắt
+CSS = CSS + dot_ui.CSS
 
 
 def prepare_env(run_dir, environ=None):
@@ -1240,6 +1274,7 @@ def _review_tab(gr, demo, store, ctx, header):
             gr.HTML(LEGEND_HTML, elem_id="legend", apply_default_css=False)
             msg = gr.HTML(elem_id="msg", apply_default_css=False)
             b_xong = gr.Button("Xong", variant="primary", elem_id="btn-xong", interactive=False)
+            push_hook, _push_refresh, push_outs, push_opts = dot_ui.push_panel(gr, demo, store, ctx)
             gr.HTML(GUIDE_HTML, elem_id="guide", apply_default_css=False)
             gr.HTML(KEYS_HTML, elem_id="keys", apply_default_css=False)
             gr.HTML(notes_html(store), elem_id="notes", apply_default_css=False)
@@ -1299,24 +1334,38 @@ def _review_tab(gr, demo, store, ctx, header):
         ses = ensure_session(store, ses)
         if ctx.job.running:                     # Xong tắt server và sẽ giết prepare đang chạy ở tab Nạp ảnh
             return render(ses, f"Đang chuẩn bị lượt {ctx.job.run}: chờ xong hoặc bấm Huỷ.", "warn", reset=False)
+        if ctx.push_job.running or ctx.del_job.running:       # ... và giết push/xoá task đang chạy giữa chừng
+            busy = ctx.push_job if ctx.push_job.running else ctx.del_job
+            return render(ses, f"Đang {'đẩy' if busy is ctx.push_job else 'xoá task của'} lượt {busy.run} (CVAT): chờ xong hoặc bấm Huỷ.",
+                          "warn", reset=False)
         m, lv, ok = act_finish(store, ses)
         if ok and not close_once["started"]:
             close_once["started"] = True
             threading.Timer(2.0, lambda: demo.close(verbose=False)).start()
         return render(ses, m, lv, reset=False)
 
+    def on_reselect(ses):
+        """Chọn lại tab Rà soát: vẽ lại (đợt có thể vừa bị xoá/khôi phục ảnh ở tab Các đợt); mặt đang xem bị xoá thì nhảy sang mặt chưa rà kế."""
+        ses = ensure_session(store, ses)
+        return render(ses, reset=False)
+
     demo.load(on_load, None, all_outs, **opts)
     grid.select(on_select, [ses_state], all_outs, **opts)
     flt.input(on_filter, [flt, ses_state], all_outs, **opts)
-    b_pp.click(on_page(-1), [ses_state], all_outs, trigger_mode="multiple", **opts)
-    b_pn.click(on_page(1), [ses_state], all_outs, trigger_mode="multiple", **opts)
-    b_prev.click(on_step(-1), [ses_state], all_outs, trigger_mode="multiple", **opts)
-    b_next.click(on_step(1), [ses_state], all_outs, trigger_mode="multiple", **opts)
-    b_nhan.click(on_decide("nhan"), [reason, shown, ses_state], all_outs, **opts)
-    b_tay.click(on_decide("gan_tay"), [reason, shown, ses_state], all_outs, **opts)
-    b_bo.click(on_decide("bo"), [reason, shown, ses_state], all_outs, **opts)
-    b_undo.click(on_undo, [shown, ses_state], all_outs, **opts)
-    b_xong.click(on_xong, [ses_state], all_outs, **opts)
+    events = [
+        b_pp.click(on_page(-1), [ses_state], all_outs, trigger_mode="multiple", **opts),
+        b_pn.click(on_page(1), [ses_state], all_outs, trigger_mode="multiple", **opts),
+        b_prev.click(on_step(-1), [ses_state], all_outs, trigger_mode="multiple", **opts),
+        b_next.click(on_step(1), [ses_state], all_outs, trigger_mode="multiple", **opts),
+        b_nhan.click(on_decide("nhan"), [reason, shown, ses_state], all_outs, **opts),
+        b_tay.click(on_decide("gan_tay"), [reason, shown, ses_state], all_outs, **opts),
+        b_bo.click(on_decide("bo"), [reason, shown, ses_state], all_outs, **opts),
+        b_undo.click(on_undo, [shown, ses_state], all_outs, **opts),
+        b_xong.click(on_xong, [ses_state], all_outs, **opts)]
+    for ev in events[4:8]:                      # sau mỗi quyết định/hoàn tác vẽ lại khung Đẩy lên CVAT (còn bao nhiêu mặt chưa rà)
+        push_hook(ev)
+    return types.SimpleNamespace(on_reselect=on_reselect, ses_state=ses_state, all_outs=all_outs, opts=opts,
+                                 push_refresh=_push_refresh, push_outs=push_outs, push_opts=push_opts)
 
 
 NAP_WARN_HTML = ('<div class="nap-box nap-warn"><b>Ảnh mặt người thật chỉ xử lý trên máy này (127.0.0.1).</b> Không đưa ảnh khách hàng, '
@@ -1361,6 +1410,10 @@ class AppCtx:
     run_dir: str
     nap_only: bool = False
     job: object = None
+    push_job: object = None            # nap_anh.PushJob: đẩy lên CVAT bằng tiến trình con
+    del_job: object = None             # nap_anh.DeleteTaskJob: xoá task trên CVAT bằng tiến trình con
+    push_pending: object = None        # dot_anh.Pending: yêu cầu xác nhận đẩy (mã ngẫu nhiên)
+    dot_pending: object = None         # dot_anh.Pending: yêu cầu xác nhận xoá ở tab Các đợt
     switch_to: object = None           # (run_dir, Store) khi bấm "Rà lượt này"
     demo: object = None
     tmp_dir: str = ""
@@ -1371,6 +1424,14 @@ class AppCtx:
     def __post_init__(self):
         if self.job is None:
             self.job = nap_anh.PrepareJob()
+        if self.push_job is None:
+            self.push_job = nap_anh.PushJob()
+        if self.del_job is None:
+            self.del_job = nap_anh.DeleteTaskJob()
+        if self.push_pending is None:
+            self.push_pending = dot_anh.Pending()
+        if self.dot_pending is None:
+            self.dot_pending = dot_anh.Pending()
         self.runs_root, self.project_root, self.layout_error = nap_anh.runs_layout(self.run_dir)
         self.tmp_dir = os.environ.get("GRADIO_TEMP_DIR") or os.path.abspath(os.path.join(self.run_dir, "_tmp"))
 
@@ -1392,6 +1453,8 @@ def _nap_tab(gr, demo, store, ctx):
     rej = gr.HTML(elem_id="nap-rejected", apply_default_css=False)
     name_tb = gr.Textbox(label="Tên lượt (để trống = tự đặt NAP_001, NAP_002…)", placeholder=nap_anh.next_run_name(ctx.runs_root),
                          max_lines=1, elem_id="nap-name")
+    note_tb = gr.Textbox(label=f"Ghi chú về đợt này (không bắt buộc, tối đa {nap_anh.NOTE_MAX} ký tự)", max_length=nap_anh.NOTE_MAX, lines=2,
+                         max_lines=4, elem_id="nap-ghichu", placeholder="Ví dụ: ảnh buổi sáng, camera cửa vào")
     with gr.Row(elem_id="nap-btns"):
         b_start = gr.Button("Bắt đầu chuẩn bị", variant="primary", elem_id="nap-start", interactive=False)
         b_cancel = gr.Button("Huỷ", variant="stop", elem_id="nap-cancel", interactive=False)
@@ -1471,10 +1534,10 @@ def _nap_tab(gr, demo, store, ctx):
         return (plan_st, gr.update(value=items, visible=bool(items)), nap_anh.rejected_html(plan), nap_anh.count_html(plan),
                 gr.update(interactive=usable and bool(plan and plan["ok"]) and not job.running))
 
-    def on_start(files, name, plan_st):
+    def on_start(files, name, note, plan_st):
         def refuse(text):
             gr.Warning(text, title="Chưa bắt đầu được")
-            return ((gr.update(), plan_st, gr.update(), gr.update(), gr.update(), gr.update(), box(text, "warn"))
+            return ((gr.update(), plan_st, gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), box(text, "warn"))
                     + job_update(job.snapshot(), n_ok_of(plan_st)))
         if job.running:
             return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Huỷ.")
@@ -1486,13 +1549,13 @@ def _nap_tab(gr, demo, store, ctx):
         try:
             plan_st = plan_for(files, plan_st)
             run = nap_anh.check_run_name(name, ctx.runs_root) if (name or "").strip() else nap_anh.next_run_name(ctx.runs_root)
-            nap_anh.stage_upload(ctx.runs_root, run, plan_st["plan"], cleanup_root=ctx.tmp_dir)
+            nap_anh.stage_upload(ctx.runs_root, run, plan_st["plan"], cleanup_root=ctx.tmp_dir, note=note, reviewer=ctx.reviewer)
             job.start(run, ctx.runs_root, ctx.project_root)
         except RunError as e:
             return refuse(str(e))
         text = f"Đã nạp {len(plan_st['plan']['ok'])} ảnh vào runs\\{run}\\inbox, đang chạy prepare."
         return ((gr.update(value=None), None, gr.update(value=[], visible=False), "", nap_anh.count_html(None),
-                 gr.update(value="", placeholder=nap_anh.next_run_name(ctx.runs_root)), box(text, "ok"))
+                 gr.update(value="", placeholder=nap_anh.next_run_name(ctx.runs_root)), gr.update(value=""), box(text, "ok"))
                 + job_update(job.snapshot(), 0))
 
     def on_retry(plan_st):
@@ -1526,6 +1589,9 @@ def _nap_tab(gr, demo, store, ctx):
         if ctx.switch_to is not None:
             return box("Đang chuyển sang lượt mới…", "ok"), "Rà soát M28 · " + run_name(ctx.switch_to[0])
         snap = job.snapshot()
+        if ctx.push_job.running or ctx.del_job.running:
+            busy = ctx.push_job if ctx.push_job.running else ctx.del_job
+            return refuse(f"Đang làm việc với CVAT cho lượt {busy.run}: chờ xong rồi chuyển lượt.")
         if snap["state"] == "dang_chay":
             return refuse(f"Đang chuẩn bị lượt {snap['run']}: chờ xong hoặc bấm Huỷ.")
         if snap["state"] != "xong":
@@ -1541,11 +1607,11 @@ def _nap_tab(gr, demo, store, ctx):
         threading.Timer(0.8, lambda: demo.close(verbose=False)).start()
         return box(f"Đang chuyển sang lượt {snap['run']}: trang mất kết nối 1–3 giây rồi tự tải lại.", "ok"), "Rà soát M28 · " + snap["run"]
 
-    start_outs = [drop, plan_state, gal, rej, count, name_tb, msg] + job_outs
+    start_outs = [drop, plan_state, gal, rej, count, name_tb, note_tb, msg] + job_outs
     nap = dict(opts, concurrency_id="nap")
     demo.load(on_load, [plan_state], [env_html, name_tb] + job_outs, **dict(opts, concurrency_id="nap"))
     drop.change(on_files, [drop, plan_state], [plan_state, gal, rej, count, b_start], **nap)
-    b_start.click(on_start, [drop, name_tb, plan_state], start_outs, **nap)
+    b_start.click(on_start, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
     b_retry.click(on_retry, [plan_state], [msg] + job_outs, **nap)
     b_cancel.click(on_cancel, [plan_state], [msg] + job_outs, **dict(opts, concurrency_id="nap_huy"))
     timer.tick(on_tick, [plan_state], job_outs, **dict(opts, concurrency_id="nap_tick"))
@@ -1566,14 +1632,28 @@ def build_ui(store, ctx=None):
         ctx.demo = demo
         header = gr.HTML(HEAD_NAP_HTML.format(rev=html.escape(ctx.reviewer)) if store is None else "", elem_id="progress",
                          apply_default_css=False)
-        with gr.Tabs(elem_id="tabs", selected="ra" if store is not None else "nap"):
-            with gr.Tab("Rà soát", id="ra", elem_id="tab-ra"):
+        with gr.Tabs(elem_id="tabs", selected="ra" if store is not None else "nap") as tabs:
+            with gr.Tab("Rà soát", id="ra", elem_id="tab-ra") as tab_ra:
                 if store is None:
                     gr.HTML(NO_RUN_HTML, apply_default_css=False)
+                    review = None
                 else:
-                    _review_tab(gr, demo, store, ctx, header)
+                    review = _review_tab(gr, demo, store, ctx, header)
             with gr.Tab("Nạp ảnh", id="nap", elem_id="tab-nap"):
                 _nap_tab(gr, demo, store, ctx)
+            with gr.Tab("Các đợt", id="dot", elem_id="tab-dot") as tab_dot:
+                refresh, dot_ses, dot_outs, dot_opts = dot_ui.dot_tab(
+                    gr, demo, store, ctx, dict(Store=Store, switch_js=NAP_SWITCH_JS, run_name=run_name))
+        tab_dot.select(refresh, [dot_ses], dot_outs, **dot_opts)           # tự làm mới khi chọn tab (không quét lại mỗi giây)
+        if review is not None:                                             # chọn lại tab Rà soát: vẽ lại (ảnh vừa xoá/khôi phục ở tab Các đợt)
+            n_outs = len(review.all_outs)
+
+            def on_tab(ses, evt: gr.SelectData):
+                if evt.value != "Rà soát":
+                    return (gr.update(),) * n_outs
+                return review.on_reselect(ses)
+            tabs.select(on_tab, [review.ses_state], review.all_outs, **review.opts)
+            tabs.select(review.push_refresh, None, review.push_outs, **dict(review.push_opts, concurrency_id="push_view"))
     demo.queue(default_concurrency_limit=1)
     return demo, theme
 
@@ -1683,8 +1763,12 @@ def main(argv=None):
             demo.close(verbose=False)
         return 0
     finally:
-        if ctx.job.running:
-            ctx.job.cancel()
+        for j in (ctx.job, ctx.push_job, ctx.del_job):
+            if j.running:
+                if j is not ctx.job:
+                    print(f"Đóng trang khi còn việc CVAT đang chạy cho lượt {j.run}: đã dừng; xem runs\\{j.run}\\push.json và chạy "
+                          f"python tool\\m28.py push --run {j.run} --resume hoặc --cleanup nếu task đã tạo dở.", flush=True)
+                j.cancel()
 
 
 if __name__ == "__main__":
