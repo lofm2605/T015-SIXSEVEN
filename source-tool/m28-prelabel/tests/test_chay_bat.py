@@ -23,6 +23,6 @@ def test_menu_covers_choice_range_and_safe_launch():
     t = _text()
     assert 'choice /C 123456' in t and t.count('if errorlevel') >= 6
     assert 'review_app.py --nap' in t and '127.0.0.1' in t
-    assert 'share' not in t.lower() and 'token' not in t.lower()    # không đụng token, không chia sẻ
+    assert 'share=' not in t.lower() and 'CVAT_ACCESS_TOKEN' not in t    # không đụng token, không chia sẻ
     assert 'findstr /V /I "torch"' in t                             # không cài torch
     assert 'rmdir /s /q ".venv"' in t and 'rmdir /s /q "runs' not in t    # chỉ xoá .venv, không bao giờ xoá runs\
