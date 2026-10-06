@@ -91,6 +91,19 @@ bấm **Bắt đầu chuẩn bị**, chờ thanh tiến độ xong (có nút Hu�
 Ảnh nằm ở `runs\NAP_001\inbox` (tên đã làm sạch; tên gốc ở `runs\NAP_001\nap_ten_goc.csv`, log ở `runs\NAP_001\nap_log.txt`). Đang rà dở lượt khác thì vẫn nạp được:
 lượt cũ không bị đụng, mở lại bằng lệnh cmd in ra (ví dụ `python tool\review_app.py runs\F5 P1`). Ảnh mặt người thật chỉ xử lý trên máy bạn, không đưa vào chat AI.
 
+### Ca khó: đánh dấu, xuất gói, họp team
+**Thành viên:** khi rà gặp mặt khó (đổi chỗ điểm, lật, dồn cục, ca chưa có quy tắc, pain point công cụ) bấm **K** (hoặc nút **Ca khó**), chọn loại, ghi chú, **Lưu**; không ảnh hưởng Nhận/Gán tay/Bỏ.
+Cuối ngày mở tab **Ca khó**, kiểm lại, bấm **Xuất gói họp**; file nằm ở `outputs\ca_kho\ca_kho_P1_1610.zip` (cũng tải về được từ trang). Gửi file này cho người tổ chức qua Drive riêng tư của đội
+hoặc gửi trực tiếp. Không đăng công khai, không đưa vào chat AI, không commit. Lượt không rõ nguồn (có thể là ảnh khách hàng) mặc định không kèm ảnh: đừng bật ô kèm ảnh nếu chưa chắc.
+
+**Người tổ chức (P5):**
+```bat
+python tool\review_app.py --nap P5
+```
+Mở tab **Họp team** (không cần lượt), bấm **Tạo phiên mới hôm nay**, kéo thả các gói zip, bấm **Nhập các gói**, họp (bấm thẻ để xem, **Trình chiếu** để chiếu), rồi **Xuất biên bản**.
+Biên bản ở `outputs\ca_kho\hop_1610\bien_ban_1610.md`: **tự** chép các khối vào `problem-backlog.md` và `so-quyet-dinh.md` rồi commit hai file đó (trang không ghi vào hai file này).
+Sau họp xoá các gói zip đã nhận nếu không cần nữa.
+
 ## 7. Nhập vào CVAT (khi đã có CVAT trên máy)
 **Lưu ý: `push`, `collect`, xoá task và label `face50` mới chỉ thử bằng CVAT giả, CHƯA thử trên CVAT thật.** Lần đầu chạy trên task thử `demo-…` và báo P4 nếu có lỗi.
 

@@ -42,6 +42,7 @@ import types
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 if TOOL_DIR not in sys.path:
     sys.path.insert(0, TOOL_DIR)
+import ca_kho  # noqa: E402  (ca khó, tab Ca khó và Họp team; chỉ thư viện chuẩn ở đầu module)
 import dot_anh  # noqa: E402
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
@@ -954,7 +955,7 @@ GUIDE_HTML = ('<div class="m28-guide"><b>Nhận</b>: đúng dáng mặt, chỉ c
               '<b>Phân vân Nhận/Gán tay → chọn Nhận</b></div>')
 KEYS_HTML = ('<div class="m28-keys"><b>Chỉ mở một tab. Chọn lý do (nếu có) trước, rồi mới bấm Gán tay / Bỏ ảnh.</b><br>'
              '<kbd>N</kbd> Nhận · <kbd>G</kbd> Gán tay · <kbd>B</kbd> Bỏ ảnh · '
-             '<kbd>Z</kbd> Hoàn tác · <kbd>←</kbd> <kbd>→</kbd> Trước/Sau · <kbd>0</kbd>–<kbd>8</kbd> chọn lý do '
+             '<kbd>Z</kbd> Hoàn tác · <kbd>K</kbd> Ca khó · <kbd>←</kbd> <kbd>→</kbd> Trước/Sau · <kbd>0</kbd>–<kbd>8</kbd> chọn lý do '
              '(0 = không)</div>')
 LEGEND_HTML = ('<div class="m28-legend"><span><i class="dot red"></i>chấm đỏ = low_conf (nhìn kỹ)</span>'
                '<span><i class="dot green"></i>chấm xanh = ổn</span></div>')
@@ -1154,8 +1155,8 @@ PAGE_JS = r"""() => {
   if (window.__m28Keys) { return; }
   window.__m28Keys = true;
   const TEXT = ['text', 'search', 'number', 'email', 'password', 'url', 'tel'];
-  const BY_KEY = { n: 'btn-nhan', g: 'btn-gantay', b: 'btn-bo', z: 'btn-undo' };
-  const BY_CODE = { KeyN: 'btn-nhan', KeyG: 'btn-gantay', KeyB: 'btn-bo', KeyZ: 'btn-undo' };
+  const BY_KEY = { n: 'btn-nhan', g: 'btn-gantay', b: 'btn-bo', z: 'btn-undo', k: 'btn-cakho' };
+  const BY_CODE = { KeyN: 'btn-nhan', KeyG: 'btn-gantay', KeyB: 'btn-bo', KeyZ: 'btn-undo', KeyK: 'btn-cakho' };
   const DECIDE = '#btn-nhan, #btn-gantay, #btn-bo';
   const press = (id) => { const b = document.getElementById(id); if (b && !b.disabled) { b.click(); } };
   const typing = (t) => {
@@ -1210,7 +1211,7 @@ PAGE_JS = r"""() => {
   mark();
 }"""
 PAGE_JS = PAGE_JS[:-1] + dot_ui.JS_BODY + "}"          # JS của hộp xác nhận và tab Các đợt chạy một lần, cùng hàm với phím tắt
-CSS = CSS + dot_ui.CSS
+CSS = CSS + dot_ui.CSS + ca_kho.CSS
 
 
 def prepare_env(run_dir, environ=None):
@@ -1269,6 +1270,7 @@ def _review_tab(gr, demo, store, ctx, header):
                 b_prev = gr.Button("← Trước", elem_id="btn-prev")
                 b_undo = gr.Button("Hoàn tác (Z)", elem_id="btn-undo")
                 b_next = gr.Button("Sau →", elem_id="btn-next")
+            ca_kho.mark_panel(gr, demo, store, ctx, shown)           # nút "Ca khó (K)" và panel đánh dấu (ghi runs/<lượt>/ca_kho.csv)
         with gr.Column(scale=3, min_width=340, elem_id="side"):
             info = gr.HTML(elem_id="info", apply_default_css=False)
             gr.HTML(LEGEND_HTML, elem_id="legend", apply_default_css=False)
@@ -1644,6 +1646,11 @@ def build_ui(store, ctx=None):
             with gr.Tab("Các đợt", id="dot", elem_id="tab-dot") as tab_dot:
                 refresh, dot_ses, dot_outs, dot_opts = dot_ui.dot_tab(
                     gr, demo, store, ctx, dict(Store=Store, switch_js=NAP_SWITCH_JS, run_name=run_name))
+            with gr.Tab("Ca khó", id="cakho", elem_id="tab-cakho") as tab_ck:
+                ck_fn, ck_in, ck_out, ck_opts = ca_kho.member_tab(gr, demo, store, ctx)
+            with gr.Tab("Họp team", id="hop", elem_id="tab-hop"):
+                ca_kho.meeting_tab(gr, demo, ctx)
+        tab_ck.select(ck_fn, ck_in, ck_out, **ck_opts)                      # tab Ca khó tự làm mới khi chọn (ca vừa đánh dấu ở tab Rà soát)
         tab_dot.select(refresh, [dot_ses], dot_outs, **dot_opts)           # tự làm mới khi chọn tab (không quét lại mỗi giây)
         if review is not None:                                             # chọn lại tab Rà soát: vẽ lại (ảnh vừa xoá/khôi phục ở tab Các đợt)
             n_outs = len(review.all_outs)
@@ -1729,6 +1736,7 @@ def main(argv=None):
             demo, theme = build_ui(store, ctx)
             # Chỉ phát file của lượt đang rà (overlays, crop/images, _tmp); không bao giờ inbox/ hay cả runs/.
             allowed = [os.path.abspath(os.path.join(ctx.run_dir, d)) for d in ("overlays", os.path.join("crop", "images"), "_tmp")]
+            allowed.append(os.path.abspath(ca_kho.serve_dir(ctx.project_root)))        # chỉ outputs/ca_kho (gói họp, phiên họp), không cả outputs/
             try:
                 _app, url, _share = _launch(demo, theme, ctx, port, allowed, inbrowser and first, 0 if first else 10)
             except OSError as e:
