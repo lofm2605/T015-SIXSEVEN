@@ -23,7 +23,7 @@ echo.
 echo ================= M28 - Nhan nhap landmark khuon mat =================
 echo   1. Mo trang ra soat   (Nap anh keo tha, Cac dot, Ca kho, Cai dat)
 echo   2. Ra soat lai mot luot co san
-echo   3. Chay thu 5 mat WFLW (can data\ va thu muc WFLW_images)
+echo   3. Chay thu 5 mat F in-cabin (chi can goi du lieu giai nen vao data\)
 echo   4. Kiem tra nhanh CVAT   (tao roi xoa task demo-smoke, can CVAT dang chay)
 echo   5. Chay test
 echo   6. Cai lai moi truong Python
@@ -66,18 +66,15 @@ goto :menu
 
 :thu5
 if not exist "data\manifest.csv" (
-  echo Chua co data\manifest.csv: giai nen goi du lieu vao thu muc data\ truoc.
+  echo Chua co data\manifest.csv: giai nen goi du lieu in-cabin (m28_incab_part*.zip^) vao thu muc data\ truoc.
   goto :menu
 )
-set "ANH="
-set /p ANH=Thu muc WFLW_images (Enter = D:\WFLW\WFLW_images): 
-if "%ANH%"=="" set "ANH=D:\WFLW\WFLW_images"
-if not exist "%ANH%" (
-  echo Khong thay thu muc %ANH%
+if not exist "data\crops\F_001.png" (
+  echo Chua co data\crops\: giai nen du cac phan m28_incab_part*.zip vao thu muc data\ truoc.
   goto :menu
 )
-python -c "import csv;r=[x for x in csv.DictReader(open('data/manifest.csv',encoding='utf-8')) if x['set']=='F'][:5];w=csv.writer(open('data/f5_list.csv','w',newline=''));w.writerow(['wflw_image','wflw_line','seed']);[w.writerow([x['wflw_image'],x['wflw_line'],5]) for x in r]"
-python tool\m28.py all --run F5 --list data\f5_list.csv --images "%ANH%" --box wflw --review auto --dry-run
+python -c "import csv;r=[x for x in csv.DictReader(open('data/manifest.csv',encoding='utf-8')) if x['set']=='F'][:5];w=csv.writer(open('data/f5_list.csv','w',newline=''));w.writerow(['image','face_idx','seed']);[w.writerow([x['image'],x['face_idx'],x['seed']]) for x in r]"
+python tool\m28.py all --run F5 --list data\f5_list.csv --images data\crops --box wflw --review auto --dry-run
 echo.
 echo Neu thay "Chay thu (--dry-run)" la dung. Ket qua: runs\F5\xml\prelabel.xml
 goto :menu

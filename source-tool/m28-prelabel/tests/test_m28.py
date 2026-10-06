@@ -722,3 +722,119 @@ def test_dot_plan_counts_equal_steps_push(tmp_path, world, capsys):
     assert all(a.text == 'true' for a in read_xml('W')['F_001.png'].iter('attribute'))
     assert steps.read_manual_list('runs/W/push/manual_list.txt') == [('F_001.png', 'co_nhap'), ('F_004.png', 'anh_trong')]
     assert re.search(r'push\tdung\t[\d.]+s\tgan_tay co_nhap=1 anh_trong=1', open('runs/W/log.txt', encoding='utf-8').read())
+
+
+# 12 --------------------------------------------------------------------------- manifest in-cabin (cột image, face_idx)
+def write_manifest_incabin(rows, crops_dir=None):
+    """rows: [(file, image, (h, w))]. Manifest in-cabin tối thiểu (cột image, face_idx, hộp, left/top/k); hộp mặt giữa ảnh.
+    crops_dir: nếu có thì ghi luôn ảnh cắt của từng mặt vào đó (như gói dữ liệu, không có khung gốc)."""
+    from wflw import crop_geometry
+    os.makedirs('data', exist_ok=True)
+    with open('data/manifest.csv', 'w', newline='', encoding='utf-8') as f, open('data/list.csv', 'w', newline='', encoding='utf-8') as g:
+        w, wl = csv.writer(f), csv.writer(g)
+        w.writerow(['file', 'set', 'block', 'seq', 'source', 'image', 'face_idx', 'x0', 'y0', 'x1', 'y1', 'left', 'top', 'k'])
+        wl.writerow(['image', 'face_idx', 'seed'])
+        for i, (fn, img, (h, wd)) in enumerate(rows):
+            box = (wd * .25, h * .25, wd * .75, h * .75)
+            left, top, k, _, _ = crop_geometry(box, np.zeros((1, 2), np.float32))
+            w.writerow([fn, 'F', '', i + 1, 'yawdd', img, 0, *box, f'{left:.4f}', f'{top:.4f}', f'{k:.6f}'])
+            wl.writerow([img, 0, 5])
+
+
+def test_incabin_manifest_columns_with_box_wflw_and_set(tmp_path, world):
+    imgs = tmp_path / 'imgs'
+    write_images(imgs)
+    write_manifest_incabin([(f'F_{i + 1:03d}.png', rel, SIZES[rel]) for i, rel in enumerate(SIZES)])
+    m28.main(prep_args('N', imgs, '--box', 'wflw'))                       # --list có cột image, face_idx
+    assert sorted(f.name for f in (tmp_path / 'runs' / 'N' / 'crop' / 'images').iterdir()) == ['F_001.png', 'F_002.png', 'F_003.png']
+    meta = json.load(open('runs/N/crop/meta.json'))
+    assert meta['F_001']['rel'] == 'sub/face_a.png' and meta['F_001']['w'] == 640           # ảnh gốc, toạ độ gốc
+    assert world.lm == 1                                                  # --box wflw không dựng landmarker ở bước crop
+    m28.main(['prepare', '--run', 'S2', '--set', 'F', '--images', str(imgs), '--box', 'wflw'])   # --set lọc theo cột set
+    assert len(json.load(open('runs/S2/crop/meta.json'))) == 3
+    m28.main(['prepare', '--run', 'S3', '--set', 'G', '--images', str(imgs), '--box', 'wflw'])
+    assert json.load(open('runs/S3/crop/meta.json')) == {}                # không có mặt thuộc tập G
+
+
+def test_incabin_list_without_manifest_uses_box_auto(tmp_path, world):
+    imgs = tmp_path / 'imgs'
+    write_images(imgs)
+    os.makedirs('data')
+    with open('data/list.csv', 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow(['image', 'face_idx'])
+        w.writerow(['sub/face_a.png', 0])
+    m28.main(['prepare', '--run', 'L', '--list', 'data/list.csv', '--images', str(imgs), '--box', 'auto'])
+    assert list(json.load(open('runs/L/crop/meta.json'))) == ['face_a']
+
+
+def test_old_wflw_columns_still_accepted(tmp_path, world):
+    imgs = wflw_setup(tmp_path)
+    assert open('data/list.csv', encoding='utf-8').readline().strip() == 'wflw_image,wflw_line'
+    m28.main(prep_args('Old', imgs, '--box', 'wflw'))
+    assert (tmp_path / 'runs' / 'Old' / 'crop' / 'images' / 'F_001.png').exists()
+
+
+def test_only_crops_package_runs_with_images_data_crops(tmp_path, world):
+    """Người trong đội chỉ có gói (ảnh cắt + manifest, không có khung gốc): --images data/crops dùng chính ảnh cắt."""
+    from wflw import square_crop
+    imgs = tmp_path / 'imgs'
+    write_images(imgs)
+    rows = [(f'F_{i + 1:03d}.png', rel, SIZES[rel]) for i, rel in enumerate(SIZES)]
+    write_manifest_incabin(rows)
+    m28.main(prep_args('Full', imgs, '--box', 'wflw'))                     # có khung gốc: chuẩn so sánh
+    crops = tmp_path / 'data' / 'crops'
+    crops.mkdir(parents=True)
+    for fn, rel, (h, w) in rows:                                          # gói: ảnh cắt của mỗi mặt, đúng như inc_ingest.py ghi
+        bgr = cv2.imread(str(imgs / rel))
+        img, _, _, _ = square_crop(bgr, (w * .25, h * .25, w * .75, h * .75), np.zeros((1, 2), np.float32))
+        cv2.imwrite(str(crops / fn), img)
+    shutil_rmtree(imgs)                                                   # khung gốc không còn
+    m28.main(prep_args('Pack', crops, '--box', 'wflw'))
+    for s in m28.PREPARE:
+        assert (tmp_path / 'runs' / 'Pack' / s / 'done.txt').exists(), s
+    meta = json.load(open('runs/Pack/crop/meta.json'))
+    assert meta['F_001']['rel'] == 'F_001.png' and meta['F_001']['w'] == 512 and meta['F_001']['h'] == 512
+    for fn, _, _ in rows:
+        a = cv2.imread(f'runs/Full/crop/images/{fn}').astype(float)
+        b = cv2.imread(f'runs/Pack/crop/images/{fn}').astype(float)
+        assert np.abs(a - b).mean() < 1.0                                  # (gần như) đúng ảnh cũ
+    m28.main(['review', '--run', 'Pack', '--review', 'auto'])
+    with pytest.raises(SystemExit):
+        m28.main(['push', '--run', 'Pack', '--review', 'auto', '--dry-run'])
+    ims = read_xml('Pack')
+    assert sorted(ims) == ['F_001.png', 'F_002.png', 'F_003.png']
+    assert all((im.get('width'), im.get('height')) == ('512', '512') for im in ims.values())
+    # --set cũng chạy chỉ với gói
+    m28.main(['prepare', '--run', 'PackSet', '--set', 'F', '--images', str(crops), '--box', 'wflw'])
+    assert len(json.load(open('runs/PackSet/crop/meta.json'))) == 3
+
+
+def shutil_rmtree(p):
+    import shutil
+    shutil.rmtree(p)
+
+
+def test_make_landmarker_default_outputs_unchanged(monkeypatch, tmp_path):
+    """make_landmarker mặc định không bật blendshape/ma trận (hành vi cũ); outputs=True bật cả hai. Dùng mediapipe giả."""
+    seen = {}
+    vision = types.ModuleType('mediapipe.tasks.python.vision')
+    vision.RunningMode = types.SimpleNamespace(IMAGE='IMAGE')
+    vision.FaceLandmarkerOptions = lambda **kw: seen.update(kw) or kw
+    vision.FaceLandmarker = types.SimpleNamespace(create_from_options=lambda o: 'LM')
+    py = types.ModuleType('mediapipe.tasks.python')
+    py.BaseOptions = lambda **kw: kw
+    py.vision = vision
+    tasks = types.ModuleType('mediapipe.tasks')
+    tasks.python = py
+    mp = types.ModuleType('mediapipe')
+    mp.tasks = tasks
+    for name, mod in (('mediapipe', mp), ('mediapipe.tasks', tasks), ('mediapipe.tasks.python', py),
+                      ('mediapipe.tasks.python.vision', vision)):
+        monkeypatch.setitem(sys.modules, name, mod)
+    model = tmp_path / 'm.task'
+    model.write_bytes(b'x')
+    assert steps.make_landmarker(str(model)) == 'LM'
+    assert seen['output_face_blendshapes'] is False and seen['output_facial_transformation_matrixes'] is False
+    assert steps.make_landmarker(str(model), outputs=True) == 'LM'
+    assert seen['output_face_blendshapes'] is True and seen['output_facial_transformation_matrixes'] is True and seen['num_faces'] == 5

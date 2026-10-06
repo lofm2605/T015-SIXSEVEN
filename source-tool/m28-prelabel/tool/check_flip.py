@@ -1,4 +1,5 @@
 """Kiểm phép lật của ánh xạ (P3, tiêu chí 7/10): chạy sau fit_map.py, cần data/ của P1.
+WFLW cũ, sẽ thay ở giai đoạn 2 (QĐ-001: tập chính là in-cabin YawDD + DrivFace).
 
     python tool\\check_flip.py --run <run đã có pred478 cho tập F, Tdev> [--manifest data\\manifest.csv --gt98 data\\gt98.json]
 

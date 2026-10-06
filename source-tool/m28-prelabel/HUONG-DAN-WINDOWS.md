@@ -44,37 +44,46 @@ curl -L -o face_landmarker.task https://storage.googleapis.com/mediapipe-models/
 ```
 Phải được file ~3,7 MB, đặt cùng thư mục chạy lệnh. Không commit file này.
 
-## 4. Dữ liệu WFLW
-**a) Gói dữ liệu đã cắt sẵn** (do chủ repo gửi, 9 file `m28_data_part00_meta.zip` … `part08_of_08.zip`): giải nén **tất cả vào cùng thư mục** `data\` rồi kiểm:
+## 4. Dữ liệu in-cabin (YawDD + DrivFace)
+Từ 6/10/2026 (QĐ-001) tập chính là ảnh tài xế trong xe; WFLW cũ: xem `nguon-du-lieu.md`. Ảnh người lái xe là dữ liệu nhạy cảm: chỉ để trên máy bạn, không đăng, không đưa vào chat AI.
+
+**a) Gói dữ liệu đã cắt sẵn** (do chủ repo gửi, `m28_incab_part00_meta.zip` và `m28_incab_part01_of_05.zip` … `part05_of_05.zip`): giải nén **tất cả vào cùng thư mục** `data\` rồi kiểm:
 ```bat
 mkdir data
-tar -xf m28_data_part00_meta.zip -C data
-tar -xf m28_data_part01_of_08.zip -C data
-rem ... lặp tới part08_of_08 (hoặc giải nén bằng Explorer, chọn thư mục data)
+for %f in (m28_incab_part*.zip) do tar -xf "%f" -C data
 python tool\check_manifest.py data\manifest.csv
 ```
-Phải in `manifest.csv đạt`; `data\crops\` có 616 ảnh, có `data\gt98.json`.
+(Gõ trực tiếp trong cmd dùng `%f`; viết trong file `.bat` thì `%%f`.) Hoặc từng dòng `tar -xf m28_incab_part00_meta.zip -C data`, `tar -xf m28_incab_part01_of_05.zip -C data`, … Phải in
+`Kiểm manifest kiểu: in-cabin (YawDD + DrivFace)` rồi `manifest.csv đạt`; `data\crops\` có 616 ảnh `.png`. Gói **chỉ có ảnh cắt và manifest** (không có video, không có khung gốc);
+`data\sources\NOTICE.txt` và `data\DOC.txt` ghi nguồn, điều khoản, cột manifest. Chỉ dùng nội bộ nhóm, không phát tán, không đưa vào báo cáo/slide công khai.
 
-**b) Ảnh WFLW gốc** (chỉ cần khi chạy `prepare`/`all`, 743 MB; làm một lần):
+**b) Tự dựng lại gói (chỉ P1/chủ repo; cần video YawDD 5,3 GB và DrivFace 26 MB):**
 ```bat
-mkdir D:\WFLW
-curl -L -o D:\WFLW\WFLW_images.tar.gz "https://drive.usercontent.google.com/download?id=1hzBd48JIdWTJSsATBEB_eFVvPL1bx6UC&export=download&confirm=t"
-tar -xzf D:\WFLW\WFLW_images.tar.gz -C D:\WFLW
-dir D:\WFLW\WFLW_images
+mkdir D:\incab
+curl -L -o D:\incab\user06.tar https://skuld.cs.umass.edu/traces/mmsys/2014/user06.tar
+tar -xf D:\incab\user06.tar -C D:\incab
+rem user06.tar giai ra D:\incab\user06\YawDD dataset.rar. Giai nen file rar nay bang 7-Zip ban moi hoac WinRAR vao D:\incab (ra thu muc D:\incab\YawDD dataset); tar -xf co the giai duoc rar: chua thu
+curl -L -o D:\incab\drivface.zip https://archive.ics.uci.edu/static/public/378/drivface.zip
+tar -xf D:\incab\drivface.zip -C D:\incab
+mkdir D:\incab\DrivFace\imgs
+tar -xf D:\incab\DrivFace\DrivImages.zip -C D:\incab\DrivFace\imgs
+python tool\inc_ingest.py all --yawdd "D:\incab\YawDD dataset" --drivface D:\incab\DrivFace --model face_landmarker.task --out data --seed 5
 ```
-Kích thước file tải phải đúng 743.030.592 byte. Google Drive hết lượt tải thì thử lại sau hoặc hỏi P1 (có bản dự phòng trên Kaggle, xem `nguon-du-lieu.md`).
-Nhãn gốc (chỉ P1/P3 cần khi sinh lại `manifest.csv`): `curl -L -O https://wywu.github.io/projects/LAB/support/WFLW_annotations.tar.gz`.
+`drivface.zip` giải ra thư mục `DrivFace\` có `DrivImages.zip` (ảnh), `drivPoints.txt`, `readme.txt`; hai lệnh `mkdir`/`tar` thứ hai đưa ảnh vào `DrivFace\imgs\DrivImages\*.jpg` (đúng chỗ `inc_ingest.py` tìm). Các lệnh `tar -xf` trên Windows này **chưa thử**.
+Quét video chậm (10-20 phút trên CPU 4 nhân của cloud; máy Windows chưa đo); `inc_ingest.py scan` lưu cache nên chạy lại `split`/`pack` chỉ mất vài phút. Gói zip ra `data_parts\` (mỗi file <= 28 MiB).
+Chi tiết, các cờ và luật tách người: `README.md`, mục "Dữ liệu in-cabin".
 
 ## 5. Chạy thử trên 5 mặt (không cần CVAT, không cần token)
-Tạo danh sách 5 mặt F rồi chạy cả chuỗi ở chế độ chạy thử:
+Chỉ cần gói dữ liệu ở mục 4a (**không** cần video hay khung gốc): `--images data\crops` dùng chính ảnh cắt. Cách nhanh nhất là `chay.bat`, chọn 3. Hoặc gõ tay: tạo danh sách 5 mặt F rồi chạy cả chuỗi ở chế độ chạy thử:
 ```bat
-python -c "import csv;r=[x for x in csv.DictReader(open('data/manifest.csv',encoding='utf-8')) if x['set']=='F'][:5];w=csv.writer(open('data/f5_list.csv','w',newline=''));w.writerow(['wflw_image','wflw_line','seed']);[w.writerow([x['wflw_image'],x['wflw_line'],5]) for x in r]"
-python tool\m28.py all --run F5 --list data\f5_list.csv --images D:\WFLW\WFLW_images --box wflw --review auto --dry-run
+python -c "import csv;r=[x for x in csv.DictReader(open('data/manifest.csv',encoding='utf-8')) if x['set']=='F'][:5];w=csv.writer(open('data/f5_list.csv','w',newline=''));w.writerow(['image','face_idx','seed']);[w.writerow([x['image'],x['face_idx'],x['seed']]) for x in r]"
+python tool\m28.py all --run F5 --list data\f5_list.csv --images data\crops --box wflw --review auto --dry-run
 ```
 Kết quả đúng: các bước `crop`, `mediapipe`, `map50`, `flags`, `autoqc`, `overlays` đều "xong", `push` in "Chạy thử (--dry-run)" rồi dừng,
 và có `runs\F5\xml\prelabel.xml` (5 mặt × 50 điểm). Lần chạy này `low_conf` = 0 vì `t_flip` trong `config\m28_config.json` còn `null` (P2 chốt sau họp 12/10).
+Lưu ý: `config\map_mp50.json` hiện còn là ánh xạ học trên WFLW (sẽ thay ở giai đoạn 2), nên một số điểm trong 50 điểm có thể lệch nghĩa trên mặt tài xế.
 Để thấy điểm đỏ trên trang rà soát khi thử: mở `config\m28_config.json`, đổi `"t_flip": null` thành `"t_flip": 0.0672` rồi chạy lại các bước từ `flags`:
-`python tool\m28.py prepare --run F5 --list data\f5_list.csv --images D:\WFLW\WFLW_images --box wflw --force flags autoqc overlays`.
+`python tool\m28.py prepare --run F5 --list data\f5_list.csv --images data\crops --box wflw --force flags autoqc overlays`.
 (Đừng commit file config sau khi sửa số này; hoàn lại bằng `git checkout config\m28_config.json`.)
 
 ## 6. Trang rà soát (giao diện trước khi nhập CVAT)

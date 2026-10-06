@@ -23,11 +23,11 @@ Mọi đường dẫn trong kế hoạch tính từ thư mục này:
 
 ```
 m28-prelabel/
-├── tool/          m28.py, m28core/ (steps, push, collect, cvat_io, loai_tru, dang_chay, phan_loai…), review_app.py, day_cvat.py,
+├── tool/          m28.py, inc_ingest.py (nạp YawDD + DrivFace, chia tập, gói), check_manifest.py, m28core/ (steps, push, collect, cvat_io, loai_tru, dang_chay, phan_loai…), review_app.py, day_cvat.py,
 │                  dot_anh.py, dot_ui.py, nap_anh.py, ca_kho.py, cai_dat.py, cai_dat_ui.py, cai_dat_thu.py, make_label.py (giao cho khách: không torch, không ảnh)
 ├── config/        m28_config.json (50 điểm), pipeline.json (không có bí mật), face50_label.json (sinh bằng make_label.py)
 ├── snippets/      đoạn code + prompt mẫu trích từ kế hoạch, CHƯA chạy thử
-├── data/          ảnh cắt, manifest, gt*.json        ← KHÔNG commit (repo công khai)
+├── data/          manifest.csv, crops/ (ảnh cắt; có trong gói), frames/ (khung gốc; chỉ người dựng gói có)   ← KHÔNG commit
 ├── raw/ final/    file xuất CVAT                     ← KHÔNG commit
 ├── outputs/ runs/ backups/                           ← KHÔNG commit
 ├── requirements.txt / requirements-ui.txt
@@ -36,6 +36,64 @@ m28-prelabel/
 
 `snippets/<chung|p1…p5>/NN_<tên>.<đuôi>` — số thứ tự theo vị trí trong tab; dòng đầu mỗi file ghi trích
 từ mục nào. Đây là điểm xuất phát để viết code thật, không phải code đã kiểm.
+
+## Dữ liệu in-cabin (YawDD + DrivFace, từ 6/10/2026, QĐ-001)
+Tập chính là ảnh tài xế trong xe; WFLW không còn dùng (các file WFLW cũ trong `tool/` giữ để làm lịch sử, sẽ thay ở giai đoạn 2). Nguồn, điều khoản, trích dẫn: [`nguon-du-lieu.md`](nguon-du-lieu.md); trong gói zip có `sources\NOTICE.txt`.
+Ảnh người lái xe là dữ liệu nhạy cảm: chỉ dùng nội bộ nhóm, không commit, không phát tán, không đưa vào báo cáo/slide công khai (YawDD chỉ cho đăng ảnh của video có "Yes" trong `Table1.pdf`/`Table2.pdf`), không đưa vào chat AI ngoài phiên đã được phép.
+
+**Sơ đồ `data\`** (không commit):
+```
+data\manifest.csv      616 mặt, cột bên dưới           (có trong gói)
+data\crops\<file>.png   ảnh cắt 512 x 512 quanh mặt     (có trong gói)
+data\frames\<nguồn>\<mã người>\<tên>.jpg   khung gốc   (CHỈ người dựng gói có; dùng với --images data\frames)
+data\cache\            ứng viên, 478 điểm, khung nháp    (CHỈ người dựng gói có)
+data\DOC.txt, data\sources\NOTICE.txt                     (có trong gói)
+```
+**Dựng gói** (P1/chủ repo; có video và ảnh gốc): `python tool\inc_ingest.py all --yawdd "D:\incab\YawDD dataset" --drivface D:\incab\DrivFace --model face_landmarker.task --out data --seed 5`.
+`scan` (10-20 phút trên CPU 4 nhân của cloud: 349 video + 606 ảnh) dò mặt và ghi cache theo từng video (chạy lại bỏ qua video đã xong); `split` (vài chục giây) chia tập, ghi khung gốc, ảnh cắt, `manifest.csv`
+và **tất định** (cùng cache + cùng seed ⇒ manifest giống từng byte); `pack` ghi `m28_incab_part00_meta.zip` (manifest, DOC, NOTICE) và `m28_incab_partNN_of_MM.zip` (ảnh cắt), mỗi file <= 28 MiB,
+không có video/khung gốc/cache. `--limit-videos N` để thử nhanh, `--fresh` để xoá cache.
+
+**Mã người (`subject`).** YawDD `yd_F001`, `yd_M012` (giới + số trong tên video, 3 chữ số); DrivFace `df_01`..`df_04`. Không có tên thật ở đâu cả. **Dash và Mirror cùng giới + cùng số được GỘP làm một người**:
+`Readme_YawDD.pdf`, `Table1.pdf`, `Table2.pdf` không nói đó là cùng hay khác người. Xem bằng mắt (lưới ảnh Dash cạnh Mirror cùng mã, 14 cặp nữ + nam 1) và đối chiếu bảng
+(ví dụ nữ 3, 4, 5: Mirror "Caucasian", Dash "Middle Eastern"; nam 4: Mirror không râu, Dash có râu) thì **gần như chắc chắn là hai người khác nhau**. Vẫn gộp vì đó là phía an toàn của việc tách người
+(không bao giờ rò rỉ người giữa nhóm A và B); cái giá chỉ là số "người" trong manifest ít hơn số người thật (đa dạng người bị đếm thiếu). Muốn tách thì đổi `parse_yawdd` (ví dụ mã `yd_D...` cho Dash) và `SUBJECT_RE` trong `check_manifest.py`.
+
+**Tách theo người.** Nhóm A = F, Tdev, Ttest (đôi một **không chung người**); nhóm B = G, P, X, D (dùng chung người giữa các tập); **không người nào ở cả A và B**.
+Chia người vào nhóm bằng tìm kiếm có seed (thử `seed + t`, tối đa 500 lần; lấy 12 lần đạt mọi luật đầu tiên rồi chọn lần cân bằng nhất về giới, Dash, kính râm, loại kính; seed của lần được chọn ghi vào cột `seed`,
+chạy lại cùng `--seed` khởi đầu ra đúng kết quả). Luật X và `check_manifest.py` dùng chung một hàm (`x_block_errors`). Mỗi tập trải đều camera/giới/kính/trạng thái (mềm, không cứng), tối đa 3 mặt mỗi video,
+hai mặt cùng video cách nhau >= 2 giây (DrivFace: >= 3 ảnh), DrivFace chiếm khoảng 18% (4 tài xế, mỗi tập một tài xế; không để chiếm nhiều hơn), Dash khoảng 10%.
+Khối X (đúng luật cũ): 10 mặt dễ (6 cờ = 0), mỗi khối 2 mặt dễ ở `seq` 01-02, 40 mặt còn lại chia vòng 1→5, 5→1; mỗi khối 1-2 mặt `pose`, 2-4 mặt `occlusion`; thêm luật mới: mỗi khối >= 2 giới, >= 2 loại camera,
+>= 2 loại kính (không tính `unknown`), không hai khung cùng video; cả X: mỗi người <= 6 mặt, DrivFace <= 10 ảnh.
+
+**Cột `manifest.csv`** (UTF-8, `/` trong đường dẫn; đúng thứ tự này):
+`file, set, block, seq` (như WFLW cũ) · `source` (yawdd|drivface) · `camera` (dash|mirror|drivface) · `subject` · `gender` (F|M|unknown) · `glasses` (none|glasses|sunglasses|unknown) ·
+`state` (normal|talking|yawning|talking_yawning|dash|unknown; Dash không có trạng thái trong tên vì một video chứa cả lái xe thường, nói và ngáp ⇒ `dash`) · `video` (đường dẫn video trong bộ gốc, hoặc tên ảnh DrivFace bỏ dấu cách) ·
+`frame` (chỉ số khung; DrivFace = `imgNum`) · `t_s` (giây trong video, để kiểm khoảng cách; trống với DrivFace) · `image` (khung gốc, tương đối so với `data\frames`) · `face_idx` (= 0, mặt lớn nhất) · `x0,y0,x1,y1` (hộp mặt = khung bao 478 điểm,
+toạ độ ảnh gốc, 4 chữ số thập phân) · `left, top, k` (cắt lại: `x_gốc = x_cắt / k + left`) · 6 cờ (`pose, expression, illumination, makeup, occlusion, blur`, 0/1) ·
+cột đo thô (`yaw, pitch, roll` độ; `jaw_open`; `luma, contrast, bright_frac`; `lap_var`; `gaze_label, gaze_ang` của DrivFace; `pad_frac` = phần viền xám của ảnh cắt) · `seed`.
+Với DrivFace, `gender` và `glasses` là `unknown`: readme chỉ nói "2 nữ, 2 nam" và "có kính/râu", không nói người nào. Loại kính YawDD lấy từ tên video, sửa hai chỗ tên sai so với bảng (`GLASSES_FIX`: Mirror nam 5 và Dash nữ 11 là kính râm).
+
+**Sáu cờ** (heuristic, ngưỡng cố định ở đầu `inc_ingest.py`, hiệu chỉnh một lần trên dữ liệu thật 6/10/2026 rồi ghi cứng; cột đo thô để soát lại). Tỉ lệ cờ = 1 trên 616 mặt chọn (mục tiêu kế hoạch tham khảo WFLW 13/20/20/15/29/20%):
+
+| Cờ | Định nghĩa | Tỉ lệ thực tế (mục tiêu) |
+|---|---|---|
+| `pose` | YawDD: \|yaw\| >= 32 độ hoặc \|pitch\| >= 18 độ, ước lượng từ ma trận biến đổi mặt của MediaPipe (hệ camera, không trừ độ lệch camera: camera Mirror nằm lệch nên mặt nhìn thẳng đã có yaw ~ +23 độ). DrivFace: `label` 1/3 (nhìn phải/trái theo bộ), vì camera DrivFace cũng lệch trục (yaw nhìn thẳng ~ +10 độ; yaw đo được tương quan 0,90 với góc `ang` của bộ) | 17% (10-30%) |
+| `expression` | `jaw_open` (blendshape jawOpen) >= 0,40: miệng mở lớn (ngáp, nói to). Không gán theo nhãn video; khi chọn mặt thì mỗi video lấy mặt miệng mở trước ở vòng đầu. Ngưỡng 0,2 cho 35% mặt: quá nhiều | 25% (15-35%) |
+| `illumination` | vùng mặt tối (luma < 70), sáng gắt (luma > 170 hoặc > 8% điểm cháy sáng >= 240) hoặc tương phản thấp (độ lệch chuẩn < 28) | 12% (10-25%) |
+| `makeup` | **luôn 0**: không ước lượng được trên bộ này (giữ cột cho khớp kế hoạch) | 0% (0%) |
+| `occlusion` | kính râm (từ tên video + `GLASSES_FIX`). Che miệng bằng tay khi ngáp **không** dùng vì chưa có cách ước lượng ổn định. DrivFace không có thông tin kính theo từng người ⇒ 0 | 12% (10-30%) |
+| `blur` | phương sai Laplacian vùng mặt (xám, chuẩn hoá về 128 x 128) < 170 (YawDD) hoặc < 75 (DrivFace; mặt nhỏ ~110 px nên Laplacian thấp hơn hẳn). Chủ yếu bắt mặt mờ/mềm của camera Dash và ảnh DrivFace | 12% (10-25%) |
+
+Đã xem lưới ảnh có cờ = 1 và = 0 cho từng cờ (ảnh ở `ui_shots` của phiên dựng): `pose` bắt đúng mặt quay nghiêng; `expression` bắt miệng há rộng, bỏ miệng cười/khép; `illumination` bắt mặt tối, chói nắng, xám phẳng;
+`occlusion` toàn kính râm; `blur` bắt ảnh mềm/mờ chuyển động. Cờ chỉ là phân loại thô để chia tập khó/dễ, không phải nhãn đúng sai.
+
+**Định dạng ảnh cắt: giữ PNG.** Đo trên 616 ảnh cắt (ước lượng từ 40 ảnh ngẫu nhiên): PNG mức 6 **128 MiB** (mức 9: 123 MiB nhưng chậm gấp ~8 lần), JPEG q95 31 MiB, JPEG q90 22 MiB. PNG = 5 phần zip 28 MiB (< 12 phần) +
+1 phần meta, không mất dữ liệu cho việc gán điểm và không phải đổi đuôi `.png` ở `check_manifest`, `ca_kho.py`, test, tài liệu. Khung gốc JPEG (YawDD: chất lượng 95; DrivFace: giữ nguyên byte gốc).
+
+**Cách dùng với `--list`, `--set`, `--box`:** xem mục "Các lệnh" bên dưới. Người chỉ có gói (không có `data\frames`) chạy `--images data\crops --box wflw` (dùng chính ảnh cắt); người dựng gói chạy `--images data\frames --box auto`
+(ảnh cắt pipeline sinh ra trùng ảnh cắt của gói: sai khác điểm ảnh trung bình <= 0,0002).
+**Ghi chú:** `config\map_mp50.json` hiện vẫn là ánh xạ 478→50 học trên WFLW; trên mặt tài xế một số điểm có thể lệch nghĩa (xem ảnh chồng). Sẽ thay ở giai đoạn 2 (chọn đỉnh trực tiếp).
 
 ## Cài đặt và chạy
 ```bat
@@ -55,14 +113,18 @@ trường `CVAT_ACCESS_TOKEN`, `CVAT_URL` (không ghi giá trị vào file, code
 
 ### Các lệnh (cmd, từ thư mục `source-tool\m28-prelabel`)
 ```bat
-python tool\m28.py prepare --run R1610 --list data\r_list_1610.csv --images D:\WFLW\WFLW_images --box auto
+python tool\m28.py prepare --run R1610 --list data\r_list_1610.csv --images data\frames --box auto
 python tool\m28.py review  --run R1610 --review ui --reviewer P5
-python tool\m28.py push    --run R1610 --images D:\WFLW\WFLW_images --task demo-R1610 --review-file triage_P5.csv
+python tool\m28.py push    --run R1610 --images data\frames --task demo-R1610 --review-file triage_P5.csv
 python tool\m28.py collect --task demo-R1610
-python tool\m28.py all     --run thuP1 --list data\f5_list.csv --images D:\WFLW\WFLW_images --box wflw --review auto --task demo-thuP1
+python tool\m28.py all     --run thuP1 --list data\f5_list.csv --images data\crops --box wflw --review auto --task demo-thuP1
 ```
-- `--box wflw`: lấy hộp mặt từ `data\manifest.csv`, XML theo toạ độ **ảnh cắt 512**, `push` tải ảnh cắt `runs\<run>\crop\images\`.
-  `--box auto`: tự dò mặt, XML theo toạ độ **ảnh gốc** (điểm ra ngoài ảnh kẹp vào mép), `push` tải ảnh gốc (nhớ `--images`).
+- `--box wflw` (tên giữ vì lịch sử): lấy hộp mặt từ cột `x0,y0,x1,y1` của `data\manifest.csv` (manifest in-cabin mới hay WFLW cũ đều chạy), XML theo toạ độ **ảnh cắt 512**, `push` tải ảnh cắt `runs\<run>\crop\images\`.
+  `--box auto` (chế độ chính cho in-cabin): tự dò mặt, XML theo toạ độ **ảnh gốc** (điểm ra ngoài ảnh kẹp vào mép), `push` tải ảnh gốc (nhớ `--images data\frames`).
+- `--list`: CSV có cột `image,face_idx` (manifest in-cabin, mới) **hoặc** `wflw_image,wflw_line` (WFLW cũ); khoá nội bộ là `(image, face_idx)` / `(wflw_image, wflw_line)`. `--set F Tdev …` lọc theo cột `set` của `manifest.csv`.
+- **Người trong đội chỉ có gói (ảnh cắt + manifest, không có khung gốc):** dùng `--images data\crops`. Khi `<images>\<image>` không tồn tại mà `<images>\<file>` (ví dụ `data\crops\F_001.png`) tồn tại,
+  `m28.py` dùng chính ảnh cắt đó và đổi hộp mặt sang toạ độ ảnh cắt `((x0-left)*k, (y0-top)*k, (x1-left)*k, (y1-top)*k)`; `square_crop` lại ra (gần như) đúng ảnh cũ.
+  Chạy với `--box wflw` (XML theo ảnh cắt 512, đúng như đường chạy thử của `chay.bat` mục 3).
   `prepare` ghi chế độ vào `runs\<run>\crop\box.txt`; `push` đọc lại từ đó, không cần gõ lại `--box`.
 - `--review ui` (mặc định, trang của P2 chỉ ở 127.0.0.1) | `excel` | `auto` (theo gợi ý autoqc, chỉ để chạy thử/demo).
   `--review excel`: mở `runs\<run>\autoqc\autoqc.csv` bằng Excel, điền cột `decision` (`nhan`/`gan_tay`/`bo`) và `reason`,
@@ -328,10 +390,17 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 | P2/P4 | `m28core.qc.run` | `run(xml_paths, outputs_dir)` → chuỗi tóm tắt hoặc `None`; module tuỳ chọn, `collect` gọi nếu có | `collect` | chưa ai xác nhận |
 
 ## Đầu vào / đầu ra
-- Vào: thư mục ảnh (hoặc danh sách ảnh WFLW + hộp mặt), `config/m28_config.json`.
+- Vào: thư mục ảnh (hoặc danh sách `image,face_idx` + hộp mặt từ `manifest.csv`), `config/m28_config.json`.
 - Ra: `runs/<run>/…` (ảnh chồng, cờ, `triage_<Pk>.csv`, `push\manual_list.txt` (loại `co_nhap`/`anh_trong`), `ca_kho.csv`), `outputs/ca_kho/` (gói họp, phiên họp, biên bản), task CVAT `demo-…`, file xuất `raw/<task>_<Pk>_<ngày>.xml`.
 
 ## Đã thử trên
+- **Dữ liệu in-cabin thật** (6/10/2026, Linux cloud, Python 3.11, mediapipe 1.0.1, 4 nhân CPU, không GPU; Windows, Python 3.14 **chưa thử**): `tool\inc_ingest.py` trên YawDD (349 video: 29 Dash + 320 Mirror, tất cả khớp regex tên) và DrivFace (606/606 ảnh khớp tên, `raw+.jpg`).
+  `scan`: 10.377 khung đọc, 3.149 ứng viên (YawDD 2.980 từ 349 video, DrivFace 169), loại: không thấy mặt 44, có điểm ngoài khung ảnh 34, gần trùng 6.597, vượt trần 553; 94 người (90 `yd_`, 4 `df_`).
+  `split` seed khởi đầu 5, **seed thực dùng 19**: F 300 (33 người), Tdev 100 (20), Ttest 100 (20), G 20 (11), P 16 (9), X 50 (21), D 30 (16) = 616 mặt, 73 người ở nhóm A, 21 ở nhóm B, 0 người chung; 333 video, tối đa 3 mặt/video;
+  `check_manifest.py` đạt. `pack`: 5 phần ảnh (27,8 / 27,8 / 27,8 / 27,8 / 17,0 MiB) + meta 0,18 MiB; giải nén bằng `bsdtar` vào thư mục trống, `check_manifest` đạt, md5 616 ảnh khớp `crops` gốc.
+  Pipeline trên 5 mặt F thật: `prepare --box auto --images data\frames` (6 bước xong, ảnh cắt pipeline trùng ảnh cắt trong gói), `review --review auto`, `push --review auto --dry-run` ra XML 5 x 50 điểm (tên ảnh = tên khung gốc);
+  và lượt chỉ có gói (`--images data\crops --box wflw`, không có khung gốc) ra XML 5 x 50 điểm 512 x 512, ảnh cắt trùng từng điểm ảnh. Ảnh chồng: điểm nằm trên mặt (ánh xạ WFLW cũ làm một số điểm hàm/lông mày lệch, xem ghi chú ở mục dữ liệu).
+  Chưa thử: `cv2` đọc `.avi` YawDD trên Windows (codec), `tar -xf` của Windows với `.rar`, MediaPipe trên Python 3.14, `chay.bat` mục 3 trong cmd thật.
 - **Ca khó và họp team** (6/10/2026, Linux cloud, Python 3.11, Gradio 6.29.1, Chromium headless): `tests/test_ca_kho.py` (88 test, gồm zip độc hại, biên bản so khớp mẫu) và `tests/e2e_ca_kho.py` (đánh dấu, tab Ca khó, xuất/tải gói, nhập gói, lưới, trình chiếu, mở lại phiên, biên bản). Chưa thử: Windows/cmd, Python 3.14, kéo thả bằng chuột thật, toàn màn hình thật, Excel mở CSV.
 - Test dữ liệu giả (`tests/`) trên Linux, Python 3.11, bằng landmarker/mapping/push/collect giả.
 - **Ảnh WFLW thật, MediaPipe thật** (5/10/2026, Linux cloud, Python 3.11, mediapipe 1.0.1, `face_landmarker.task`
