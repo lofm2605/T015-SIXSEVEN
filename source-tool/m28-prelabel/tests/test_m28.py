@@ -403,9 +403,10 @@ def test_push_real_with_fake_push(tmp_path, world, monkeypatch, capsys):
     assert sorted(os.path.basename(p) for p in c['nhan']) == ['face_a.png', 'face_c.png']
     assert [os.path.basename(p) for p in c['tay']] == ['face_b.png']
     assert not set(c['nhan']) & set(c['tay']) and all(os.path.exists(p) for p in c['nhan'] + c['tay'])
-    assert sorted(read_xml('A')) == sorted(os.path.basename(p) for p in c['nhan'])   # ảnh tải lên = ảnh XML dùng
+    assert sorted(read_xml('A')) == sorted(os.path.basename(p) for p in c['nhan'] + c['tay'])   # XML = Nhận + Gán tay có nháp (face_b có nháp)
     assert os.path.exists('runs/A/push/done.txt')
-    assert open('runs/A/push/manual_list.txt').read() == 'face_b.png'
+    assert steps.read_manual_list('runs/A/push/manual_list.txt') == [('face_b.png', 'co_nhap')]
+    assert open('runs/A/push/manual_list.txt').read() == 'face_b.png\tco_nhap'
     m28.main(['push', '--run', 'A', '--review', 'auto', '--images', str(imgs), '--task', 'demo-A'])
     assert len(world.push) == 1 and 'bỏ qua push' in capsys.readouterr().out
 
@@ -697,4 +698,27 @@ def test_dot_plan_counts_equal_steps_push(tmp_path, world, capsys):
     n, t, b, x = map(int, re.search(r'push: (\d+) mặt nhận, (\d+) mặt gán tay, (\d+) bỏ, (\d+) đã xoá mềm', out).groups())
     p = day_cvat.plan_counts(rd, 'auto', os.getcwd())
     assert (p['nhan'], p['tay'], p['bo'], p['xoa']) == (n, t, b, x) == (2, 0, 2, 1)
+    assert re.search(r'gán tay: 0 có nháp .*, 0 ảnh trống', out) and (p['tay_nhap'], p['tay_trong']) == (0, 0)
     assert p['jobs'] == 1 and p['remaining'] == 0
+
+    # Gán tay có nháp và Gán tay ảnh trống: F_001 (có nháp) và F_004 (ảnh đen, MediaPipe không thấy mặt, không có nháp) chuyển sang Gán tay
+    path = os.path.join(rd, 'review', 'triage_auto.csv')
+    rows = [r for r in csv.reader(open(path, encoding='utf-8'))]
+    for r in rows[1:]:
+        if r[0] in ('F_001.png', 'F_004.png'):
+            r[1] = 'gan_tay'
+    csv.writer(open(path, 'w', encoding='utf-8', newline='')).writerows(rows)
+    with pytest.raises(SystemExit):
+        m28.main(['push', '--run', 'W', '--review', 'auto', '--dry-run', '--force', 'push'])
+    out = capsys.readouterr().out
+    n, t, b, x = map(int, re.search(r'push: (\d+) mặt nhận, (\d+) mặt gán tay, (\d+) bỏ, (\d+) đã xoá mềm', out).groups())
+    m_ = re.search(r'gán tay: (\d+) có nháp \(mọi điểm low_conf=true\), (\d+) ảnh trống', out)
+    assert m_ and (int(m_.group(1)), int(m_.group(2))) == (1, 1)
+    p = day_cvat.plan_counts(rd, 'auto', os.getcwd())
+    assert (p['nhan'], p['tay'], p['bo'], p['xoa']) == (n, t, b, x) == (1, 2, 1, 1)
+    assert (p['tay_nhap'], p['tay_trong']) == (1, 1)                              # bằng số steps.push in ra
+    assert sorted(read_xml('W')) == ['F_001.png', 'F_002.png']                    # Nhận F_002, rồi Gán tay có nháp F_001; F_004 (ảnh trống) không có
+    assert [(n, im.get('id')) for n, im in read_xml('W').items()] == [('F_002.png', '0'), ('F_001.png', '1')]      # Nhận trước, Gán tay có nháp nối sau
+    assert all(a.text == 'true' for a in read_xml('W')['F_001.png'].iter('attribute'))
+    assert steps.read_manual_list('runs/W/push/manual_list.txt') == [('F_001.png', 'co_nhap'), ('F_004.png', 'anh_trong')]
+    assert re.search(r'push\tdung\t[\d.]+s\tgan_tay co_nhap=1 anh_trong=1', open('runs/W/log.txt', encoding='utf-8').read())

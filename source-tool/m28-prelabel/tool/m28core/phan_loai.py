@@ -5,6 +5,7 @@ Cũng chứa các hàm đọc thuần dùng chung (read_triage, read_no_face) đ
 """
 import csv
 import io
+import math
 import os
 
 DECISIONS = ("nhan", "gan_tay", "bo")
@@ -47,12 +48,38 @@ def read_no_face(run_dir):
     return {r["name"]: r["reason"] for r in reversed(rows)}
 
 
-def classify(triage, meta, mp50, no_face, excluded=frozenset()):
+def _hai_so_huu_han(v):
+    """True khi v là danh sách/bộ đúng 2 số hữu hạn (không bool, không None, không NaN/inf)."""
+    if not isinstance(v, (list, tuple)) or len(v) != 2:
+        return False
+    return all(isinstance(c, (int, float)) and not isinstance(c, bool) and math.isfinite(c) for c in v)
+
+
+def nhap_hop_le(entry, point_names=None):
+    """Nháp của máy (một phần tử của mp50.json) có dùng được cho mặt Gán tay không: `entry` là dict có "orig" là dict, có đủ mọi tên
+    trong point_names (None thì đòi đúng 50 khoá), mỗi giá trị là 2 số hữu hạn. Chỉ thư viện chuẩn."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("orig"), dict):
+        return False
+    orig = entry["orig"]
+    if point_names is None:
+        if len(orig) != 50:
+            return False
+        keys = list(orig)
+    else:
+        keys = list(point_names)
+        if not keys or any(k not in orig for k in keys):
+            return False
+    return all(_hai_so_huu_han(orig[k]) for k in keys)
+
+
+def classify(triage, meta, mp50, no_face, excluded=frozenset(), point_names=None):
     """triage {tên: (quyết định, lý do)}; meta/mp50 chứa khoá tên (đúng thứ tự meta.json); no_face {tên: lý do}; excluded: tên bị xoá mềm.
 
     Trả dict:
       nhan      mặt chọn Nhận và có nháp (mp50), theo thứ tự meta
-      tay       mặt chọn Gán tay, và mặt chọn Nhận nhưng không có nháp (đưa sang Gán tay), theo thứ tự meta
+      tay       mặt chọn Gán tay, và mặt chọn Nhận nhưng không có nháp (đưa sang Gán tay), theo thứ tự: tay_nhap rồi tay_trong
+      tay_nhap  Gán tay CÓ nháp hợp lệ (nhap_hop_le): lên CVAT kèm nháp 50 điểm, mọi điểm low_conf=true, theo thứ tự meta
+      tay_trong Gán tay ẢNH TRỐNG (không có nháp, hoặc nháp không hợp lệ; gồm cả nhan_khong_nhap), theo thứ tự meta
       nhan_khong_nhap  tên các mặt chọn Nhận nhưng không có nháp (cảnh báo)
       lost      mặt chọn Gán tay nhưng không có ảnh cắt (không tải lên được)
       rejected  [(tên, lý do)] mặt Bỏ (kèm mặt no_face chưa có quyết định)
@@ -62,14 +89,18 @@ def classify(triage, meta, mp50, no_face, excluded=frozenset()):
     dec = lambda n: triage.get(n, ("", ""))[0]                    # noqa: E731
     names = [n for n in meta if n not in excluded]
     nhan = [n for n in names if dec(n) == "nhan" and n in mp50]
-    tay = [n for n in names if dec(n) == "gan_tay" or (dec(n) == "nhan" and n not in mp50)]
+    tay_all = [n for n in names if dec(n) == "gan_tay" or (dec(n) == "nhan" and n not in mp50)]
+    tay_nhap = [n for n in tay_all if n in mp50 and nhap_hop_le(mp50[n], point_names)]
+    co_nhap = set(tay_nhap)
+    tay_trong = [n for n in tay_all if n not in co_nhap]
+    tay = tay_nhap + tay_trong
     no_draft = [n for n in names if dec(n) == "nhan" and n not in mp50]
     lost = [n for n in no_face if n not in meta and n not in excluded and dec(n) == "gan_tay"]
     rejected = [(n, triage[n][1]) for n in triage if dec(n) == "bo" and n not in excluded] + \
                [(n, why) for n, why in no_face.items() if dec(n) not in DECISIONS and n not in excluded]
     universe = set(meta) | set(no_face) | set(triage)
     removed = [(n, "da_xoa") for n in sorted(excluded & universe)]
-    return dict(nhan=nhan, tay=tay, nhan_khong_nhap=no_draft, lost=lost, rejected=rejected, removed=removed)
+    return dict(nhan=nhan, tay=tay, tay_nhap=tay_nhap, tay_trong=tay_trong, nhan_khong_nhap=no_draft, lost=lost, rejected=rejected, removed=removed)
 
 
 def n_jobs(n_nhan, n_tay, job_size=8):

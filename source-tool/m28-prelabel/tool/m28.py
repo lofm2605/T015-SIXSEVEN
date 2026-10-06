@@ -26,7 +26,8 @@ PREPARE = ["crop", "mediapipe", "map50", "flags", "autoqc", "overlays"]
 def _log(args, name, status, t0):
     os.makedirs(os.path.join("runs", args.run), exist_ok=True)
     with open(os.path.join("runs", args.run, "log.txt"), "a", encoding="utf-8") as f:
-        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{name}\t{status}\t{time.time() - t0:.1f}s\n")
+        detail = steps._LOG_DETAIL.pop(name, "")      # chi tiết bước (ví dụ push: gan_tay co_nhap=a anh_trong=b)
+        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{name}\t{status}\t{time.time() - t0:.1f}s" + (f"\t{detail}" if detail else "") + "\n")
 
 
 def run_step(name, args):

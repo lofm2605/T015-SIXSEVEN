@@ -959,7 +959,7 @@ def info_html(store, face, status, warn):
     body = "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in rows)
     warns = ""
     if not face.has_draft:
-        warns += '<div class="m28-warn">Mặt này không có nháp: chỉ chọn Gán tay hoặc Bỏ ảnh (nút Nhận đã khoá).</div>'
+        warns += '<div class="m28-warn">Mặt này không có nháp: chỉ chọn Gán tay hoặc Bỏ ảnh (nút Nhận đã khoá). Gán tay mặt này lên CVAT là <b>ảnh trống</b>.</div>'
     if warn:
         warns += f'<div class="m28-warn">{html.escape(warn)}</div>'
     return f'<table class="m28-info">{body}</table>{warns}'
@@ -1007,7 +1007,8 @@ def make_view(store, ses, msg="", level="info"):
 
 # ---------- giao diện Gradio ----------
 GUIDE_HTML = ('<div class="m28-guide"><b>Nhận</b>: đúng dáng mặt, chỉ cần kéo nhẹ · <b>Gán tay</b>: lật gương, dồn cục, '
-              'lệch cả vùng, quay/che nhiều, nhiều mặt · <b>Bỏ</b>: không mặt, sai mặt, mờ/nhỏ · '
+              'lệch cả vùng, quay/che nhiều, nhiều mặt (lên CVAT ở job riêng <b>kèm nháp, mọi điểm đánh dấu low_conf</b>: kiểm kỹ từng điểm, '
+              'giữ điểm đúng, sửa điểm sai; mặt không có nháp thì lên ảnh trống) · <b>Bỏ</b>: không mặt, sai mặt, mờ/nhỏ · '
               '<b>Phân vân Nhận/Gán tay → chọn Nhận</b></div>')
 KEYS_HTML = ('<div class="m28-keys"><b>Chỉ mở một tab. Chọn lý do (nếu có) trước, rồi mới bấm Gán tay / Bỏ ảnh.</b><br>'
              '<kbd>N</kbd> Nhận · <kbd>G</kbd> Gán tay · <kbd>B</kbd> Bỏ ảnh · '

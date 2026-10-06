@@ -14,7 +14,7 @@ Một lệnh `tool/m28.py` chạy offline trên CPU:
 |---|---|---|
 | `prepare` | Cắt mặt, chạy MediaPipe (ảnh gốc + ảnh lật), đổi 478 → 50 điểm, gắn cờ `low_conf`, tự kiểm (autoqc), vẽ ảnh chồng | Tự động |
 | `review` | Trang rà soát Gradio ở 127.0.0.1: mỗi mặt bấm Nhận / Gán tay / Bỏ ảnh | Người rà |
-| `push` | Tạo task CVAT **mới** tên `demo-…` (mặt Nhận chia job 8 mặt, mặt Gán tay ở một job riêng cuối task), nhập nhãn nháp đúng một lần, xuất lại để kiểm; bản đầu, **chưa thử trên CVAT thật** | Tự động, trên CVAT của chính máy đó (hoặc nút **Đẩy lên CVAT** trên trang rà soát) |
+| `push` | Tạo task CVAT **mới** tên `demo-…` (mặt Nhận chia job 8 mặt; mặt Gán tay ở một job riêng cuối task, **kèm nháp 50 điểm với mọi điểm `low_conf`** để người gán kiểm kỹ từng điểm, mặt không có nháp thì lên **ảnh trống**), nhập nhãn nháp đúng một lần, xuất lại để kiểm; bản đầu, **chưa thử trên CVAT thật** | Tự động, trên CVAT của chính máy đó (hoặc nút **Đẩy lên CVAT** trên trang rà soát) |
 | `collect` | Sau khi gán: xuất nhãn (chỉ đọc, không nhập) về `raw\`, báo cáo ngắn ở `outputs\`; bản đầu, **chưa thử trên CVAT thật** | Tự động |
 | `all` | `prepare` → `review` (mở trang; bấm Xong thì đi tiếp) → `push`; đóng trang khi chưa bấm Xong thì dừng, gõ lại đúng lệnh (`collect` chạy riêng sau khi có người gán) | |
 
@@ -74,12 +74,13 @@ python tool\m28.py all     --run thuP1 --list data\f5_list.csv --images D:\WFLW\
 - Mỗi bước ghi vào `runs\<run>\<bước>\` (`crop`, `mediapipe`, `map50`, `flags`, `autoqc`, `overlays`, `review`, `push`)
   và để `done.txt` khi xong thật; lần sau in "bỏ qua". `runs\<run>\log.txt` ghi giờ, bước, kết quả (`xong`/`bo_qua`/`dung`/`loi`).
   `runs\<run>\no_face.csv` (cột `name,reason,step`) liệt kê mặt không dùng được.
-- Mặt Gán tay lên task không có nháp, ở job riêng (`runs\<run>\push\manual_list.txt`); mặt Bỏ ghi `push\rejected.csv`.
+- Mặt Gán tay lên task ở job riêng cuối task: **Gán tay có nháp** (nháp của máy, mọi điểm `low_conf=true`) hoặc **Gán tay ảnh trống** (mặt không có nháp). `runs\<run>\push\manual_list.txt` ghi mỗi dòng `<tên ảnh>`, một dấu Tab, rồi `co_nhap` hoặc `anh_trong` (có nháp trước); đọc bằng `steps.read_manual_list` (đọc được cả định dạng cũ, mỗi dòng một tên = `anh_trong`). Mặt Bỏ ghi `push\rejected.csv`.
   Mặt `no_face` mặc định là Bỏ. Hai mặt cùng một ảnh gốc ở `--box auto` bị từ chối (CVAT cấm tên ảnh trùng).
 
 ## Trang rà soát
 Người rà xem nháp 50 điểm trên ảnh chồng và bấm **Nhận / Gán tay / Bỏ ảnh** cho từng mặt, trước khi nhập vào CVAT
-(sửa điểm vẫn làm trong CVAT, trang này không có công cụ kéo điểm).
+(sửa điểm vẫn làm trong CVAT, trang này không có công cụ kéo điểm). **Gán tay** = mặt lên CVAT ở job riêng **kèm nháp, mọi điểm đánh dấu `low_conf`**: kiểm kỹ từng điểm, giữ điểm đúng, sửa điểm sai
+(mặt không có nháp thì lên ảnh trống). Phân vân Nhận/Gán tay thì chọn Nhận.
 ```bat
 python -m pip install -r requirements-ui.txt
 python tool\m28.py review --run R1610 --reviewer P5
@@ -95,7 +96,7 @@ python tool\review_app.py --nap P5
 - Đổi bộ lọc thì tự chuyển sang mặt đầu của danh sách lọc; lọc ra 0 mặt thì hiện thông báo và khoá N/G/B. Bấm lại đúng quyết định đang có thì không ghi thêm dòng.
 - Server chỉ nhận Host `127.0.0.1`/`localhost` và chỉ phát file trong `overlays`, `crop\images`, `_tmp` của lượt. Ảnh chồng hỏng/thiếu thì vẽ lại tạm từ ảnh cắt (hoặc ảnh xám), trang không sập.
 - Mặt đáng ngờ (autoqc `nen_gan_tay`/`can_xem`, nhiều cờ `low_conf`) lên đầu. Mặt MediaPipe không thấy mặt (`no_face.csv`) mà còn ảnh cắt
-  cũng vào hàng đợi, **không có nháp**: nút Nhận bị khoá, chỉ Gán tay hoặc Bỏ. Mặt không còn ảnh cắt không vào hàng đợi, `push` tự xếp vào Bỏ.
+  cũng vào hàng đợi, **không có nháp**: nút Nhận bị khoá, chỉ Gán tay hoặc Bỏ; Gán tay mặt này lên CVAT là **ảnh trống**. Mặt không còn ảnh cắt không vào hàng đợi, `push` tự xếp vào Bỏ.
 - Mỗi lần bấm ghi ngay một dòng vào `runs\<run>\review\triage_<người rà>.csv` (`name,decision,reason,seconds`, tên có đuôi `.png`; `seconds` là
   khoảng giữa hai lần bấm quyết định, mốc đầu là lúc trang tải) rồi tự sang mặt chưa rà kế tiếp. Bấm ảnh trong lưới để xem lại và đổi quyết định.
   Đóng ngang chừng (kể cả bị tắt đột ngột) không mất dòng nào đã bấm: gõ lại đúng lệnh thì làm tiếp, bỏ qua mặt đã rà.
@@ -103,7 +104,7 @@ python tool\review_app.py --nap P5
 | Phím | Việc | Phím | Việc |
 |---|---|---|---|
 | `N` | Nhận (khoá với mặt không có nháp) | `←` / `→` | Mặt trước / sau trong danh sách đang lọc |
-| `G` | Gán tay | `0` | Lý do "(không)" |
+| `G` | Gán tay (lên CVAT kèm nháp, mọi điểm `low_conf`; mặt không có nháp: ảnh trống) | `0` | Lý do "(không)" |
 | `B` | Bỏ ảnh | `1`…`8` | Lý do: `LAT_GUONG`, `DON_CUC`, `LECH_VUNG`, `QUAY_CHE`, `NHIEU_MAT`, `KHONG_MAT`, `SAI_MAT`, `MO_NHO` |
 | `Z` | Hoàn tác lần bấm gần nhất | | |
 
@@ -162,14 +163,17 @@ Dưới nút **Xong** có khung **Đẩy lên CVAT**: bấm là đẩy lượt �
 - **Link và token CVAT:** lấy từ tab **Cài đặt** (cách chính: nhập link `http://localhost:8080` và token, bấm Lưu) hoặc biến môi trường `CVAT_URL` / `CVAT_ACCESS_TOKEN` (tuỳ chọn `CVAT_ORG`), đọc lại mỗi lần vẽ;
   tiến trình con nhận chúng qua môi trường của nó. Thiếu thì nút khoá và trang hiện hướng dẫn (mở tab Cài đặt; hoặc đóng trang, trong **cùng cửa sổ cmd** gõ `set CVAT_URL=http://localhost:8080` và `set CVAT_ACCESS_TOKEN=<token của bạn>` rồi mở lại).
   **Khung Đẩy lên CVAT không có ô nhập nào** (ô token duy nhất nằm ở tab Cài đặt); token không bao giờ hiện trên trang, không đi qua đối số dòng lệnh, và bị lọc khỏi log (`***`).
-- **Hộp xác nhận** (nút **Huỷ** là mặc định có focus, **Esc** = Huỷ): tên task `demo-<lượt>`, số Nhận / Gán tay / Bỏ (tính bằng đúng `m28core.phan_loai.classify` mà `steps.push` dùng),
+- **Hộp xác nhận** (nút **Huỷ** là mặc định có focus, **Esc** = Huỷ): tên task `demo-<lượt>`, số Nhận / Gán tay (tách **có nháp** và **ảnh trống**) / Bỏ (tính bằng đúng `m28core.phan_loai.classify` mà `steps.push` dùng, với `mp50.json` thật và tên 50 điểm của `config\m28_config.json`),
   số job dự kiến, địa chỉ CVAT, và câu "chỉ tạo task MỚI, không đụng task `m28-`". Hộp mở thì phím N/G/B/Z/←/→/0–8 không tác dụng.
 - **Đang chạy:** thanh tiến độ theo pha (kiểm tra, kết nối, project, tải ảnh, nhập nhãn, xuất kiểm), log (đã lọc token), thời gian, nút **Huỷ** (`terminate`, 5 giây, `kill`; sau huỷ
   trang đọc `push.json` và nói task đã tạo dở hay chưa, kèm lệnh `--resume` / `--cleanup`). Rà vẫn bấm được trong lúc đẩy (sự kiện riêng `push`, `push_tick`, `push_huy`);
   **Xong** bị từ chối khi đang đẩy.
-- **Xong:** thẻ kết quả có tên task, id, link `CVAT_URL/tasks/<id>` (mở tab mới, `rel="noopener"`), số job (Nhận / Gán tay), kết quả kiểm `check.zip`. **Lỗi:** nguyên nhân tiếng Việt (dòng cuối của tiến trình
+- **Xong:** thẻ kết quả có tên task, id, link `CVAT_URL/tasks/<id>` (mở tab mới, `rel="noopener"`), số job (Nhận / Gán tay), số Gán tay có nháp / ảnh trống, kết quả kiểm `check.zip` (cả mặt Nhận lẫn mặt Gán tay có nháp). **Lỗi:** nguyên nhân tiếng Việt (dòng cuối của tiến trình
   con) và bước tiếp theo; traceback không hiện trên trang (vẫn nằm trong `runs\<lượt>\push_log.txt`).
 - Vì chạy qua `m28.py push` nên `runs\<lượt>\push\done.txt` được ghi: sau đó `m28.py all`/`push` gõ ở cmd in "bỏ qua push". Xoá task rồi (xem dưới) thì `done.txt` bị gỡ và đẩy lại được.
+
+**"Gán tay" trên trang rà soát khác điều kiện "gán tay" của thí nghiệm.** Nút Gán tay chỉ ảnh hưởng task `demo-…` do `m28.py push` tạo: mặt lên job riêng kèm nháp, mọi điểm `low_conf`. Thí nghiệm bấm giờ 14–15/10 dùng task `m28-manual` (không nháp) và `m28-assisted` khôi phục từ `backups\`, không đi qua nút này nên không đổi. Không dùng số đo trên task `demo-…` làm mốc "gán tay" của thí nghiệm.
+(Đã kiểm trong code: `push.check_prefix`/`check_task_name` chỉ cho task `demo-…` (`cvat_io.SAFE_PREFIX`); `collect` không gọi CVAT với task không `demo-`; `tool\` không có `build_backups.py` hay `tasks.json`, đường dựng task thí nghiệm là của P4, từ `backups\`.)
 
 ### Ca khó và họp team
 Ba phần cùng nằm trong trang rà soát (chỉ 127.0.0.1), mã trong `tool/ca_kho.py`:
@@ -259,8 +263,11 @@ python tool\m28.py collect --task demo-Khoi --dry-run                   rem ch�
   tìm project theo tên (hơn một thì dừng; chưa có thì tạo từ `face50_label.json`; có rồi thì kiểm label `face50` đủ 50 sublabel đúng tên) → dừng nếu đã có task cùng tên trong project → `create_from_data` (`spec={"name","project_id"}` không labels, `ResourceType.LOCAL`,
   `image_quality` 95, `use_cache` True, `job_file_mapping` = các nhóm `job_size` mặt Nhận theo thứ tự + **một job Gán tay riêng ở cuối**; không dùng `sorting_method`, `segment_size`, `annotation_path`) → kiểm số job → kiểm tên frame khớp tên ảnh trong XML
   (khác thứ tự thì ghi `runs\<lượt>\xml\prelabel_cvat.xml` với `id` ảnh ghép theo **tên**, không sửa `prelabel.xml`) → `import_annotations("CVAT 1.1", …)` **đúng một lần, chỉ khi task còn 0 nhãn** → `export_dataset("CVAT for images 1.1", check.zip, include_images=False)` → kiểm mỗi mặt Nhận có skeleton
-  `face50` đủ 50 tên điểm kèm `low_conf`, mặt Gán tay không có nhãn. Dòng cuối: `push xong: task <tên> id <id>, <n> job (<a> Nhận, <b> Gán tay), <url>`.
-- **`push.json`** (ghi nguyên tử): `trang_thai` `dang_tao` (ghi trước khi gọi `create_from_data`) → `da_tao` (có `task_id`, `jobs`) → `da_nhap` → `xong` (có `check`, `task_url`); lỗi thì giữ trạng thái và ghi `loi` (đã lọc token); `task_deleted` sau khi xoá task.
+  `face50` đủ 50 tên điểm kèm `low_conf`, mặt **Gán tay có nháp** có đúng một skeleton `face50` đủ 50 điểm với **mọi** `low_conf = true`, mặt **Gán tay ảnh trống** không có nhãn. Dòng cuối: `push xong: task <tên> id <id>, <n> job (<a> Nhận, <b> Gán tay), <url>`.
+- **Gán tay có nháp / ảnh trống:** `steps.push` phân loại bằng `phan_loai.classify` (`tay_nhap` = mặt Gán tay có nháp hợp lệ trong `mp50.json`: đủ 50 điểm, mỗi điểm 2 số hữu hạn; `tay_trong` = còn lại, gồm mặt chọn Nhận mà không có nháp) và ghi XML = mặt Nhận (id `0…`, cờ thật của `flags.json`)
+  rồi mặt Gán tay có nháp (id nối sau, mọi `low_conf=true`). `m28core.push.push` (chữ ký không đổi) suy ra nhóm Gán tay có nháp từ XML: ảnh Gán tay nào có `<image>` trong XML thì được nhập nháp, còn lại là ảnh trống; XML có ảnh không thuộc Nhận ∪ Gán tay, hoặc thiếu mặt Nhận, thì dừng trước khi kết nối.
+  Nhập nhãn vẫn đúng một lần (chỉ khi task còn 0 nhãn; chỉ có Gán tay ảnh trống thì không nhập). `steps.push` in thêm dòng `  gán tay: a có nháp (mọi điểm low_conf=true), b ảnh trống` và `log.txt` ghi `gan_tay co_nhap=a anh_trong=b`.
+- **`push.json`** (ghi nguyên tử; lượt mới `phien_ban: 2`, thêm `so_anh: {nhan, gan_tay, gan_tay_co_nhap, gan_tay_trong}` và `gan_tay_co_nhap: [tên file…]`; lượt cũ không có các khoá này vẫn đọc và `--cleanup` được; `--resume` lượt cũ giữ nghĩa cũ: mọi Gán tay là ảnh trống, chỉ nhập mặt Nhận; `--resume` lượt mới mà nhóm Gán tay có nháp trong XML đã khác `push.json` thì dừng, không nhập): `trang_thai` `dang_tao` (ghi trước khi gọi `create_from_data`) → `da_tao` (có `task_id`, `jobs`) → `da_nhap` → `xong` (có `check`, `task_url`); lỗi thì giữ trạng thái và ghi `loi` (đã lọc token); `task_deleted` sau khi xoá task.
   `xong` → chạy lại bị từ chối. `da_tao`/`da_nhap` → từ chối, chỉ ra hai cách: `--resume` (làm nốt trên đúng `task_id`, sau khi lấy lại task theo id và kiểm tên, prefix, project; không nhập lại nếu task đã có nhãn) hoặc `--cleanup`.
   `dang_tao` (chết lúc tạo, không có id) → `--cleanup` chỉ **liệt kê** task cùng tên trong project để bạn tự xoá trong CVAT, rồi xoá `push.json`; không tự xoá task nào.
 - **Xoá task trên CVAT** (`push --cleanup --confirm-name <tên>` hoặc nút **Xoá task trên CVAT…** ở tab Các đợt): chỉ xoá được task **chính tool đã tạo** (id và tên ghi trong `push.json`), tên bắt đầu đúng `demo-` (không bao giờ task `m28-` hay task lạ).
@@ -269,7 +276,7 @@ python tool\m28.py collect --task demo-Khoi --dry-run                   rem ch�
   Link/token lấy từ tab Cài đặt hoặc biến môi trường (không nhập ở hộp xoá). Xoá xong: ghi vào `log.txt` (`xoa_task`) và `push_log.txt`, `push.json` đổi thành `task_deleted` (giữ id/tên cũ), `push\done.txt` bị gỡ, đợt **đẩy lại được** (`push.json` mới ghi lịch sử ở `truoc_do`). Task đã mất sẵn trên CVAT (xoá tay) thì chỉ đánh dấu.
 - **`collect`** (chỉ xuất; không bao giờ `import_annotations` hay tạo/sửa/xoá gì trên CVAT): nhận nhiều `--task`. Task `demo-…` (không `--skip-export`): tìm theo tên (0 hoặc ≥ 2 task trùng tên thì báo và bỏ), xuất `"CVAT for images 1.1"` chỉ nhãn vào `raw\<task>_<người>_<ngàyDDMM>.xml` kèm `.txt`
   cùng tên (bản server, id, số ảnh, giờ tạo theo giờ Việt Nam UTC+7, số job và stage/state từng job), **không ghi đè** (đã có thì dùng file đó). `<người>` = `--reviewer` (mặc định `RA`: nên đặt `--reviewer P4`). Task không bắt đầu `demo-` (ví dụ `m28-manual`): không gọi CVAT, chỉ đọc
-  `raw\<task>_*_*.xml` mới nhất của mỗi người. Báo cáo `outputs\collect_<tag hoặc task đầu>.md`: số ảnh, mặt đủ 50 điểm, điểm thiếu, điểm `low_conf` bật, file còn thiếu, job chưa `completed`, thời gian từng bước, QC của P2 (nếu có `m28core.qc.run(xml_paths, outputs_dir)`; chưa có thì một dòng "bỏ qua").
+  `raw\<task>_*_*.xml` mới nhất của mỗi người. Báo cáo `outputs\collect_<tag hoặc task đầu>.md`: số ảnh, mặt đủ 50 điểm, điểm thiếu, điểm `low_conf` bật, file còn thiếu, job chưa `completed`; với task `demo-…` có `runs\*\push.json` bản 2 thì thêm dòng "Gán tay: a có nháp, b ảnh trống" và tách điểm `low_conf` bật thành "ở mặt Nhận" và "ở mặt Gán tay có nháp (bật sẵn từ máy, người gán chưa tắt)"; task `m28-…` và lượt cũ: báo cáo như cũ; thời gian từng bước, QC của P2 (nếu có `m28core.qc.run(xml_paths, outputs_dir)`; chưa có thì một dòng "bỏ qua").
 
 ## Chạy test
 ```bat
@@ -277,7 +284,7 @@ python -m pytest tests -q
 ```
 Test chỉ dùng dữ liệu giả (ảnh ngẫu nhiên, landmarker/mapping giả, **CVAT giả** ở `tests\fake_cvat\cvat_sdk\`); không cần mediapipe, CVAT thật hay mạng.
 `tests\test_push.py` thử push/collect/xoá task bằng gói `cvat_sdk` giả (giữ "server" trong bộ nhớ, ghi mọi lời gọi, giả lỗi theo lệnh) và so từng lời gọi với chữ ký của cvat-sdk **thật** nếu import được
-(`pip install cvat-sdk==2.77.0`, hoặc đặt `M28_REAL_CVAT_SDK_PATH=<thư mục chứa gói cvat_sdk>`; không có thì bài đó `skip`). `tests\test_make_label.py` thử label skeleton. `tests\test_dot_anh.py` thử tab Các đợt, xoá mềm,
+(`pip install cvat-sdk==2.77.0`, hoặc đặt `M28_REAL_CVAT_SDK_PATH=<thư mục chứa gói cvat_sdk>`; không có thì bài đó `skip`). `tests\test_gan_tay.py` thử Gán tay có nháp (phân loại, XML, push với CVAT giả, tương thích `push.json` cũ, collect, chữ trên trang). `tests\test_make_label.py` thử label skeleton. `tests\test_dot_anh.py` thử tab Các đợt, xoá mềm,
 nút Đẩy, PushJob/DeleteTaskJob. `tests\test_cai_dat.py` thử tab Cài đặt (lưu/nạp/quên, quyền file, ưu tiên nguồn, kiểm link/token/đường dẫn, t_flip, thử kết nối bằng tiến trình con với CVAT giả, tiền kiểm redirect bằng http.server cục bộ, không rò token); `tests\conftest.py` trỏ `M28_CONFIG_DIR` vào thư mục tạm cho mọi test. `tests\test_review_app.py` thử phần logic của trang rà soát mà không cần gradio hay trình duyệt. Kiểm thử trên trình duyệt thật
 (tuỳ chọn, cần playwright, không nằm trong requirements): `python tests\e2e_review_ui.py --work <thư mục có runs\F5 và runs\ALL616> --shots <thư mục ảnh chụp>`
 (pha F thử tab Nạp ảnh bằng ảnh WFLW thật: thêm `--wflw <WFLW_images>` nếu không nằm cạnh thư mục work) và
@@ -296,7 +303,7 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 | P3 | `config/map_mp50.json` | nội dung tuỳ P3; m28 chỉ đọc JSON rồi đưa nguyên cho `apply_map` | `map50` | **bản nháp có sẵn** (`tool/fit_map.py` sinh ra) |
 | P4 | `m28core.autoqc.run` | `run(name, pts50, config)` → list mã lỗi (chuỗi); mã bắt đầu bằng `guong`, `don_cuc` hoặc `diem_khong_hop_le` thì gợi ý "nen_gan_tay". Module tuỳ chọn | bước `autoqc` | chưa ai xác nhận |
 | P4 | `runs/<run>/autoqc/autoqc.csv` | m28 ghi: `name,suggestion,n_flags,decision,reason,seconds,problems` (`suggestion` = `on`/`can_xem`/`nen_gan_tay`; `name` có đuôi `.png`) | `review` (excel, auto), P2 xếp hàng | chưa ai xác nhận |
-| P4 | `m28core.push.push` | `push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project=, prefix=, label_json=, *, resume=False)` trả đường dẫn `check.zip`; đường ảnh là đường dẫn file đầy đủ; từ chối tên không bắt đầu `demo-`; tự ghi `push.json`; thêm `cleanup(run_dir, prefix=, confirm_name=)` / `delete_task(...)` | bước `push` | **bản đầu có sẵn** (`tool/m28core/push.py`), **chưa thử trên CVAT thật**; P4 xác nhận |
+| P4 | `m28core.push.push` | `push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project=, prefix=, label_json=, *, resume=False)` trả đường dẫn `check.zip`; đường ảnh là đường dẫn file đầy đủ; ảnh trong `tay_imgs` có `<image>` trong `xml_path` là Gán tay **có nháp** (mọi điểm `low_conf=true`), không có thì là ảnh trống; từ chối tên không bắt đầu `demo-`; tự ghi `push.json`; thêm `cleanup(run_dir, prefix=, confirm_name=)` / `delete_task(...)` | bước `push` | **bản đầu có sẵn** (`tool/m28core/push.py`), **chưa thử trên CVAT thật**; P4 xác nhận |
 | P4 | `m28core.collect.collect` | `collect(args)` → `True` nếu xong (`args.task` list, `dry_run`, `skip_export`, `tag`, `reviewer`) | lệnh `collect` | **bản đầu có sẵn** (`tool/m28core/collect.py`), **chưa thử trên CVAT thật**; P4 xác nhận |
 | P2 | `tool/review_app.py` | `python tool\review_app.py <run_dir> <reviewer>`; ghi `runs/<run>/review/triage_<reviewer>.csv` và `done.txt` khi bấm Xong; `launch(server_name="127.0.0.1", share=False)` | `review --review ui` | **bản nháp có sẵn** (`tool/review_app.py`, xem mục Trang rà soát), P2 xác nhận |
 | P2/P4 | `triage_<Pk>.csv` | cột `name,decision,reason,seconds` (tên có hay không đuôi ảnh đều được; không tiêu đề thì đọc theo thứ tự cột). Dòng sau đè dòng trước; `decision` rỗng (dòng Hoàn tác về chưa rà) nghĩa là chưa rà | `review`, `push` | chưa ai xác nhận |
@@ -306,7 +313,7 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 
 ## Đầu vào / đầu ra
 - Vào: thư mục ảnh (hoặc danh sách ảnh WFLW + hộp mặt), `config/m28_config.json`.
-- Ra: `runs/<run>/…` (ảnh chồng, cờ, `triage_<Pk>.csv`, `ca_kho.csv`), `outputs/ca_kho/` (gói họp, phiên họp, biên bản), task CVAT `demo-…`, file xuất `raw/<task>_<Pk>_<ngày>.xml`.
+- Ra: `runs/<run>/…` (ảnh chồng, cờ, `triage_<Pk>.csv`, `push\manual_list.txt` (loại `co_nhap`/`anh_trong`), `ca_kho.csv`), `outputs/ca_kho/` (gói họp, phiên họp, biên bản), task CVAT `demo-…`, file xuất `raw/<task>_<Pk>_<ngày>.xml`.
 
 ## Đã thử trên
 - **Ca khó và họp team** (6/10/2026, Linux cloud, Python 3.11, Gradio 6.29.1, Chromium headless): `tests/test_ca_kho.py` (88 test, gồm zip độc hại, biên bản so khớp mẫu) và `tests/e2e_ca_kho.py` (đánh dấu, tab Ca khó, xuất/tải gói, nhập gói, lưới, trình chiếu, mở lại phiên, biên bản). Chưa thử: Windows/cmd, Python 3.14, kéo thả bằng chuột thật, toàn màn hình thật, Excel mở CSV.
@@ -369,6 +376,10 @@ Cloud không có CVAT. `push`, `collect`, xoá task và label `face50` chỉ đ�
 8. **`CVAT_ORG`**: đặt `client.organization_slug`; project phải nằm trong organization đó (chưa thử).
 9. **Xoá task**: `Task.remove()` (= `DELETE /api/tasks/<id>`); tool lấy lại task bằng `tasks.retrieve(id)` và so tên, prefix, project trước khi xoá. Chưa kiểm server trả mã gì khi task đã mất (tool coi HTTP 404 là "đã mất").
 10. **`collect`**: lấy danh sách task bằng `tasks.list()` rồi lọc theo tên (chưa thử phân trang với server nhiều task); `Job.stage`/`state` chỉ dùng để báo job chưa `completed`.
+
+11. **Gán tay có nháp (lệch kế hoạch, cần P4 và P5 đồng ý).** Thay đổi này lệch `de-tai-m28/p4-cvat.md` dòng 328 ("XML chỉ có skeleton cho mặt Nhận…; mặt Gán tay không có skeleton") và dòng 112 (18/10, `demo-R1610`: "mặt Gán tay nằm trong job riêng, không có điểm"): giờ mặt Gán tay có nháp có skeleton 50 điểm, mọi `low_conf=true`.
+    Bản Claude Docs chưa sửa (không sửa `de-tai-m28/`). Chưa kiểm trên CVAT thật rằng 50 điểm `low_conf=true` nhập được và checkbox hiện bật đúng. Với mặt lật gương/dồn cục, nháp có thể sai gần hết và kéo 50 điểm có thể chậm hơn vẽ mới (P5 nên đo).
+    `low_conf` của mặt Gán tay trong file xuất không phản ánh độ tin của máy (bật hết). Mặt Nhận vẫn chưa kiểm điểm không hữu hạn (giữ nguyên hành vi cũ; chỉ Gán tay mới kiểm `nhap_hop_le`).
 
 ## Giới hạn
 - Chỉ làm nháp cho mặt lớn nhất trong ảnh; ảnh nhiều người chọn "Gán tay".

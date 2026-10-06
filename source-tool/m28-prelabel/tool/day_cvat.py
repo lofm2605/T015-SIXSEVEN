@@ -78,8 +78,20 @@ def _under_images(images_dir, rel):
     return os.path.join(images_dir, *parts)
 
 
+def _point_names(project_root):
+    """Tên 50 điểm từ <project_root>/config/m28_config.json; đọc lỗi hoặc không có project_root thì None (classify rơi về kiểm đúng 50 khoá)."""
+    if not project_root:
+        return None
+    try:
+        with open(os.path.join(project_root, "config", "m28_config.json"), encoding="utf-8") as f:
+            names = [p["name"] for p in json.load(f)["points"]]
+        return names or None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def plan_counts(run_dir, reviewer, project_root=None, pipe=None, images_dir=None):
-    """Số Nhận / Gán tay / Bỏ / xoá mềm sẽ đẩy, số job dự kiến, số mặt chưa rà, ảnh thiếu. Cùng hàm với steps.push.
+    """Số Nhận / Gán tay (tách có nháp / ảnh trống) / Bỏ / xoá mềm sẽ đẩy, số job dự kiến, số mặt chưa rà, ảnh thiếu. Cùng hàm với steps.push.
     images_dir (thư mục WFLW_images đã cài ở tab Cài đặt): ảnh gốc không còn ở đường dẫn ghi trong meta nhưng có ở <images_dir>/<rel> thì
     KHÔNG tính là thiếu, và `via_images` đếm số ảnh như vậy (lúc đó lệnh push phải kèm --images, xem push_model)."""
     pipe = pipe or dict(cvat_io.DEFAULT_PIPELINE)
@@ -88,8 +100,8 @@ def plan_counts(run_dir, reviewer, project_root=None, pipe=None, images_dir=None
     tri, err = dot_anh.triage_of(run_dir, reviewer)
     meta_all = dot_anh.read_meta(run_dir)
     meta = {k: v for k, v in meta_all.items() if k not in excluded}      # chỉ để kiểm ảnh thiếu; classify nhận meta đầy đủ
-    mp50 = {n: 1 for n in dot_anh.read_mp50_names(run_dir) if n not in excluded}
-    pl = phan_loai.classify(tri, meta_all, mp50, _no_face(run_dir), excluded)
+    mp50 = {n: v for n, v in dot_anh.read_mp50(run_dir).items() if n not in excluded}       # nháp thật: classify kiểm Gán tay có nháp hợp lệ
+    pl = phan_loai.classify(tri, meta_all, mp50, _no_face(run_dir), excluded, _point_names(project_root))
     remaining = sum(1 for n in names if tri.get(n, ("", ""))[0] not in phan_loai.DECISIONS)
     mode = "auto"
     try:
@@ -107,7 +119,7 @@ def plan_counts(run_dir, reviewer, project_root=None, pipe=None, images_dir=None
                 via_images += 1
             else:
                 missing.append(n)
-    return dict(nhan=len(pl["nhan"]), tay=len(pl["tay"]), bo=len(pl["rejected"]), xoa=len(pl["removed"]), lost=len(pl["lost"]),
+    return dict(nhan=len(pl["nhan"]), tay=len(pl["tay"]), tay_nhap=len(pl["tay_nhap"]), tay_trong=len(pl["tay_trong"]), bo=len(pl["rejected"]), xoa=len(pl["removed"]), lost=len(pl["lost"]),
                 nhan_khong_nhap=len(pl["nhan_khong_nhap"]), jobs=phan_loai.n_jobs(len(pl["nhan"]), len(pl["tay"]), pipe["job_size"]),
                 remaining=remaining, missing=missing, via_images=via_images, loi_triage=err)
 
@@ -178,16 +190,18 @@ def panel_html(m):
             out.append(f'<div class="m28-warn">{_e(ps["loi"])}</div>')
     if m["enabled"]:
         p = m["plan"]
-        out.append(f'<div class="nap-note">Sẵn sàng đẩy: <b>{p["nhan"]}</b> Nhận, <b>{p["tay"]}</b> Gán tay, <b>{p["bo"]}</b> Bỏ '
-                   f'(task <b>{_e(m["task"])}</b>).</div>')
+        out.append(f'<div class="nap-note">Sẵn sàng đẩy: <b>{p["nhan"]}</b> Nhận, <b>{p["tay"]}</b> Gán tay '
+                   f'({p["tay_nhap"]} có nháp, {p["tay_trong"]} ảnh trống), <b>{p["bo"]}</b> Bỏ (task <b>{_e(m["task"])}</b>).</div>')
     return "".join(out)
 
 
 def confirm_html(m):
     """Nội dung hộp xác nhận trước khi đẩy."""
     p = m["plan"]
-    rows = [("Tên task", f'<b>{_e(m["task"])}</b>'), ("Mặt Nhận (có nháp 50 điểm)", f'<b>{p["nhan"]}</b>'),
-            ("Mặt Gán tay (không có nháp)", f'<b>{p["tay"]}</b>'), ("Mặt Bỏ (không tải lên)", f'<b>{p["bo"]}</b>')]
+    rows = [("Tên task", f'<b>{_e(m["task"])}</b>'), ("Mặt Nhận (có nháp 50 điểm, cờ của máy)", f'<b>{p["nhan"]}</b>'),
+            ("Mặt Gán tay (job riêng cuối task)",
+             f'<b>{p["tay"]}</b> ({p["tay_nhap"]} có nháp — mọi điểm low_conf, kiểm kỹ từng điểm · {p["tay_trong"]} ảnh trống)'),
+            ("Mặt Bỏ (không tải lên)", f'<b>{p["bo"]}</b>')]
     if p["xoa"]:
         rows.append(("Ảnh đã xoá (không tải lên)", f'<b>{p["xoa"]}</b>'))
     rows += [("Số job dự kiến", f'<b>{p["jobs"]}</b> (mỗi job Nhận {m["pipe"]["job_size"]} mặt + một job Gán tay riêng ở cuối)'),
@@ -195,7 +209,7 @@ def confirm_html(m):
     body = "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in rows)
     extra = ""
     if p["nhan_khong_nhap"]:
-        extra = f'<div class="m28-warn">{p["nhan_khong_nhap"]} mặt chọn Nhận nhưng không có nháp: tự đưa sang Gán tay.</div>'
+        extra = f'<div class="m28-warn">{p["nhan_khong_nhap"]} mặt chọn Nhận nhưng không có nháp: tự đưa sang Gán tay (ảnh trống).</div>'
     return ('<div class="modal-title" id="push-confirm-title">Đẩy lên CVAT?</div>'
             f'<table class="m28-info">{body}</table>{extra}'
             f'<div class="nap-note">Chỉ tạo task <b>MỚI</b> trong project <b>{_e(m["pipe"]["project"])}</b>, nhập nhãn nháp đúng một lần rồi xuất lại để kiểm. '
@@ -260,11 +274,17 @@ def result_html(ps, run):
     link = (f'<a class="push-link" href="{_e(url)}" target="_blank" rel="noopener">{_e(url)}</a>' if url.startswith(("http://", "https://")) else "")
     kiem = (f'Kiểm sau khi nhập: <b>{chk.get("n_day_du", "?")}/{chk.get("n_nhan", "?")}</b> mặt Nhận có đủ 50 điểm kèm low_conf'
             + (" (đạt)" if chk.get("ok") else " (KHÔNG đạt)")) if chk else ""
+    if "n_tay_nhap" in chk:                       # push.json lượt mới; lượt cũ không có khoá này nên không hiện dòng
+        kiem += (f'<br>Gán tay có nháp: <b>{chk.get("n_tay_nhap_day_du", "?")}/{chk.get("n_tay_nhap", "?")}</b> mặt đủ 50 điểm, mọi low_conf bật'
+                 + (f' · {len(chk.get("tay_nhap_thieu") or [])} mặt sai' if chk.get("tay_nhap_thieu") else ""))
     warn = "".join(f'<div class="m28-warn">{_e(w)}</div>' for w in ps.get("canh_bao", []))
+    sa = ps.get("so_anh") if isinstance(ps.get("so_anh"), dict) else {}
+    gan = (f'<tr><th>Mặt Gán tay</th><td><b>{sa.get("gan_tay", "?")}</b> ({sa["gan_tay_co_nhap"]} có nháp · {sa.get("gan_tay_trong", "?")} ảnh trống)</td></tr>'
+           if "gan_tay_co_nhap" in sa else "")
     return (f'<div class="nap-box nap-ok push-done" role="status"><b>Đã đẩy lên CVAT.</b>'
             f'<table class="m28-info"><tr><th>Task</th><td><b>{_e(ps.get("task", "?"))}</b> (id {_e(ps.get("task_id", "?"))})</td></tr>'
             f'<tr><th>Mở trong CVAT</th><td>{link}</td></tr>'
-            f'<tr><th>Số job</th><td><b>{len(jobs)}</b> ({n_nhan} Nhận, {n_tay} Gán tay)</td></tr></table>{kiem}{warn}</div>')
+            f'<tr><th>Số job</th><td><b>{len(jobs)}</b> ({n_nhan} Nhận, {n_tay} Gán tay)</td></tr>{gan}</table>{kiem}{warn}</div>')
 
 
 def next_step(ps, run):

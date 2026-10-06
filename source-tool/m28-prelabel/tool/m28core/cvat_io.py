@@ -237,27 +237,48 @@ def read_zip_annotations(zip_path):
         raise SystemExit(f"{zip_path} không phải file zip hợp lệ (tải về dở?).")
 
 
-def check_faces(ann, want_nhan, want_tay, point_names):
-    """So kết quả xuất với kế hoạch. Trả dict(ok, n_nhan, n_day_du, thieu=[...], gan_tay_co_nhan=[...], thieu_anh=[...])."""
+def _skeleton_ok(im, need, n_points, want_flag=None):
+    """Ảnh có đúng một skeleton face50, đủ tên điểm; mọi low_conf thuộc ('true','false') (want_flag=None) hoặc đúng bằng want_flag."""
+    sk = [s for s in im["skeletons"] if s["label"] == "face50"]
+    if not (len(sk) == 1 and set(sk[0]["points"]) == need and len(sk[0]["points"]) == n_points):
+        return False
+    pts = sk[0]["points"].values()
+    return all(p["low_conf"] in ("true", "false") for p in pts) if want_flag is None else all(p["low_conf"] == want_flag for p in pts)
+
+
+def check_faces(ann, want_nhan, want_tay, point_names, want_tay_nhap=()):
+    """So kết quả xuất với kế hoạch.
+    Nhận: đúng một skeleton face50 đủ điểm, low_conf là true/false. Gán tay có nháp (want_tay_nhap, một phần của want_tay): đúng một
+    skeleton face50 đủ điểm, MỌI low_conf == "true". Gán tay ảnh trống (want_tay trừ want_tay_nhap): 0 shape.
+    Trả dict(ok, n_nhan, n_day_du, thieu, thieu_anh, gan_tay_co_nhan (chỉ xét ảnh trống), n_tay_nhap, n_tay_nhap_day_du, tay_nhap_thieu)."""
     need = set(point_names)
+    nt = set(want_tay_nhap)
     thieu, full, thieu_anh = [], 0, []
     for name in want_nhan:
         im = ann.get(name)
         if im is None:
             thieu_anh.append(name)
-            continue
-        sk = [s for s in im["skeletons"] if s["label"] == "face50"]
-        ok = False
-        if len(sk) == 1 and set(sk[0]["points"]) == need and len(sk[0]["points"]) == len(point_names):
-            ok = all(p["low_conf"] in ("true", "false") for p in sk[0]["points"].values())
-        if ok:
+        elif _skeleton_ok(im, need, len(point_names)):
             full += 1
         else:
             thieu.append(name)
-    tay_co = [n for n in want_tay if n in ann and ann[n]["n_shapes"] > 0]
-    thieu_anh += [n for n in want_tay if n not in ann]
-    good = not thieu and not thieu_anh and not tay_co
-    return dict(ok=good, n_nhan=len(want_nhan), n_day_du=full, thieu=thieu[:20], thieu_anh=thieu_anh[:20], gan_tay_co_nhan=tay_co[:20])
+    tay_nhap_full, tay_nhap_thieu = 0, []
+    for name in want_tay:
+        if name not in nt:
+            continue
+        im = ann.get(name)
+        if im is None:
+            thieu_anh.append(name)
+        elif _skeleton_ok(im, need, len(point_names), "true"):
+            tay_nhap_full += 1
+        else:
+            tay_nhap_thieu.append(name)
+    trong = [n for n in want_tay if n not in nt]
+    tay_co = [n for n in trong if n in ann and ann[n]["n_shapes"] > 0]
+    thieu_anh += [n for n in trong if n not in ann]
+    good = not thieu and not thieu_anh and not tay_co and not tay_nhap_thieu
+    return dict(ok=good, n_nhan=len(want_nhan), n_day_du=full, thieu=thieu[:20], thieu_anh=thieu_anh[:20], gan_tay_co_nhan=tay_co[:20],
+                n_tay_nhap=len(nt & set(want_tay)), n_tay_nhap_day_du=tay_nhap_full, tay_nhap_thieu=tay_nhap_thieu[:20])
 
 
 def safe_file_part(text):

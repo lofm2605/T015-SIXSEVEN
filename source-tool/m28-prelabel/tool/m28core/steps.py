@@ -490,28 +490,52 @@ def _upload_path(args, rd, name, m, mode):
     return m["src"]
 
 
-def build_xml(mode, nhan, meta, mp50, fl, cfg, path):
-    """mode wflw: toạ độ ảnh cắt 512, tên name.png. mode auto: toạ độ ảnh gốc (x_cắt / k + left, kẹp vào mép)."""
+def _face_pts(mode, n, meta, mp50, names):
+    """(danh sách 50 điểm, rộng, cao) của mặt n theo hệ toạ độ ảnh tải lên CVAT. wflw: toạ độ ảnh cắt 512; auto: x/k + left, kẹp mép."""
+    m = meta[n]
+    if mode == "wflw":
+        return [mp50[n]["orig"][p] for p in names], OUT, OUT
+    w, h = m["w"], m["h"]
+    return [(min(max(mp50[n]["orig"][p][0] / m["k"] + m["left"], 0), w - 1),
+             min(max(mp50[n]["orig"][p][1] / m["k"] + m["top"], 0), h - 1)) for p in names], w, h
+
+
+def build_xml(mode, nhan, meta, mp50, fl, cfg, path, tay_nhap=()):
+    """mode wflw: toạ độ ảnh cắt 512, tên name.png. mode auto: toạ độ ảnh gốc (x_cắt / k + left, kẹp vào mép).
+    Mặt Nhận: id 0..len(nhan)-1, cờ low_conf thật (fl). Mặt Gán tay có nháp (tay_nhap): nối sau, id len(nhan)+i, MỌI điểm low_conf=true."""
     names = [p["name"] for p in cfg["points"]]
     parts = ['<?xml version="1.0" encoding="utf-8"?>', '<annotations>', '  <version>1.1</version>']
-    for fid, n in enumerate(nhan):
-        m = meta[n]
-        if mode == "wflw":
-            pts, w, h = [mp50[n]["orig"][p] for p in names], OUT, OUT
-        else:
-            w, h = m["w"], m["h"]
-            pts = [(min(max(mp50[n]["orig"][p][0] / m["k"] + m["left"], 0), w - 1),
-                    min(max(mp50[n]["orig"][p][1] / m["k"] + m["top"], 0), h - 1)) for p in names]
-        parts.append(image_xml(fid, _file_name(n, m, mode), names, pts, fl[n], w, h))
+    faces = [(n, fl[n]) for n in nhan] + [(n, [True] * len(names)) for n in tay_nhap]
+    for fid, (n, low) in enumerate(faces):
+        pts, w, h = _face_pts(mode, n, meta, mp50, names)
+        parts.append(image_xml(fid, _file_name(n, meta[n], mode), names, pts, low, w, h))
     parts.append('</annotations>')
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(parts))
 
 
-def push_plan(triage, meta, mp50, no_face, excluded=frozenset()):
+def push_plan(triage, meta, mp50, no_face, excluded=frozenset(), point_names=None):
     """Phân loại mặt để đẩy: dùng chung với trang rà soát (xem m28core.phan_loai.classify)."""
-    return phan_loai.classify(triage, meta, mp50, no_face, excluded)
+    return phan_loai.classify(triage, meta, mp50, no_face, excluded, point_names)
+
+
+KIND_CO_NHAP, KIND_ANH_TRONG = "co_nhap", "anh_trong"
+_LOG_DETAIL = {}                                                  # m28.py ghi thêm vào log.txt (cột cuối) cho bước đã đăng ký ở đây
+
+
+def read_manual_list(path):
+    """[(tên file ảnh, loại)] từ manual_list.txt. Mỗi dòng `<tên>\t<co_nhap|anh_trong>`; dòng không có tab (định dạng cũ) là anh_trong,
+    vì bản cũ luôn đẩy Gán tay thành ảnh trống."""
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for ln in f.read().splitlines():
+            if not ln.strip():
+                continue
+            name, _sep, kind = ln.partition("\t")
+            kind = kind.strip()
+            out.append((name.strip(), kind if kind in (KIND_CO_NHAP, KIND_ANH_TRONG) else KIND_ANH_TRONG))
+    return out
 
 
 def push(args, out):
@@ -529,8 +553,9 @@ def push(args, out):
     if len(args.task) > 1:
         raise SystemExit("push chỉ nhận một --task")
     no_face = _no_face(args)
-    plan = push_plan(triage, meta_all, mp50, phan_loai.read_no_face(rd), excluded)       # classify tự trừ mặt xoá mềm và ghi chúng vào removed
-    nhan, tay = plan["nhan"], plan["tay"]
+    point_names = [p["name"] for p in cfg["points"]]
+    plan = push_plan(triage, meta_all, mp50, phan_loai.read_no_face(rd), excluded, point_names)   # classify tự trừ mặt xoá mềm
+    nhan, tay, tay_nhap, tay_trong = plan["nhan"], plan["tay"], plan["tay_nhap"], plan["tay_trong"]
     for n in plan["nhan_khong_nhap"]:
         print(f"Cảnh báo: {n} được chọn Nhận nhưng MediaPipe không thấy mặt, đưa vào Gán tay.")
     lost = plan["lost"]
@@ -547,16 +572,19 @@ def push(args, out):
     if dup:
         raise SystemExit(f"Tên ảnh trùng, CVAT không nhận hai ảnh cùng tên: {dup}. Mỗi ảnh gốc chỉ được một mặt "
                          "lên task (chuyển mặt kia sang Bỏ trong triage) hoặc dùng --box wflw (ảnh cắt, tên khác nhau).")
+    co_nhap = set(tay_nhap)
     with open(os.path.join(out, "manual_list.txt"), "w", encoding="utf-8") as f:
-        f.write("\n".join(_file_name(n, meta[n], mode) for n in tay))
+        f.write("\n".join(f"{_file_name(n, meta[n], mode)}\t{KIND_CO_NHAP if n in co_nhap else KIND_ANH_TRONG}" for n in tay))
     with open(os.path.join(out, "rejected.csv"), "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["name", "reason"])
         w.writerows(rejected + removed)                            # mặt xoá mềm ghi lý do da_xoa (không tải lên)
     xml_path = os.path.join(rd, "xml", "prelabel.xml")
-    build_xml(mode, nhan, meta, mp50, fl, cfg, xml_path)
+    build_xml(mode, nhan, meta, mp50, fl, cfg, xml_path, tay_nhap)
     print(f"push: {len(nhan)} mặt nhận, {len(tay)} mặt gán tay, {len(rejected)} bỏ"
           + (f", {len(removed)} đã xoá mềm" if removed else "") + f", XML ({mode}): {xml_path}")
+    print(f"  gán tay: {len(tay_nhap)} có nháp (mọi điểm low_conf=true), {len(tay_trong)} ảnh trống")
+    _LOG_DETAIL["push"] = f"gan_tay co_nhap={len(tay_nhap)} anh_trong={len(tay_trong)}"
     if args.dry_run:
         print("Chạy thử (--dry-run): đã ghi XML, không đẩy lên CVAT.")
         return False

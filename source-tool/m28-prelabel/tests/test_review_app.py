@@ -440,6 +440,7 @@ def test_no_face_cannot_be_accepted(tmp_path, monkeypatch):
     assert level == 'warn' and 'không có nháp' in msg
     v = ra.make_view(s, ses)
     assert v['nhan_ok'] is False and 'không có nháp' in v['gallery'][0][1] and 'khoá' in v['info']
+    assert 'Gán tay mặt này lên CVAT là <b>ảnh trống</b>' in v['info']          # cảnh báo: Gán tay mặt không có nháp lên CVAT là ảnh trống
 
 
 # ---------- 8. Xong ----------
