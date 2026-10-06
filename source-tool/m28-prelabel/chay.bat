@@ -24,14 +24,16 @@ echo ================= M28 - Nhan nhap landmark khuon mat =================
 echo   1. Mo trang ra soat   (Nap anh keo tha, Cac dot, Ca kho, Cai dat)
 echo   2. Ra soat lai mot luot co san
 echo   3. Chay thu 5 mat WFLW (can data\ va thu muc WFLW_images)
-echo   4. Chay test
-echo   5. Cai lai moi truong Python
-echo   6. Thoat
+echo   4. Kiem tra nhanh CVAT   (tao roi xoa task demo-smoke, can CVAT dang chay)
+echo   5. Chay test
+echo   6. Cai lai moi truong Python
+echo   7. Thoat
 echo ======================================================================
-choice /C 123456 /N /M "Chon 1-6: "
-if errorlevel 6 goto :het
-if errorlevel 5 goto :cai_lai
-if errorlevel 4 goto :test
+choice /C 1234567 /N /M "Chon 1-7: "
+if errorlevel 7 goto :het
+if errorlevel 6 goto :cai_lai
+if errorlevel 5 goto :test
+if errorlevel 4 goto :smoke
 if errorlevel 3 goto :thu5
 if errorlevel 2 goto :luot
 if errorlevel 1 goto :mo_trang
@@ -78,6 +80,22 @@ python -c "import csv;r=[x for x in csv.DictReader(open('data/manifest.csv',enco
 python tool\m28.py all --run F5 --list data\f5_list.csv --images "%ANH%" --box wflw --review auto --dry-run
 echo.
 echo Neu thay "Chay thu (--dry-run)" la dung. Ket qua: runs\F5\xml\prelabel.xml
+goto :menu
+
+:smoke
+echo.
+echo === Kiem tra nhanh CVAT ===
+echo Can CVAT dang chay (Ubuntu WSL: docker compose up -d^) va token o tab Cai dat (bat Nho tren may nay^)
+echo hoac bien moi truong trong cua so nay. Script se tao roi xoa task demo-smoke (4 anh xam gia, khong phai anh mat^)
+echo trong project m28; neu chua co project m28 thi tao roi xoa lai khi con trong. Khong dung task khac.
+choice /C CK /N /M "Chay kiem tra nhanh? (C = co, K = khong): "
+if errorlevel 2 goto :menu
+python tool\cvat_smoke.py
+set "MA=%errorlevel%"
+echo.
+echo Ma thoat: %MA%
+if not "%MA%"=="0" echo Co buoc HONG hoac loi: gui P4 file runs\_smoke\bao_cao_GIO.txt (khong gui token, khong gui anh).
+pause
 goto :menu
 
 :test

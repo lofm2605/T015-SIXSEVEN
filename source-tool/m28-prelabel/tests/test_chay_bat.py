@@ -21,7 +21,10 @@ def test_all_goto_and_call_targets_exist():
 
 def test_menu_covers_choice_range_and_safe_launch():
     t = _text()
-    assert 'choice /C 123456' in t and t.count('if errorlevel') >= 6
+    assert 'choice /C 1234567' in t and t.count('if errorlevel') >= 7
+    levels = [int(x) for x in re.findall(r'^if errorlevel (\d+) goto :(?!menu)', t.split(':menu', 1)[1].split(':hoi_nguoi')[0], re.M)]
+    assert levels == sorted(levels, reverse=True) and levels[0] == 7                         # errorlevel kiểm từ lớn xuống nhỏ
+    assert 'tool\\cvat_smoke.py' in t and 'choice /C CK' in t and 'goto :smoke' in t
     assert 'review_app.py --nap' in t and '127.0.0.1' in t
     assert 'share=' not in t.lower() and 'CVAT_ACCESS_TOKEN' not in t    # không đụng token, không chia sẻ
     assert 'findstr /V /I "torch"' in t                             # không cài torch
