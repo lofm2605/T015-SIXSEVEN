@@ -905,3 +905,27 @@ def test_gradio_ui_builds_with_all_element_ids(world):
     os.makedirs('runs/_nap', exist_ok=True)
     demo2, _ = ra.build_ui(None, ra.AppCtx(reviewer='P2', run_dir=os.path.join('runs', '_nap'), nap_only=True))   # --nap: có tab Các đợt
     assert 'tab-dot' in {getattr(b, 'elem_id', None) for b in demo2.blocks.values()}
+
+
+def test_guard_accepts_page_pid_from_env_when_parent_is_launcher(tmp_path, monkeypatch):
+    """Windows: python.exe của .venv là bộ khởi chạy nên getppid() KHÔNG phải trang; trang báo pid của mình qua M28_LOCK_OWNER."""
+    monkeypatch.chdir(tmp_path)
+    rd = os.path.join('runs', 'Khoi')
+    os.makedirs(rd)
+    page_pid = os.getppid() + 100000                     # một pid khác cha trực tiếp
+    monkeypatch.setattr(dang_chay, 'pid_alive', lambda pid: True)
+    json.dump(dict(kind='push', pid=page_pid, t='x'), open(dang_chay.path(rd), 'w'))
+    with pytest.raises(SystemExit):                      # chưa khai báo chủ khoá: bị từ chối như cũ
+        with dang_chay.Guard(rd, 'push', 'x'):
+            pass
+    monkeypatch.setenv(dang_chay.OWNER_ENV, str(page_pid))
+    with dang_chay.Guard(rd, 'push', 'x') as g:
+        assert not g.own                                 # dùng tiếp khoá của trang, không xoá khi thoát
+    assert dang_chay.busy(rd) == ('push', page_pid)
+    monkeypatch.setenv(dang_chay.OWNER_ENV, 'abc')       # giá trị hỏng: bỏ qua, không crash
+    assert dang_chay.owners() == {os.getppid()}
+
+
+def test_review_app_main_marks_lock_owner():
+    src = open(os.path.join(os.path.dirname(__file__), '..', 'tool', 'review_app.py'), encoding='utf-8').read()
+    assert 'dang_chay.mark_owner()' in src
