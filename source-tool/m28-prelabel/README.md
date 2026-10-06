@@ -16,7 +16,7 @@ Một lệnh `tool/m28.py` chạy offline trên CPU:
 | `review` | Trang rà soát Gradio ở 127.0.0.1: mỗi mặt bấm Nhận / Gán tay / Bỏ ảnh | Người rà |
 | `push` | Tạo task CVAT mới tên `demo-…`, nhập nhãn nháp đúng một lần | Tự động, trên CVAT của chính máy đó |
 | `collect` | Sau khi gán: xuất nhãn, QC, ảnh chồng, báo cáo ngắn | Tự động |
-| `all` | `prepare` → `review` → `push`; dừng ở trang rà soát, gõ lại đúng lệnh sau khi rà xong (`collect` chạy riêng sau khi có người gán) | |
+| `all` | `prepare` → `review` (mở trang; bấm Xong thì đi tiếp) → `push`; đóng trang khi chưa bấm Xong thì dừng, gõ lại đúng lệnh (`collect` chạy riêng sau khi có người gán) | |
 
 ## Cấu trúc (theo kế hoạch)
 Mọi đường dẫn trong kế hoạch tính từ thư mục này:
@@ -84,7 +84,12 @@ python tool\m28.py review --run R1610 --reviewer P5
 rem hoặc chạy thẳng, không qua m28:
 python tool\review_app.py runs\R1610 P5
 ```
-- Mở địa chỉ cmd in ra (thường http://127.0.0.1:7860; trình duyệt tự mở). `set M28_NO_BROWSER=1` để không tự mở, `set GRADIO_SERVER_PORT=7861` để đổi cổng.
+- Mở địa chỉ cmd in ra (http://127.0.0.1:7860; trình duyệt tự mở). `set M28_NO_BROWSER=1` để không tự mở, `set GRADIO_SERVER_PORT=7861` để đổi cổng.
+  Cổng cố định: mở bản thứ hai khi bản cũ còn chạy thì báo "Cổng 7860 bận" (tránh hai bản cùng ghi một `triage_<Pk>.csv`). **Chỉ mở một tab.**
+- Lượt đã bấm Xong từ trước (có `review\done.txt`, kể cả do `--review auto`) thì `m28.py review` chỉ in "bỏ qua review": muốn rà lại thêm `--force review`.
+- **Chọn lý do TRƯỚC, rồi mới bấm Gán tay / Bỏ ảnh** (bấm xong là sang mặt khác). Quên thì Hoàn tác (Z), chọn lý do, bấm lại; trang nhắc nhưng không bắt buộc.
+- Đổi bộ lọc thì tự chuyển sang mặt đầu của danh sách lọc; lọc ra 0 mặt thì hiện thông báo và khoá N/G/B. Bấm lại đúng quyết định đang có thì không ghi thêm dòng.
+- Server chỉ nhận Host `127.0.0.1`/`localhost` và chỉ phát file trong `overlays`, `crop\images`, `_tmp` của lượt. Ảnh chồng hỏng/thiếu thì vẽ lại tạm từ ảnh cắt (hoặc ảnh xám), trang không sập.
 - Mặt đáng ngờ (autoqc `nen_gan_tay`/`can_xem`, nhiều cờ `low_conf`) lên đầu. Mặt MediaPipe không thấy mặt (`no_face.csv`) mà còn ảnh cắt
   cũng vào hàng đợi, **không có nháp**: nút Nhận bị khoá, chỉ Gán tay hoặc Bỏ. Mặt không còn ảnh cắt không vào hàng đợi, `push` tự xếp vào Bỏ.
 - Mỗi lần bấm ghi ngay một dòng vào `runs\<run>\review\triage_<người rà>.csv` (`name,decision,reason,seconds`, tên có đuôi `.png`; `seconds` là

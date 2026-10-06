@@ -563,3 +563,24 @@ def test_review_ui_needs_app_and_stale_done_removed(tmp_path, world, monkeypatch
     args = parse(['review', '--run', 'A', '--review', 'ui', '--reviewer', 'P5'])
     assert steps.review(args, 'runs/A/review') is False
     assert calls[0][1:] == [app, os.path.join('runs', 'A'), 'P5']
+
+
+def test_review_ui_ctrl_c_stops_cleanly_and_skip_hint(tmp_path, world, monkeypatch, capsys):
+    imgs = tmp_path / 'imgs'
+    write_images(imgs)
+    m28.main(['prepare', '--run', 'A', '--images', str(imgs)])
+    monkeypatch.setattr(steps, '_need_file', lambda p, why: p)
+
+    def ctrl_c(cmd):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(steps.subprocess, 'call', ctrl_c)
+    capsys.readouterr()
+    with pytest.raises(SystemExit, match='Dừng ở bước review'):          # gọn, không traceback KeyboardInterrupt
+        m28.main(['review', '--run', 'A', '--review', 'ui', '--reviewer', 'P5'])
+    assert 'gõ lại đúng lệnh' in capsys.readouterr().out
+    assert not os.path.exists('runs/A/review/done.txt')
+    os.makedirs('runs/A/review', exist_ok=True)
+    open('runs/A/review/done.txt', 'w').write('ok')
+    m28.main(['review', '--run', 'A', '--review', 'ui', '--reviewer', 'P5'])
+    assert '--force review' in capsys.readouterr().out                  # bỏ qua vì đã xong: gợi ý cách rà lại

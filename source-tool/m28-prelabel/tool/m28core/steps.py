@@ -429,7 +429,11 @@ def review(args, out):
     _need_file(app, "trang rà soát của P2")
     if os.path.exists(os.path.join(out, "done.txt")):           # --force review: xoá done.txt cũ, chỉ tin nút Xong lần này
         os.remove(os.path.join(out, "done.txt"))
-    subprocess.call([sys.executable, app, rd, args.reviewer])
+    try:
+        subprocess.call([sys.executable, app, rd, args.reviewer])
+    except KeyboardInterrupt:                                    # Ctrl+C: trang con tự thoát sạch, không mất dòng CSV nào
+        print("Đã đóng trang rà soát chưa bấm Xong: gõ lại đúng lệnh để làm tiếp.")
+        return False
     if not os.path.exists(os.path.join(out, "done.txt")):
         print("Trang rà soát đã đóng mà chưa bấm Xong.")
         return False

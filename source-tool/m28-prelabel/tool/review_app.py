@@ -50,6 +50,9 @@ LABELS = {"nhan": "Nhận", "gan_tay": "Gán tay", "bo": "Bỏ ảnh"}
 SUG_VI = {"on": "ổn", "can_xem": "cần xem", "nen_gan_tay": "nên gán tay", "": "chưa có autoqc"}
 PROBLEMS_VI = {"diem_ngoai_anh": "điểm ra ngoài ảnh", "diem_khong_hop_le": "điểm không hợp lệ"}
 NO_FACE_VI = {"khong_thay_mat": "MediaPipe không thấy mặt", "khong_doc_duoc_anh": "không đọc được ảnh"}
+EMPTY_VI = {"tat_ca": "Không có mặt nào trong lượt này.", "chua_ra": "Đã rà hết: không còn mặt chưa rà. Bấm Xong ở cột bên phải.",
+            "dang_ngo": "Không có mặt đáng ngờ nào.", "da_ra": "Chưa rà mặt nào."}
+DEFAULT_PORT = 7860
 PAGE_SIZE = 24
 FILTERS = [("tat_ca", "Tất cả"), ("chua_ra", "Chưa rà"), ("dang_ngo", "Đáng ngờ"), ("da_ra", "Đã rà")]
 HEADER = ["name", "decision", "reason", "seconds"]
@@ -399,6 +402,7 @@ class Store:
         self.lat = latest(self.rows)
         self.resumed = self.progress()["done"]          # số mặt đã rà từ lần chạy trước
         self.undo_stack = []
+        self.finished = False            # đã bấm Xong thật: mọi tab từ chối ghi thêm trong 2 giây trang còn mở
 
     def status(self, name):
         return _status(self.lat, name)
@@ -554,6 +558,33 @@ def _redraw_overlay(face, run_dir, pts):
     return out
 
 
+_IMG_OK = {}        # đường dẫn -> ((mtime_ns, size), đọc được không)
+
+
+def _img_ok(path):
+    """Ảnh mở và giải mã được (ảnh chồng bị cắt dở sau một lần prepare bị ngắt thì không). Có cache theo mtime/size."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    key = (st.st_mtime_ns, st.st_size)
+    c = _IMG_OK.get(path)
+    if c and c[0] == key:
+        return c[1]
+    try:
+        from PIL import Image
+    except ImportError:
+        return True
+    try:
+        with Image.open(path) as im:
+            im.load()
+        ok = True
+    except Exception:                                   # OSError, SyntaxError, ValueError, ảnh quá lớn...
+        ok = False
+    _IMG_OK[path] = (key, ok)
+    return ok
+
+
 def _placeholder(run_dir):
     from PIL import Image, ImageDraw
     out = _tmp(run_dir, "overlays", "_khong_co_anh.png")
@@ -566,36 +597,37 @@ def _placeholder(run_dir):
 
 def overlay_for(face, run_dir):
     """(đường dẫn ảnh lớn, cảnh báo|None).
-    Có overlays/<tên>.png thì dùng; không có mà có ảnh cắt và mp50.json thì vẽ lại vào runs/<run>/_tmp/overlays/;
-    mặt không có nháp (no_face) dùng ảnh cắt; thiếu cả hai thì ảnh xám 512 kèm cảnh báo."""
+    Có overlays/<tên>.png đọc được thì dùng; thiếu hoặc hỏng mà có ảnh cắt và mp50.json thì vẽ lại vào runs/<run>/_tmp/overlays/
+    (không đụng file gốc); mặt không có nháp (no_face) dùng ảnh cắt; thiếu cả hai thì ảnh xám 512 kèm cảnh báo."""
+    bad = False
     if face.overlay and os.path.isfile(face.overlay):
-        return face.overlay, None
+        if _img_ok(face.overlay):
+            return face.overlay, None
+        bad = True
+    crop_ok = bool(face.crop and os.path.isfile(face.crop) and _img_ok(face.crop))
     if not face.has_draft:
-        if face.crop and os.path.isfile(face.crop):
+        if crop_ok:
             return face.crop, None
-        return _placeholder(run_dir), f"Thiếu ảnh cắt của {face.file} (crop/images): không xem được mặt này."
-    if face.crop and os.path.isfile(face.crop):
+        return _placeholder(run_dir), f"Thiếu hoặc hỏng ảnh cắt của {face.file} (crop/images): không xem được mặt này."
+    if crop_ok:
         mp = _mp50(run_dir)
         orig = (mp or {}).get(face.name, {}).get("orig")
         if orig and len(list(orig.values())) == len(face.flags):
             try:
+                what = "hỏng" if bad else "thiếu"
                 return (_redraw_overlay(face, run_dir, list(orig.values())),
+                        f"Ảnh chồng overlays/{face.file} {what}: trang vẽ lại tạm từ ảnh cắt và mp50.json "
+                        f"(chạy lại prepare --force overlays để sửa hẳn)." if bad else
                         f"Thiếu overlays/{face.file}: ảnh chồng này do trang vẽ lại tạm từ ảnh cắt và mp50.json.")
             except (OSError, ValueError, KeyError):
                 pass
+    head = f"Ảnh chồng overlays/{face.file} hỏng" if bad else f"Thiếu ảnh chồng overlays/{face.file}"
     return (_placeholder(run_dir),
-            f"Thiếu ảnh chồng overlays/{face.file} và không vẽ lại được (thiếu ảnh cắt hoặc map50/mp50.json). "
+            f"{head} và không vẽ lại được (thiếu ảnh cắt hoặc map50/mp50.json). "
             "Không xem được nháp: đừng chọn Nhận, chạy lại python tool\\m28.py prepare ... --force overlays.")
 
 
-def thumb_for(face, status, run_dir):
-    """Ảnh nhỏ JPEG ~176 px (chất lượng 85) có viền 6 px theo trạng thái vẽ thẳng vào ảnh và nhãn N/G/B ở góc.
-    Tên file chứa trạng thái nên URL đổi theo, trình duyệt không giữ ảnh cũ. Tạo lười, có cache theo mtime."""
-    status = status if status in DECISIONS else ""
-    src, _warn = overlay_for(face, run_dir)
-    out = _tmp(run_dir, "thumbs", f"{_safe(face.name)}__{status or 'chua'}.jpg")
-    if os.path.exists(out) and os.path.getmtime(out) >= os.path.getmtime(src):
-        return out
+def _build_thumb(src, out, status):
     from PIL import Image, ImageDraw, ImageOps
     im = Image.open(src).convert("RGB")
     im.thumbnail((THUMB - 2 * BORDER, THUMB - 2 * BORDER), Image.Resampling.LANCZOS)
@@ -605,6 +637,21 @@ def thumb_for(face, status, run_dir):
         d.rectangle([0, 0, 25, 25], fill=STATUS_COLOR[status])
         _text_at(d, (13, 13), STATUS_LETTER[status], "white", _font(18, True), "mm")
     _save(im, out, "JPEG", quality=85)
+
+
+def thumb_for(face, status, run_dir):
+    """Ảnh nhỏ JPEG ~176 px (chất lượng 85) có viền 6 px theo trạng thái vẽ thẳng vào ảnh và nhãn N/G/B ở góc.
+    Tên file chứa trạng thái nên URL đổi theo, trình duyệt không giữ ảnh cũ. Tạo lười, có cache theo mtime.
+    Một ảnh hỏng không làm sập cả trang: rơi về ảnh xám 'Không có ảnh chồng'."""
+    status = status if status in DECISIONS else ""
+    src, _warn = overlay_for(face, run_dir)
+    out = _tmp(run_dir, "thumbs", f"{_safe(face.name)}__{status or 'chua'}.jpg")
+    if os.path.exists(out) and os.path.getmtime(out) >= os.path.getmtime(src):
+        return out
+    try:
+        _build_thumb(src, out, status)
+    except (OSError, SyntaxError, ValueError):
+        _build_thumb(_placeholder(run_dir), out, status)
     return out
 
 
@@ -641,8 +688,12 @@ def act_select(store, ses, index):
 
 
 def act_filter(store, ses, mode):
+    """Đổi bộ lọc. Mặt đang xem không nằm trong danh sách mới thì chuyển sang mặt chưa rà đầu tiên của danh sách
+    (không có mặt chưa rà thì mặt đầu); danh sách rỗng thì giữ mặt cũ nhưng khoá N/G/B (xem make_view)."""
     ses["mode"] = mode if mode in dict(FILTERS) else "tat_ca"
     items = _filtered(store, ses)
+    if items and not any(f.name == ses["cur"] for f in items):
+        ses["cur"] = next_pending(items, store.lat, None) or items[0].name
     ses["page"] = page_of(items, ses["cur"], PAGE_SIZE) if any(f.name == ses["cur"] for f in items) else 0
     return "", "info"
 
@@ -667,12 +718,26 @@ def act_step(store, ses, delta):
     return "", "info"
 
 
+STALE_MSG = "Bỏ qua một lần bấm vì ảnh chưa kịp đổi. Nhìn ảnh rồi bấm lại."
+CLOSED_MSG = "Đã bấm Xong, trang sắp tắt: không ghi thêm được."
+
+
 def act_decide(store, ses, decision, reason, shown):
     """Bấm Nhận / Gán tay / Bỏ ảnh cho mặt `shown` (mặt người rà đang nhìn thấy khi bấm). Trả (thông báo, mức, đặt lại lý do).
-    Nếu `shown` khác mặt hiện hành của server (bấm quá nhanh khi trang chưa kịp đổi ảnh) thì bỏ qua, không ghi gì."""
+    Nếu `shown` khác mặt hiện hành của server (bấm quá nhanh khi trang chưa kịp đổi ảnh) thì bỏ qua, không ghi gì.
+    Bấm đúng quyết định (và lý do) mặt đó đang có thì không ghi thêm dòng nào."""
+    if store.finished:
+        return CLOSED_MSG, "info", False
     if shown != ses["cur"]:
-        return "Bỏ qua một lần bấm vì ảnh chưa kịp đổi. Nhìn ảnh rồi bấm lại.", "info", False
+        return STALE_MSG, "info", False
     name = ses["cur"]
+    before = _filtered(store, ses)
+    if not any(f.name == name for f in before):
+        return "Mặt đang xem không nằm trong bộ lọc này: chọn một ảnh trong lưới trước.", "info", False
+    if decision in DECISIONS and store.status(name) == decision:
+        cur_reason = store.lat[name][1]
+        if decision == "nhan" or (reason or "") == cur_reason:
+            return f"{name}.png đã là {LABELS[decision]}" + (f" ({cur_reason})" if cur_reason else "") + " rồi, không ghi thêm.", "info", False
     now = store.clock()
     try:
         store.decide(name, decision, reason, seconds_since(ses.get("t"), now))
@@ -684,18 +749,29 @@ def act_decide(store, ses, decision, reason, shown):
     ses["t"] = now
     why = store.lat[name][1]
     msg = f"Đã ghi {name}.png: {LABELS[decision]}" + (f" ({why})" if why else "") + "."
-    nxt = next_pending(store.faces, store.lat, name)
+    if decision != "nhan" and not why:
+        msg += " Chưa có lý do: bấm Hoàn tác (Z), chọn lý do (0–8) rồi bấm lại nếu muốn ghi lý do."
+    nxt = next_pending(before, store.lat, name)                  # trước hết trong danh sách đang lọc
+    if nxt is None:
+        nxt = next_pending(store.faces, store.lat, name)
+        if nxt is not None and not any(f.name == nxt for f in _filtered(store, ses)):
+            ses["mode"] = "chua_ra"
+            msg += " Bộ lọc hiện tại hết mặt chưa rà, chuyển sang 'Chưa rà'."
     if nxt:
         ses["cur"] = nxt
     else:
         msg += " Đã rà hết, bấm Xong."
+        if not any(f.name == name for f in _filtered(store, ses)):
+            ses["mode"] = "tat_ca"                                # bộ lọc 'Chưa rà' trống thì quay về Tất cả
     _follow(store, ses)
     return msg, "ok", True
 
 
 def act_undo(store, ses, shown):
+    if store.finished:
+        return CLOSED_MSG, "info", False
     if shown != ses["cur"]:
-        return "Bỏ qua một lần bấm vì ảnh chưa kịp đổi. Nhìn ảnh rồi bấm lại.", "info", False
+        return STALE_MSG, "info", False
     try:
         name = store.undo()
     except OSError as e:
@@ -705,12 +781,16 @@ def act_undo(store, ses, shown):
         return "Chưa có gì để hoàn tác.", "info", False
     ses["cur"] = name
     ses["t"] = store.clock()
+    if not any(f.name == name for f in _filtered(store, ses)):
+        ses["mode"] = "tat_ca"                                    # mặt vừa hoàn tác rời bộ lọc đang chọn
     _follow(store, ses)
     return f"Đã hoàn tác {name}.png: về trạng thái trước đó.", "ok", True
 
 
 def act_finish(store, ses):
     """Trả (thông báo, mức, đã xong thật). Xong thật thì UI tự tắt trang sau 2 giây."""
+    if store.finished:
+        return CLOSED_MSG, "info", False
     try:
         path = store.write_done()
     except ValueError as e:
@@ -718,6 +798,7 @@ def act_finish(store, ses):
     except OSError as e:
         return f"Không ghi được {_shown(store.done_path)} ({e}).", "warn", False
     ses["finished"] = True
+    store.finished = True
     return (f"Đã ghi {_shown(path)}. Trang tự tắt sau 2 giây, quay lại cửa sổ cmd."), "ok", True
 
 
@@ -753,13 +834,16 @@ def header_html(store, ses):
                     (("nhan", "Nhận"), ("gan_tay", "Gán tay"), ("bo", "Bỏ")))
     chips += f'<span class="m28-chip c-chua">Còn lại <b>{p["remaining"]}</b></span>'
     again = ('<span class="m28-chip c-gan_tay">Lượt này đã bấm Xong trước đó</span>'
-             if store.had_done and not ses.get("finished") else "")
+             if store.had_done and not (ses.get("finished") or store.finished) else "")
+    done = ('<div class="m28-done" role="alert"><div class="m28-done-box"><b>Đã ghi xong.</b>'
+            '<span>Đóng tab này và quay lại cửa sổ cmd. Trang đã tắt, bấm gì cũng không còn tác dụng.</span></div></div>'
+            if (ses.get("finished") or store.finished) else "")
     return (f'<div class="m28-head"><div class="m28-top"><div class="m28-title">Rà soát nhãn nháp M28</div>'
             f'<div class="m28-sub">lượt <b>{html.escape(run_name(store.run_dir))}</b> · người rà '
             f'<b>{html.escape(store.reviewer)}</b></div>{again}</div>'
             f'<div class="m28-prog"><span class="m28-count">Đã rà {p["done"]}/{p["total"]}</span>'
             f'<div class="m28-bar" role="progressbar" aria-valuenow="{p["done"]}" aria-valuemax="{p["total"]}">'
-            f'<i style="width:{pct}%"></i></div><div class="m28-chips">{chips}</div></div></div>')
+            f'<i style="width:{pct}%"></i></div><div class="m28-chips">{chips}</div></div></div>{done}')
 
 
 def info_html(store, face, status, warn):
@@ -770,9 +854,9 @@ def info_html(store, face, status, warn):
             ("Trạng thái", _chip(status, lat[1] if status else ""))]
     if face.has_draft:
         pts = fmt_points(face.flags)
-        rows.append(("Cờ low_conf", f"<b>{face.n_flags}/{len(face.flags)}</b>"
+        rows.append(("Điểm nghi sai", f"<b>{face.n_flags}/{len(face.flags)}</b>"
                      + (f' · điểm <span class="m28-pts">{html.escape(pts)}</span>' if pts else " · không có điểm nào")))
-        rows.append(("Gợi ý autoqc", html.escape(SUG_VI[face.suggestion])))
+        rows.append(("Gợi ý của máy", html.escape(SUG_VI[face.suggestion])))
         probs = ", ".join(PROBLEMS_VI.get(p, p) for p in face.problems)
         rows.append(("Vấn đề", html.escape(probs) if probs else "không"))
     else:
@@ -806,17 +890,19 @@ def make_view(store, ses, msg="", level="info"):
     cur_i = ses["names"].index(face.name) if face.name in ses["names"] else None
     names_all = [f.name for f in items]
     pos = names_all.index(face.name) if face.name in names_all else None
-    fin = bool(ses.get("finished"))
+    fin = bool(ses.get("finished") or store.finished)
+    incl = pos is not None                       # mặt đang xem nằm trong danh sách đã lọc (N/G/B chỉ bật khi đúng)
     return dict(
         header=header_html(store, ses),
         filter_choices=[(f"{t} ({counts[m]})", m) for m, t in FILTERS], filter_value=ses["mode"],
         gallery=[(thumb_for(f, store.status(f.name), store.run_dir), caption(f, store.status(f.name)))
                  for f in page_items],
         selected=cur_i,
-        page_html=f'<div class="m28-page">Trang <b>{page + 1}</b>/{n_pages}</div>',
+        page_html=(f'<div class="m28-page">Trang <b>{page + 1}</b>/{n_pages}</div>' if items else
+                   f'<div class="m28-empty">{html.escape(EMPTY_VI.get(ses["mode"], EMPTY_VI["tat_ca"]))}</div>'),
         page_prev=page > 0 and not fin, page_next=page < n_pages - 1 and not fin,
         big=big, info=info_html(store, face, status, warn),
-        nhan_ok=face.has_draft and not fin, tay_ok=not fin, bo_ok=not fin,
+        nhan_ok=face.has_draft and not fin and incl, tay_ok=not fin and incl, bo_ok=not fin and incl,
         undo_ok=bool(store.undo_stack) and not fin,
         prev_ok=bool(items) and not fin and (pos is None or pos > 0),
         next_ok=bool(items) and not fin and (pos is None or pos < len(items) - 1),
@@ -829,7 +915,8 @@ def make_view(store, ses, msg="", level="info"):
 GUIDE_HTML = ('<div class="m28-guide"><b>Nhận</b>: đúng dáng mặt, chỉ cần kéo nhẹ · <b>Gán tay</b>: lật gương, dồn cục, '
               'lệch cả vùng, quay/che nhiều, nhiều mặt · <b>Bỏ</b>: không mặt, sai mặt, mờ/nhỏ · '
               '<b>Phân vân Nhận/Gán tay → chọn Nhận</b></div>')
-KEYS_HTML = ('<div class="m28-keys"><kbd>N</kbd> Nhận · <kbd>G</kbd> Gán tay · <kbd>B</kbd> Bỏ ảnh · '
+KEYS_HTML = ('<div class="m28-keys"><b>Chỉ mở một tab. Chọn lý do (nếu có) trước, rồi mới bấm Gán tay / Bỏ ảnh.</b><br>'
+             '<kbd>N</kbd> Nhận · <kbd>G</kbd> Gán tay · <kbd>B</kbd> Bỏ ảnh · '
              '<kbd>Z</kbd> Hoàn tác · <kbd>←</kbd> <kbd>→</kbd> Trước/Sau · <kbd>0</kbd>–<kbd>8</kbd> chọn lý do '
              '(0 = không)</div>')
 LEGEND_HTML = ('<div class="m28-legend"><span><i class="dot red"></i>chấm đỏ = low_conf (nhìn kỹ)</span>'
@@ -839,7 +926,16 @@ CSS = """
 /* Màu lấy từ biến của theme Gradio nên chế độ tối không hỏng; màu trạng thái dùng nền trong suốt. */
 .gradio-container { max-width: 1560px !important; }
 #progress, #pagelbl, #info, #msg, #legend, #guide, #keys, #notes { padding: 0 !important; }
-#msg { min-height: 44px; }
+#msg { min-height: 64px; }
+#info { min-height: 250px; }
+#msg .progress-text, #msg .meta-text-center, #msg .meta-text, #msg .generating, #msg .eta-bar { display: none !important; }
+.m28-empty { padding: 28px 12px; text-align: center; font-size: 15px; color: var(--body-text-color-subdued);
+  border: 1px dashed var(--border-color-primary); border-radius: 10px; }
+.m28-done { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--background-fill-primary) 96%, transparent); }
+.m28-done-box { display: flex; flex-direction: column; gap: 8px; padding: 28px 36px; text-align: center; max-width: 560px;
+  background: var(--block-background-fill); border: 2px solid #16a34a; border-radius: 16px; font-size: 17px; }
+.m28-done-box b { font-size: 26px; color: #16a34a; }
 .m28-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 28px; padding: 10px 16px;
   background: var(--block-background-fill); border: 1px solid var(--border-color-primary);
   border-radius: var(--radius-lg); }
@@ -913,6 +1009,20 @@ CSS = """
 #reason label { padding: 5px 8px; font-size: 13px; line-height: 1.2; min-height: 34px; align-items: center; }
 #nav { gap: 10px; flex-wrap: nowrap; }
 #nav button { min-width: 0 !important; }
+#nav button, #pager button { background: var(--background-fill-secondary) !important; color: var(--body-text-color) !important;
+  border: 1px solid var(--border-color-primary) !important; }
+#nav button:disabled, #pager button:disabled { opacity: .4; }
+#reason [data-testid="block-info"], #reason legend, #reason > label > span, #reason .block-info { background: transparent !important;
+  color: var(--body-text-color) !important; font-weight: 700; padding-left: 0 !important; }
+#reason label.selected, #reason label:has(input:checked) { background: color-mix(in srgb, #2563eb 16%, transparent) !important;
+  border-color: #2563eb !important; color: var(--body-text-color) !important; }
+#reason input[type=radio]:checked { accent-color: #2563eb; background-color: #2563eb !important; }
+@media (max-width: 600px) {
+  #decide, #nav { gap: 6px; }
+  #decide button { font-size: 15px; white-space: nowrap; padding: 0 4px !important; }
+  #nav button { font-size: 14px; white-space: nowrap; padding: 0 6px !important; }
+  #reason .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 #btn-xong { min-height: 48px; font-size: 17px; font-weight: 800; transition: none !important; }
 #btn-xong:not(:disabled) { background: #16a34a !important; border-color: #15803d !important; color: #fff !important; opacity: 1 !important; }
 #btn-xong:disabled { background: var(--background-fill-secondary) !important; color: var(--body-text-color-subdued) !important;
@@ -955,6 +1065,7 @@ PAGE_JS = r"""() => {
   const onDecide = (t) => !!(t && t.closest && t.closest(DECIDE));
   document.addEventListener('keydown', (e) => {
     if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || typing(e.target)) { return; }
+    if (document.querySelector('.m28-done')) { e.preventDefault(); return; }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       press(e.key === 'ArrowLeft' ? 'btn-prev' : 'btn-next');
@@ -1018,7 +1129,8 @@ def build_ui(store):
         """Đổi mô hình hiển thị thành tuple cập nhật, đúng thứ tự `outs`."""
         return (v["header"],
                 gr.update(choices=v["filter_choices"], value=v["filter_value"]),
-                gr.update(value=v["gallery"], selected_index=-1 if v["selected"] is None else v["selected"]),   # None bị bỏ qua: -1 = không ảnh nào
+                gr.update(value=v["gallery"], visible=bool(v["gallery"]),
+                  selected_index=-1 if v["selected"] is None else v["selected"]),   # None bị bỏ qua: -1 = không ảnh nào
                 v["page_html"], gr.update(interactive=v["page_prev"]), gr.update(interactive=v["page_next"]),
                 v["big"], v["info"],
                 gr.update(value="") if reset_reason else gr.update(),
@@ -1043,14 +1155,14 @@ def build_ui(store):
                 grid = gr.Gallery(show_label=False, allow_preview=False, columns=4, object_fit="contain", buttons=[],
                                   elem_id="grid", height="auto")
             with gr.Column(scale=5, min_width=400, elem_id="center"):
-                big = gr.Image(type="filepath", interactive=False, buttons=["fullscreen"], elem_id="big",
+                big = gr.Image(type="filepath", interactive=False, buttons=[], elem_id="big",
                                show_label=False)
                 with gr.Row(elem_id="decide"):
                     b_nhan = gr.Button("Nhận (N)", variant="primary", elem_id="btn-nhan")
                     b_tay = gr.Button("Gán tay (G)", elem_id="btn-gantay")
                     b_bo = gr.Button("Bỏ ảnh (B)", variant="stop", elem_id="btn-bo")
                 reason = gr.Radio(choices=[(f"{i} · {t}" if c else t, c) for i, (c, t) in enumerate(REASONS)],
-                                  value="", label="Lý do (cho Gán tay / Bỏ ảnh; phím 0–8)", elem_id="reason")
+                                  value="", label="Lý do: chọn TRƯỚC khi bấm Gán tay / Bỏ ảnh (phím 0–8)", elem_id="reason")
                 with gr.Row(elem_id="nav"):
                     b_prev = gr.Button("← Trước", elem_id="btn-prev")
                     b_undo = gr.Button("Hoàn tác (Z)", elem_id="btn-undo")
@@ -1162,16 +1274,28 @@ def main(argv=None):
         return 2
     demo, theme = build_ui(store)
     inbrowser = os.environ.get("M28_NO_BROWSER") != "1"
+    try:                                                  # cổng cố định: bản thứ hai không tự nhảy sang cổng khác
+        port = int(os.environ.get("GRADIO_SERVER_PORT") or DEFAULT_PORT)
+    except ValueError:
+        print(f"Lỗi: GRADIO_SERVER_PORT={os.environ.get('GRADIO_SERVER_PORT')!r} không phải số.", file=sys.stderr)
+        return 2
+    from starlette.middleware import Middleware
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+    # Chỉ nhận Host là localhost/127.0.0.1: chặn DNS rebinding từ trang web lạ đọc ảnh mặt qua 127.0.0.1.
+    guard = [Middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])]
+    allowed = [os.path.abspath(os.path.join(run_dir, d)) for d in ("overlays", os.path.join("crop", "images"), "_tmp")]
     # share=False và 127.0.0.1: chỉ máy này vào được. Gradio có in dòng gợi ý tạo public link: KHÔNG làm theo,
     # nên quiet=True để tắt dòng đó và tự in địa chỉ bằng tiếng Việt.
     try:
-        _app, url, _share = demo.launch(server_name="127.0.0.1", share=False, ssr_mode=False, mcp_server=False, pwa=False,
-                                        enable_monitoring=False, footer_links=[], show_error=True, quiet=True,
-                                        allowed_paths=[os.path.abspath(run_dir)], inbrowser=inbrowser, theme=theme,
-                                        css=CSS, js=PAGE_JS, prevent_thread_lock=True)
+        _app, url, _share = demo.launch(server_name="127.0.0.1", server_port=port, share=False, ssr_mode=False,
+                                        mcp_server=False, pwa=False, enable_monitoring=False, footer_links=[],
+                                        show_error=True, quiet=True, allowed_paths=allowed, inbrowser=inbrowser,
+                                        theme=theme, css=CSS, js=PAGE_JS, prevent_thread_lock=True,
+                                        app_kwargs={"middleware": guard})
     except OSError as e:
-        print(f"Lỗi: không mở được trang rà soát ({e}). Cổng bận thì đóng trang rà soát cũ hoặc đặt cổng khác "
-              "bằng set GRADIO_SERVER_PORT=7861.", file=sys.stderr)
+        print(f"Lỗi: không mở được trang rà soát ({e}). Cổng {port} bận: có thể trang rà soát cũ còn mở (đóng nó trước, "
+              "tránh hai bản cùng ghi một file) hoặc chương trình khác dùng cổng; đổi cổng bằng set GRADIO_SERVER_PORT=7861.",
+              file=sys.stderr)
         return 2
     p = store.progress()
     print(f"Trang rà soát lượt {run_name(run_dir)}, người rà {reviewer}: còn {p['remaining']}/{p['total']} mặt chưa rà.\n"

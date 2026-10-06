@@ -670,7 +670,8 @@ def test_decide_jumps_to_next_pending_and_filter_shrinks(five):
     assert seen == [('F_004', 5), ('F_002', 4), ('F_001', 3), ('F_003', 2), ('F_005', 1)]   # bộ lọc co lại sau mỗi lần
     assert 'Đã rà hết, bấm Xong' in msg and ses['cur'] == 'F_005'
     v = ra.make_view(s, ses)
-    assert v['xong_ok'] and v['xong_label'] == 'Xong' and v['gallery'] == []
+    assert v['xong_ok'] and v['xong_label'] == 'Xong'
+    assert ses['mode'] == 'tat_ca' and len(v['gallery']) == 5 and v['nhan_ok']      # lọc 'Chưa rà' trống thì về 'Tất cả'
 
 
 def test_decide_from_old_face_continues_after_it(five):
@@ -761,7 +762,7 @@ def test_caption_and_info_text(five):
     assert ra.caption(q['F_001'], 'nhan') == 'F_001 · 0 cờ · ổn · Nhận'
     ses = ra.new_session(s)
     info = ra.make_view(s, ses)['info']
-    assert 'F_004.png' in info and '38/50' in info and '1–26, 28, 32–36, 38, 39, 44–47' not in info   # F_004 giả chỉ có cờ 1–38
+    assert 'Điểm nghi sai' in info and 'Gợi ý của máy' in info and 'F_004.png' in info and '38/50' in info and '1–26, 28, 32–36, 38, 39, 44–47' not in info   # F_004 giả chỉ có cờ 1–38
     assert '1–38' in info and '1/5 trong hàng đợi' in info and 'Chưa rà' in info and 'cần xem' in info
 
 
@@ -785,6 +786,154 @@ def test_problems_are_translated(tmp_path, monkeypatch):
     s = ra.Store(rd, 'P2')
     info = ra.make_view(s, ra.new_session(s))['info']
     assert 'điểm ra ngoài ảnh' in info and 'điểm không hợp lệ' in info and 'la' in info and 'nên gán tay' in info
+
+
+# ---------- phát hiện của đợt kiểm độc lập 6/10 ----------
+def test_filter_change_moves_to_a_face_inside_the_list(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    ses['cur'] = 'F_005'                                              # mặt ổn, 0 cờ
+    ra.act_filter(s, ses, 'dang_ngo')
+    v = ra.make_view(s, ses)
+    assert ses['cur'] == 'F_004' and v['selected'] == 0 and v['nhan_ok'] and v['shown'] == 'F_004'
+    ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    ra.act_filter(s, ses, 'da_ra')                                    # đang xem F_002 (chưa rà) -> sang mặt đã rà
+    assert ses['cur'] == 'F_004'
+    ra.act_filter(s, ses, 'tat_ca')
+    assert ses['cur'] == 'F_004'                                      # đã nằm trong danh sách thì giữ
+
+
+def test_empty_filter_locks_decisions_and_shows_message(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    ra.act_filter(s, ses, 'da_ra')                                    # chưa rà mặt nào
+    v = ra.make_view(s, ses)
+    assert v['gallery'] == [] and 'Chưa rà mặt nào' in v['page_html'] and 'Trang' not in v['page_html']
+    assert not (v['nhan_ok'] or v['tay_ok'] or v['bo_ok'] or v['prev_ok'] or v['next_ok'])
+    msg, level, reset = ra.act_decide(s, ses, 'nhan', '', ses['cur'])  # ghi nhầm cho mặt vô hình bị chặn
+    assert level == 'info' and 'không nằm trong bộ lọc' in msg and s.rows == []
+
+
+def test_dang_ngo_runs_out_then_switches_to_chua_ra(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    ra.act_filter(s, ses, 'dang_ngo')
+    ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    assert ses['cur'] == 'F_002' and ses['mode'] == 'dang_ngo'
+    msg, *_ = ra.act_decide(s, ses, 'nhan', '', 'F_002')
+    assert ses['mode'] == 'chua_ra' and ses['cur'] == 'F_001' and 'chuyển sang' in msg
+
+
+def test_undo_returns_face_into_filter(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    ra.act_filter(s, ses, 'da_ra')
+    ra.act_filter(s, ses, 'tat_ca')
+    ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    ra.act_filter(s, ses, 'da_ra')
+    ra.act_decide(s, ses, 'bo', 'SAI_MAT', 'F_004')                   # đổi ý trong 'Đã rà': nhảy sang mặt chưa rà
+    assert ses['mode'] == 'chua_ra'
+    ra.act_undo(s, ses, ses['cur'])
+    assert ses['cur'] == 'F_004' and ses['mode'] == 'tat_ca'
+
+
+def test_repeated_decision_is_not_written_twice(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    for n in ('F_004', 'F_002', 'F_001', 'F_003', 'F_005'):
+        ra.act_decide(s, ses, 'nhan', '', n)
+    assert ses['cur'] == 'F_005' and len(s.rows) == 5
+    for _ in range(3):
+        msg, level, reset = ra.act_decide(s, ses, 'nhan', '', 'F_005')
+        assert level == 'info' and 'đã là Nhận rồi' in msg and not reset
+    assert len(s.rows) == 5
+    ra.act_decide(s, ses, 'gan_tay', '', 'F_005')                      # đổi quyết định thì ghi
+    assert len(s.rows) == 6
+    assert ra.act_decide(s, ses, 'gan_tay', '', 'F_005')[1] == 'info'
+    assert ra.act_decide(s, ses, 'gan_tay', 'MO_NHO', 'F_005')[1] == 'ok'     # thêm lý do thì ghi
+    assert len(s.rows) == 7
+
+
+def test_skipped_face_is_found_again_after_last_one(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    ra.act_decide(s, ses, 'nhan', '', 'F_004')
+    ra.act_step(s, ses, 1)                                             # F_002 -> F_001, lướt qua F_002
+    assert ses['cur'] == 'F_001'
+    for n in ('F_001', 'F_003', 'F_005'):
+        ses['cur'] = n
+        ra.act_decide(s, ses, 'nhan', '', n)
+    assert ses['cur'] == 'F_002' and s.status('F_002') == ''           # vòng lại mặt bị lướt qua, không kẹt ở F_005
+
+
+def test_decision_without_reason_gets_soft_hint(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    msg, level, _ = ra.act_decide(s, ses, 'gan_tay', '', 'F_004')
+    assert level == 'ok' and 'Chưa có lý do' in msg and 'Hoàn tác' in msg
+    msg, level, _ = ra.act_decide(s, ses, 'bo', 'MO_NHO', 'F_002')
+    assert 'Chưa có lý do' not in msg
+    assert 'TRƯỚC' in open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()     # nhãn nói rõ thứ tự
+
+
+def test_finished_blocks_other_tabs_and_shows_closing_overlay(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    ses = ra.new_session(s)
+    other = ra.new_session(s)                                          # tab thứ hai
+    decide_all(s)
+    assert 'm28-done' not in ra.make_view(s, ses)['header']
+    msg, level, ok = ra.act_finish(s, ses)
+    assert ok and s.finished and os.path.exists(s.done_path)
+    v = ra.make_view(s, ses)
+    assert 'm28-done' in v['header'] and 'quay lại cửa sổ cmd' in v['header'] and not v['nhan_ok'] and not v['xong_ok']
+    assert 'm28-done' in ra.make_view(s, other)['header']              # tab kia cũng thấy lớp phủ
+    n = len(s.rows)
+    assert ra.act_decide(s, other, 'bo', '', other['cur'])[1] == 'info'
+    assert ra.act_undo(s, other, other['cur'])[1] == 'info'
+    assert len(s.rows) == n and os.path.exists(s.done_path)           # done.txt không bị xoá trong 2 giây
+
+
+def test_corrupt_overlay_does_not_break_page(five):
+    need_pil()
+    s = ra.Store(five, 'P2', clock=FakeClock())
+    with open(os.path.join(five, 'overlays', 'F_002.png'), 'wb') as f:
+        f.write(b'junk')
+    big, warn = ra.overlay_for(s.by_name['F_002'], five)
+    assert warn and 'hỏng' in warn and big != os.path.join(five, 'overlays', 'F_002.png')   # không có mp50: ảnh xám
+    assert open(os.path.join(five, 'overlays', 'F_002.png'), 'rb').read() == b'junk'        # không ghi đè file gốc
+    ses = ra.new_session(s)
+    v = ra.make_view(s, ses)                                           # không văng lỗi
+    assert len(v['gallery']) == 5 and all(os.path.exists(p) for p, _ in v['gallery'])
+    with open(os.path.join(five, 'crop', 'images', 'F_001.png'), 'wb') as f:
+        f.write(b'junk')
+    with open(os.path.join(five, 'overlays', 'F_001.png'), 'wb') as f:
+        f.write(b'junk')
+    assert len(ra.make_view(s, ses)['gallery']) == 5
+
+
+def test_corrupt_overlay_is_redrawn_from_crop_when_possible(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd, pts = fake_run_with_images(tmp_path, with_overlay=True)
+    with open(os.path.join(rd, 'overlays', 'A.png'), 'wb') as f:
+        f.write(b'junk')
+    s = ra.Store(rd, 'P2')
+    big, warn = ra.overlay_for(s.by_name['A'], rd)
+    assert '_tmp' in big and 'hỏng' in warn and 'prepare' in warn
+    assert os.path.exists(ra.thumb_for(s.by_name['A'], '', rd))
+
+
+def test_port_is_fixed_so_second_copy_fails_clearly(five, tmp_path):
+    src = open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()
+    assert 'server_port=port' in src and 'TrustedHostMiddleware' in src and 'DEFAULT_PORT = 7860' in src
+    assert 'allowed_paths=[os.path.abspath(run_dir)]' not in src          # chỉ mở overlays, crop/images, _tmp
 
 
 # ---------- chạy thật như m28 gọi ----------

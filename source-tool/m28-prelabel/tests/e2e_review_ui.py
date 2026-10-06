@@ -14,7 +14,8 @@ Bốn pha:
   B  qua m28 thật: `m28.py review --force review` rồi `push --dry-run`, XML/manual_list/rejected khớp CSV.
   C  độ mượt trên ALL616 (616 mặt): mở trang, một quyết định, đổi trang; xoá triage_E2E.csv sau khi đo.
   D  (thêm) lỗi ghi CSV (giả lập Excel khoá file bằng cách đặt một thư mục vào chỗ file): báo "Không ghi được", giữ nguyên mặt, sửa xong bấm lại thì ghi được.
-Mọi tiến trình đã mở được dọn ở `finally`. Cổng 7871–7875, M28_NO_BROWSER=1.
+  E  sửa theo đợt kiểm 6/10: đổi bộ lọc, lưới rỗng, lớp phủ sau Xong, Host lạ bị chặn, cổng bận, tab thứ hai sau Xong, bấm lặp.
+Mọi tiến trình đã mở được dọn ở `finally`. Cổng 7871–7876, M28_NO_BROWSER=1.
 """
 import argparse
 import csv
@@ -27,6 +28,7 @@ import statistics
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 CODE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -446,11 +448,122 @@ def phase_d(pw, W, shots, port):
     shutil.rmtree(run, ignore_errors=True)
 
 
+# ---------- pha E ----------
+def phase_e(pw, W, shots, port):
+    log('\n== PHA E: sửa theo đợt kiểm 6/10 (bộ lọc, lưới rỗng, lớp phủ Xong, Host, cổng, hai tab) ==')
+    run = os.path.join(W, 'runs', 'F5UX')
+    shutil.rmtree(run, ignore_errors=True)
+    shutil.copytree(os.path.join(W, 'runs', 'F5'), run)
+    for d in ('review', 'push', 'xml', '_tmp'):
+        shutil.rmtree(os.path.join(run, d), ignore_errors=True)
+    csv_path = os.path.join(run, 'review', 'triage_P2.csv')
+    cmd = [sys.executable, os.path.join(CODE, 'tool', 'review_app.py'), 'runs/F5UX', 'P2']
+    p = start(cmd, W, port, None, os.path.join(shots, 'app_e.log'))
+    wait_port(port, p)
+    # bản thứ hai trên cùng cổng: lỗi rõ ràng mã 2, không tự nhảy sang cổng khác
+    p2 = start(cmd, W, port, None, os.path.join(shots, 'app_e2.log'))
+    p2.wait(timeout=60)
+    msg2 = open(os.path.join(shots, 'app_e2.log'), encoding='utf-8').read()
+    check(p2.returncode == 2 and f'Cổng {port} bận' in msg2, f'bản thứ hai thoát mã 2 báo cổng bận: {msg2.strip()[:90]!r}')
+    check(len(listeners(port + 1)) == 0, 'không có server nào mở ở cổng kế bên')
+    # Host lạ và file ngoài thư mục ảnh
+    def get(path, host=None):
+        req = urllib.request.Request(f'http://127.0.0.1:{port}{path}', headers={'Host': host} if host else {})
+        try:
+            return urllib.request.urlopen(req, timeout=5).status
+        except urllib.error.HTTPError as e:
+            return e.code
+    img = f'/gradio_api/file={os.path.abspath(os.path.join(run, "crop", "images", "F_001.png"))}'
+    csv_url = f'/gradio_api/file={os.path.abspath(os.path.join(run, "flags", "flags.json"))}'
+    check(get(img) == 200, 'ảnh cắt vẫn lấy được với Host 127.0.0.1')
+    check(get(img, f'evil.example:{port}') == 400, 'Host lạ (DNS rebinding) bị từ chối 400')
+    check(get(csv_url) == 403, 'flags.json (ngoài overlays, crop/images, _tmp) không lấy được qua /file= (403)')
+    ui = Ui(pw, port)
+    pg = ui.page
+    other = ui.browser.new_page(viewport={'width': 1440, 'height': 900})        # tab thứ hai, mở sớm (trạng thái cũ)
+    try:
+        ui.open()
+        other.goto(f'http://127.0.0.1:{port}/')
+        other.wait_for_selector('#info .face-name', timeout=30000)
+        ys = []
+        for name in ('F_001', 'F_004', 'F_005'):
+            pg.locator(f'#grid .thumbnail-item:has(img[alt^="{name}"])').first.click()
+            ui.wait_cur(name + '.png')
+            pg.wait_for_timeout(250)
+            ys.append(round(pg.locator('#btn-xong').bounding_box()['y']))
+        check(max(ys) - min(ys) <= 2, f'nút Xong không nhảy lên xuống giữa các mặt: y={ys}')
+        txt = pg.inner_text('#info')
+        check('Điểm nghi sai' in txt and 'Gợi ý của máy' in txt and 'low_conf' not in txt.split('Điểm nghi sai')[0],
+              'cột thông tin dùng chữ dễ hiểu (Điểm nghi sai, Gợi ý của máy)')
+        # đang xem F_005 (0 cờ) rồi lọc Đáng ngờ: phải sang mặt có trong danh sách
+        pg.locator('#filter label:has-text("Đáng ngờ")').click()
+        ui.wait_cur('F_004.png')
+        check(pg.locator('#grid .thumbnail-item.m28-cur').count() == 1, 'đổi bộ lọc: mặt đang xem được viền xanh trong lưới')
+        check(len(pg.locator('#grid img').all()) == 2 and not pg.locator('#btn-bo').is_disabled(),
+              'bộ lọc Đáng ngờ: 2 ảnh, nút quyết định bật')
+        pg.screenshot(path=os.path.join(shots, 'after_01_loc_dangngo.png'))
+        pg.locator('#filter label:has-text("Tất cả")').click()
+        # Gán tay không lý do: nhắc mềm
+        pg.keyboard.press('g')
+        ui.wait_done(1)
+        check('Chưa có lý do' in pg.inner_text('#msg'), 'Gán tay không lý do: có nhắc "Chưa có lý do"')
+        check('TRƯỚC' in pg.inner_text('#reason'), 'nhãn lý do ghi rõ chọn TRƯỚC')
+        pg.screenshot(path=os.path.join(shots, 'after_02_nhac_ly_do.png'))
+        # rà hết mặt còn lại
+        for _ in range(4):
+            pg.keyboard.press('n')
+            pg.wait_for_timeout(500)
+        ui.wait_done(5)
+        n_rows = len(read_csv_rows(csv_path))
+        for _ in range(4):
+            pg.keyboard.press('n')
+            pg.wait_for_timeout(300)
+        check(len(read_csv_rows(csv_path)) == n_rows, f'bấm N lặp ở mặt đã Nhận không ghi thêm dòng ({n_rows} dòng)')
+        check('đã là Nhận rồi' in pg.inner_text('#msg'), 'báo "đã là Nhận rồi"')
+        # lưới rỗng
+        pg.locator('#filter label:has-text("Chưa rà")').click()
+        pg.wait_for_selector('.m28-empty', timeout=10000)
+        check(pg.locator('#grid img').count() == 0 or not pg.locator('#grid').is_visible(), 'lọc rỗng: không còn lưới/biểu tượng ảnh hỏng')
+        check('không còn mặt chưa rà' in pg.inner_text('.m28-empty') and 'Trang' not in pg.inner_text('#pagelbl'),
+              'lọc rỗng: thông báo rõ, không có số trang')
+        check(pg.locator('#btn-nhan').is_disabled() and pg.locator('#btn-bo').is_disabled(), 'lọc rỗng: N/G/B bị khoá')
+        pg.screenshot(path=os.path.join(shots, 'after_03_loc_rong.png'))
+        pg.locator('#filter label:has-text("Tất cả")').click()
+        pg.wait_for_timeout(500)
+        # 500 px: nút không xuống dòng lệch nhau
+        pg.set_viewport_size({'width': 500, 'height': 900})
+        pg.wait_for_timeout(500)
+        hs = [pg.locator(s).first.bounding_box()['height'] for s in ('#btn-nhan', '#btn-gantay', '#btn-bo', '#btn-prev', '#btn-undo', '#btn-next')]
+        check(max(hs[:3]) - min(hs[:3]) < 2 and max(hs[3:]) - min(hs[3:]) < 2, f'500px: nút cùng hàng cao bằng nhau {hs}')
+        pg.screenshot(path=os.path.join(shots, 'after_04_500px.png'), full_page=True)
+        pg.set_viewport_size({'width': 1440, 'height': 900})
+        pg.wait_for_timeout(400)
+        # Xong: lớp phủ, tab cũ không ghi được
+        pg.click('#btn-xong')
+        pg.wait_for_selector('.m28-done', state='visible', timeout=10000)
+        check('quay lại cửa sổ cmd' in pg.inner_text('.m28-done'), 'bấm Xong: lớp phủ "Đóng tab này và quay lại cửa sổ cmd"')
+        pg.screenshot(path=os.path.join(shots, 'after_05_xong_overlay.png'))
+        before = read_csv_rows(csv_path)
+        other.click('#btn-bo')
+        other.wait_for_timeout(1000)
+        check(read_csv_rows(csv_path) == before, 'tab cũ bấm Bỏ trong 2 giây cuối: không ghi gì')
+        check(os.path.exists(os.path.join(run, 'review', 'done.txt')), 'done.txt không bị xoá')
+        t = time.time()
+        while p.poll() is None and time.time() - t < 10:
+            time.sleep(0.2)
+        check(p.returncode == 0 and os.path.exists(os.path.join(run, 'review', 'done.txt')), 'tiến trình thoát mã 0, done.txt còn')
+        pg.screenshot(path=os.path.join(shots, 'after_06_sau_tat.png'))
+        check(not ui.external(), 'không có request ra ngoài 127.0.0.1')
+        check(not ui.errors or all('Failed to load resource' in e or 'ERR_' in e for e in ui.errors), f'không lỗi JS: {ui.errors[:2]}')
+    finally:
+        ui.close()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--work', required=True, help='thư mục chạy có config/, runs/F5, runs/ALL616')
     ap.add_argument('--shots', required=True, help='thư mục lưu ảnh chụp (ngoài repo: có mặt người)')
-    ap.add_argument('--phases', default='ABCD')
+    ap.add_argument('--phases', default='ABCDE')
     a = ap.parse_args()
     W, shots = os.path.abspath(a.work), os.path.abspath(a.shots)
     os.makedirs(shots, exist_ok=True)
@@ -467,6 +580,8 @@ def main():
                 phase_c(pw, W, shots, 7874)
             if 'D' in a.phases:
                 phase_d(pw, W, shots, 7875)
+            if 'E' in a.phases:
+                phase_e(pw, W, shots, 7876)
     except (AssertionError, RuntimeError) as e:
         log(f'\nHỎNG: {e}')
         return 1

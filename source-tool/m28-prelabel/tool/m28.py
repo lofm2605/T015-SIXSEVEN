@@ -31,6 +31,8 @@ def run_step(name, args):
     out = os.path.join("runs", args.run, name)
     if os.path.exists(os.path.join(out, "done.txt")) and name not in args.force:
         print("bỏ qua", name)
+        if name == "review":
+            print("  (lượt này đã rà xong từ trước: muốn rà lại thì thêm --force review)")
         _log(args, name, "bo_qua", t0)
         return
     os.makedirs(out, exist_ok=True)
