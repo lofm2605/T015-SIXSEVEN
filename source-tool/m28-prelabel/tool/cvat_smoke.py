@@ -396,6 +396,9 @@ class Smoke:
         if not bad:
             _o, bad = cai_dat.check_org(env["org"])
         if bad:
+            if not env["url"] or not env["token"]:
+                bad += (" Hoặc mở tab Cài đặt trong trang rà soát, nhập link và token, TICK \"Nhớ trên máy này\" rồi Lưu: lệnh này chạy ở "
+                        "tiến trình riêng nên không thấy token chỉ nhập trong phiên của trang.")
             return HONG, S(bad)
         self.env = env
         self.url = env["url"]
