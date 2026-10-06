@@ -1,7 +1,7 @@
-"""Khớp phép đổi 478 -> N điểm (config) và ghi config/map_mp50.json, data/mp50.json (P3, 7/10). Chỉ dùng numpy.
-WFLW cũ, sẽ thay ở giai đoạn 2 (QĐ-001: tập chính là in-cabin YawDD + DrivFace).
+"""LỊCH SỬ, KHÔNG DÙNG (QĐ-001). Khớp phép đổi 478 -> N điểm (config) và ghi config/map_mp50.json, data/mp50.json (P3, 7/10). Chỉ dùng numpy.
+Đã thay bằng chọn đỉnh trực tiếp (tool/make_config.py); giữ để làm số so sánh.
 
-    python tool\\fit_map.py --run <run đã chạy crop+mediapipe cho tập F> [--manifest data\\manifest.csv --gt98 data\\gt98.json]
+    python tool\\legacy_wflw\\fit_map.py --run <run đã chạy crop+mediapipe cho tập F> [--manifest data\\manifest.csv --gt98 data\\gt98.json]
 
 Theo kế hoạch: chia mặt F một lần theo seed thành 240 khớp / 60 kiểm (chia TRƯỚC khi bỏ mặt no_face, nên số mặt thực có thể
 ít hơn) -> hình trung bình (Procrustes về mặt đầu tiên theo mã của tập khớp) -> với mỗi điểm lấy k = 6 đỉnh MediaPipe gần
@@ -19,8 +19,10 @@ import sys
 
 import numpy as np
 
-from make_config import gt50_from_gt98
-from m28core.mapping import apply_map, fit_ridge, similarity, to_mean
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from m28core.mapping import similarity, to_mean  # noqa: E402
+from make_config_wflw import gt50_from_gt98  # noqa: E402
+from mapping_ridge import apply_map, fit_ridge  # noqa: E402
 
 LAMBDAS = (0.1, 1.0, 10.0, 100.0)
 K = 6

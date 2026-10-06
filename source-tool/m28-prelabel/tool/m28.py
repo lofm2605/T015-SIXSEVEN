@@ -8,6 +8,9 @@
     python tool\\m28.py collect --task demo-R1610
     python tool\\m28.py all     --run thuP1 --list data\\f5_list.csv --images data\\crops --box wflw --review auto --task demo-thuP1
 
+Công cụ đo (không nằm trong pipeline, cùng thư mục tool\\): make_config.py (sinh config + map + hoán vị gương), check_flip.py, flag_eval.py, eval50.py, check_drivface.py.
+Ánh xạ 478 -> 50 là CHỌN ĐỈNH trực tiếp (config\\m28_config.json, mp_idx); công cụ WFLW cũ nằm ở tool\\legacy_wflw\\ (lịch sử). `--box wflw` giữ tên vì chay.bat, README, test dùng
+(nghĩa: lấy hộp mặt từ manifest.csv; chỉ đổi tên sau khi P1/P4 đồng ý).
 Mỗi bước ghi vào runs/<run>/<bước>/ và để lại done.txt khi xong thật; chạy lại thì bước đã xong được bỏ qua
 (trừ khi tên bước nằm trong --force). Địa chỉ CVAT và token đọc từ CVAT_URL, CVAT_ACCESS_TOKEN (tuỳ chọn CVAT_ORG).
 push chỉ tạo task MỚI demo-…; collect chỉ xuất (--skip-export, --dry-run, nhiều --task, --reviewer). --cleanup xoá task đã đẩy rồi lượt đẩy lại được.

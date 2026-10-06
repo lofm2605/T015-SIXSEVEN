@@ -1,12 +1,19 @@
-"""Đo cờ low_conf (P2, 8/10 và 10/10): cờ bắt được bao nhiêu điểm sai? Chỉ dùng numpy, chỉ chạy trên T-dev.
-WFLW cũ, sẽ thay ở giai đoạn 2 (QĐ-001: tập chính là in-cabin YawDD + DrivFace).
+"""Đo cờ low_conf (P2, 8/10 và 10/10). Chỉ dùng numpy; không bao giờ chạy trên Ttest (Ttest chỉ chạy một lần ngày 20/10).
 
-    python tool\\flag_eval.py --run <run có pred478 cho Tdev> [--tol 3.0] [--set Tdev]
+Điểm số nghi sai của mỗi điểm = lệch giữa ảnh gốc và ảnh lật đã bỏ lật / khoảng cách hai khoé mắt ngoài DỰ ĐOÁN (giống steps.flags). Cờ bật khi điểm số > t_flip.
+Hai chế độ:
 
-Điểm sai = lỗi so với đáp án WFLW > tol (% IOD; kế hoạch tạm 3% cho tới khi P3 có sai số vùng ngày 10/10). Lỗi: điểm E đo
-điểm-điểm, điểm C đo tới đường cong (cùng chỉ số chính của eval50). Điểm số nghi sai = lệch gốc/lật / khoảng cách hai mắt.
-In: tỉ lệ điểm sai, AUROC (toàn bộ và theo vùng), và với từng ngưỡng (phân vị) tỉ lệ điểm bị cờ, % điểm sai bị bắt, độ chính xác.
-Không đọc Ttest: T-test chỉ chạy đúng một lần ngày 20/10.
+(a) KHÔNG đáp án (dùng ngay, chưa cần nhãn gán tay):
+        python tool\\flag_eval.py --run <run đã chạy prepare cho Tdev> --set Tdev [--manifest data\\manifest.csv]
+    In phân bố điểm số theo vùng (trung vị, phân vị 0,85 và 0,95), với từng ngưỡng (phân vị 0,5 ... 0,95) tỉ lệ điểm bị cờ và số cờ/mặt, và ĐỀ XUẤT
+    t_flip = phân vị 0,85 của điểm số trên Tdev (cờ ~ 15% số điểm, ~7 cờ/mặt trên 50 điểm; kế hoạch P2: cờ <= 15% số điểm) để P2 chốt ngày 12/10.
+    Không ghi vào config (P2 tự ghi ở tab Cài đặt hoặc make_config.py --t-flip). Không có AUROC vì chưa biết điểm nào sai.
+
+(b) CÓ đáp án (khi nhóm đã gán tay xong tập G/X, nhãn ở raw\\*.xml):
+        python tool\\flag_eval.py --run <run> --gt raw\\<đáp án>.xml [--tol 3.0]
+    Lỗi từng điểm lấy từ eval50.point_errors (E điểm-điểm, C tới đường gấp khúc đáp án), ghép theo tên ảnh và tên điểm. "Điểm sai" = lỗi > sai số chấp nhận
+    (config.tolerance theo vùng nếu có, không thì --tol, mặc định 3% IOD). Báo % điểm sai, AUROC toàn bộ và THEO VÙNG, và với từng ngưỡng: % điểm bị cờ,
+    % điểm sai bị bắt, độ chính xác, cờ/mặt. Mặt thuộc Ttest (theo manifest) bị bỏ.
 """
 import argparse
 import csv
@@ -16,10 +23,10 @@ import sys
 
 import numpy as np
 
-from fit_map import iod98, point_to_curve
-from m28core.mapping import apply_map
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 QUANTILES = (0.5, 0.7, 0.8, 0.85, 0.9, 0.95)
+SUGGEST_Q = 0.85
 
 
 def auroc(score, bad):
@@ -41,32 +48,100 @@ def auroc(score, bad):
     return float((ranks[bad].sum() - n1 * (n1 + 1) / 2) / (n1 * n0))
 
 
-def collect_points(files, pred, cfg, mp, gt98):
-    """Mỗi điểm của mỗi mặt: (vùng, điểm số nghi sai, lỗi % IOD)."""
+def flip_scores(mp50_face, cfg):
+    """Điểm số nghi sai của từng điểm của một mặt: [(vùng, điểm số)] theo thứ tự config; None nếu mặt không có ảnh lật.
+    mp50_face = {'orig': {tên: [x, y]}, 'flip': {...} | None} (flip đã bỏ lật, như map50\\mp50.json)."""
+    if not mp50_face.get("flip"):
+        return None
     names = [p["name"] for p in cfg["points"]]
     e1, e2 = cfg["iod_points"]
+    o = np.array([mp50_face["orig"][n] for n in names], float)
+    f = np.array([mp50_face["flip"][n] for n in names], float)
+    iod = float(np.linalg.norm(np.array(mp50_face["orig"][e1]) - np.array(mp50_face["orig"][e2]))) or 1.0
+    s = np.linalg.norm(o - f, axis=1) / iod
+    return [(p["region"], float(v)) for p, v in zip(cfg["points"], s)]
+
+
+def collect_scores(files, mp50, cfg):
+    """Chế độ (a): [(vùng, điểm số, tên mặt)] của các mặt có ảnh lật; trả thêm số mặt bị bỏ vì thiếu ảnh lật."""
+    rows, skipped = [], 0
+    for fn in files:
+        sc = flip_scores(mp50[fn], cfg)
+        if sc is None:
+            skipped += 1
+            continue
+        rows += [(r, v, fn) for r, v in sc]
+    return rows, skipped
+
+
+def threshold_table(score, nface, out=print):
+    """Với từng phân vị: ngưỡng, % điểm bị cờ, số cờ/mặt. Trả list (q, t, % cờ, cờ/mặt)."""
+    out("phân vị  ngưỡng t_flip  điểm bị cờ  cờ/mặt")
+    table = []
+    for q in QUANTILES:
+        t = float(np.quantile(score, q))
+        flag = score > t
+        table.append((q, t, float(flag.mean() * 100), float(flag.sum() / max(nface, 1))))
+        out(f"{q:7.2f}  {t:12.4f}  {flag.mean() * 100:9.1f}%  {flag.sum() / max(nface, 1):6.1f}")
+    return table
+
+
+def report_unlabelled(rows, out=print):
+    """Chế độ (a). Trả dict(t_flip, flags_per_face, flagged_pct, table, by_region)."""
+    reg = np.array([r[0] for r in rows])
+    score = np.array([r[1] for r in rows])
+    faces = sorted(set(r[2] for r in rows))
+    out(f"{len(faces)} mặt, {len(rows)} điểm (KHÔNG có đáp án: không tính được AUROC; AUROC cần nhãn gán tay G/X, dùng chế độ --gt)")
+    out("điểm số theo vùng (trung vị / phân vị 0,85 / phân vị 0,95): "
+        + ", ".join(f"{g} {np.median(score[reg == g]):.4f}/{np.quantile(score[reg == g], 0.85):.4f}/{np.quantile(score[reg == g], 0.95):.4f}"
+                    for g in sorted(set(reg))))
+    table = threshold_table(score, len(faces), out)
+    t = round(float(np.quantile(score, SUGGEST_Q)), 4)
+    flagged = score > t
+    per_face = float(flagged.sum() / len(faces))
+    by_reg = {g: float((flagged[reg == g]).mean() * 100) for g in sorted(set(reg))}
+    out(f"ĐỀ XUẤT t_flip = {t:g} (phân vị {SUGGEST_Q:g} trên {len(faces)} mặt): {100 * flagged.mean():.1f}% điểm bị cờ, {per_face:.1f} cờ/mặt; "
+        "theo vùng: " + ", ".join(f"{g} {v:.0f}%" for g, v in by_reg.items()))
+    out("(chỉ đề xuất cho P2 chốt ngày 12/10; chưa ghi vào config)")
+    return dict(t_flip=t, flags_per_face=per_face, flagged_pct=float(100 * flagged.mean()), table=table, by_region=by_reg)
+
+
+def tolerance_for(cfg, region, tol):
+    """Sai số chấp nhận (% IOD) của một vùng: config.tolerance (dict theo vùng hoặc một số) nếu có, không thì tol."""
+    t = cfg.get("tolerance")
+    if isinstance(t, dict):
+        v = t.get(region)
+        return float(v) if v is not None else tol
+    if isinstance(t, (int, float)) and not isinstance(t, bool):
+        return float(t)
+    return tol
+
+
+def collect_points(files, mp50, cfg, gt, pred_upload, tol):
+    """Chế độ (b): [(vùng, điểm số, lỗi % IOD, tên mặt)]. files: {tên mặt trong run: tên ảnh không đuôi trong nhãn}. pred_upload: dự đoán theo toạ độ nhãn."""
+    import eval50
     rows = []
-    for f in files:
-        o = apply_map(pred[f]["orig"], mp, cfg)
-        u = apply_map(pred[f]["flip"], mp, cfg, flipped=True)
-        iod_pred = np.linalg.norm(np.array(o[e1]) - np.array(o[e2])) or 1.0
-        g98 = np.asarray(gt98[f], float)
-        d = iod98(g98)
-        for p in cfg["points"]:
-            n = p["name"]
-            pt = np.array(o[n])
-            gt = g98[p["wflw"]]
-            e = np.linalg.norm(pt - gt) if p["type"] == "E" else point_to_curve(pt, g98[p["curve"]])
-            rows.append((p["region"], float(np.linalg.norm(pt - np.array(u[n])) / iod_pred), float(e / d * 100), f))
+    for fn, key in files.items():
+        sc = flip_scores(mp50[fn], cfg)
+        if sc is None or key not in gt or key not in pred_upload:
+            continue
+        err, _missing, d = eval50.point_errors(pred_upload[key], gt[key], cfg)
+        if d is None:
+            continue
+        for p, (reg, v) in zip(cfg["points"], sc):
+            if p["name"] in err:
+                rows.append((reg, v, err[p["name"]], fn))
     return rows
 
 
-def report(rows, tol, out=print):
+def report(rows, tol, out=print, cfg=None):
+    """Chế độ (b): rows = [(vùng, điểm số, lỗi % IOD, tên mặt)]; điểm sai = lỗi > tol (hoặc config.tolerance theo vùng nếu truyền cfg)."""
     reg = np.array([r[0] for r in rows])
     score = np.array([r[1] for r in rows])
     err = np.array([r[2] for r in rows])
-    bad = err > tol
-    out(f"{len(set(r[3] for r in rows))} mặt, {len(rows)} điểm; điểm sai (lỗi > {tol:g}% IOD): {100 * bad.mean():.1f}%")
+    tols = np.array([tolerance_for(cfg, g, tol) if cfg else tol for g in reg])
+    bad = err > tols
+    out(f"{len(set(r[3] for r in rows))} mặt, {len(rows)} điểm; điểm sai (lỗi > sai số chấp nhận, mặc định {tol:g}% IOD): {100 * bad.mean():.1f}%")
     out(f"AUROC toàn bộ: {auroc(score, bad):.3f}   (0,5 = cờ không có tác dụng; 1 = hoàn hảo)")
     out("AUROC theo vùng: " + ", ".join(f"{r} {auroc(score[reg == r], bad[reg == r]):.3f} (sai {100 * bad[reg == r].mean():.0f}%)"
                                           for r in sorted(set(reg))))
@@ -83,28 +158,63 @@ def report(rows, tol, out=print):
     return table
 
 
-def main():
+def _faces_of_set(manifest, sets):
+    with open(manifest, encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    return {r["file"][:-4]: r["set"] for r in rows}, [r["file"][:-4] for r in rows if r["set"] in sets]
+
+
+def main(argv=None):
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    p = argparse.ArgumentParser()
-    p.add_argument("--run", required=True)
-    p.add_argument("--set", default="Tdev", choices=["Tdev", "F", "D", "G", "X"], help="Ttest không được phép (chỉ chạy một lần ngày 20/10)")
-    p.add_argument("--tol", type=float, default=3.0)
-    p.add_argument("--manifest", default=os.path.join("data", "manifest.csv"))
-    p.add_argument("--gt98", default=os.path.join("data", "gt98.json"))
-    p.add_argument("--config", default=os.path.join("config", "m28_config.json"))
-    p.add_argument("--map", default=os.path.join("config", "map_mp50.json"))
-    a = p.parse_args()
-    cfg, mp = json.load(open(a.config, encoding="utf-8")), json.load(open(a.map, encoding="utf-8"))
-    gt98 = {k[:-4] if k.endswith(".png") else k: v for k, v in json.load(open(a.gt98, encoding="utf-8")).items()}
-    pred = json.load(open(os.path.join("runs", a.run, "mediapipe", "pred478.json"), encoding="utf-8"))
-    with open(a.manifest, encoding="utf-8") as f:
-        files = [r["file"][:-4] for r in csv.DictReader(f) if r["set"] == a.set]
-    files = [f for f in files if f in pred and pred[f].get("flip") is not None and f in gt98]
+    ap = argparse.ArgumentParser(description="Đo cờ low_conf: chế độ (a) không đáp án, (b) có đáp án (--gt)")
+    ap.add_argument("--run", required=True)
+    ap.add_argument("--set", default="Tdev", choices=["Tdev", "F", "D", "G", "X", "P"], help="Ttest không được phép (chỉ chạy một lần ngày 20/10)")
+    ap.add_argument("--gt", help="nhãn gán tay (annotations.xml, raw\\*.xml hoặc zip CVAT): bật chế độ (b)")
+    ap.add_argument("--tol", type=float, default=3.0, help="chế độ (b): sai số chấp nhận (%% IOD) khi config.tolerance chưa có")
+    ap.add_argument("--manifest", default=os.path.join("data", "manifest.csv"))
+    ap.add_argument("--config", default=os.path.join("config", "m28_config.json"))
+    a = ap.parse_args(argv)
+    with open(a.config, encoding="utf-8") as f:
+        cfg = json.load(f)
+    mp50_path = os.path.join("runs", a.run, "map50", "mp50.json")
+    if not os.path.exists(mp50_path):
+        sys.exit(f"Không thấy {mp50_path}: chạy prepare (map50) cho lượt này trước.")
+    with open(mp50_path, encoding="utf-8") as f:
+        mp50 = json.load(f)
+    if a.gt:
+        import eval50
+        gt = eval50.read_labels(a.gt, cfg)
+        from m28core import steps
+        meta = steps._jload(os.path.join("runs", a.run, "crop", "meta.json"))
+        box = os.path.join("runs", a.run, "crop", "box.txt")
+        mode = open(box, encoding="utf-8").read().strip() if os.path.exists(box) else "wflw"
+        keys = {n: eval50.stem(steps._file_name(n, meta[n], mode)) for n in mp50 if n in meta}
+        if os.path.exists(a.manifest):
+            sets, _ = _faces_of_set(a.manifest, {a.set})
+            dropped = [n for n in keys if sets.get(n) == "Ttest"]
+            for n in dropped:
+                del keys[n]
+            if dropped:
+                print(f"Bỏ {len(dropped)} mặt thuộc Ttest (không dùng để chọn ngưỡng).")
+        pred_up = eval50.read_run_pred(a.run, cfg)
+        rows = collect_points(keys, mp50, cfg, gt, pred_up, a.tol)
+        if not rows:
+            sys.exit("Không ghép được mặt nào giữa nhãn và lượt chạy (tên ảnh khác nhau? thiếu ảnh lật?).")
+        report(rows, a.tol, cfg=cfg)
+        return 0
+    if not os.path.exists(a.manifest):
+        sys.exit(f"Cần {a.manifest} để chọn mặt của tập {a.set}.")
+    _, files = _faces_of_set(a.manifest, {a.set})
+    files = [f for f in files if f in mp50]
     if not files:
-        sys.exit("Không có mặt nào có cả ảnh gốc, ảnh lật và đáp án. Chạy prepare cho tập này trước.")
-    report(collect_points(files, pred, cfg, mp, gt98), a.tol)
+        sys.exit(f"Không có mặt nào của tập {a.set} trong {mp50_path}. Chạy prepare --set {a.set} trước.")
+    rows, skipped = collect_scores(files, mp50, cfg)
+    if skipped:
+        print(f"Bỏ {skipped} mặt không có ảnh lật.")
+    report_unlabelled(rows)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

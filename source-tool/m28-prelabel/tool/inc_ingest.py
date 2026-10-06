@@ -1,6 +1,6 @@
 """Nạp dữ liệu in-cabin (YawDD + DrivFace), chia tập, cắt ảnh và đóng gói (P1, giai đoạn 1 mới, QĐ-001).
 
-Thay cho split.py + crop.py của WFLW (giữ nguyên làm lịch sử). Ba lệnh con, chạy lần lượt hoặc gộp bằng `all`:
+Thay cho split.py + crop.py của WFLW (nay ở tool/legacy_wflw/, lịch sử, không dùng; phần cắt mặt dùng chung ở m28core/cat_mat.py). Ba lệnh con, chạy lần lượt hoặc gộp bằng `all`:
 
     scan   trích khung từ video YawDD / đọc ảnh DrivFace, dò mặt bằng MediaPipe, đo, ghi cache (chậm, chạy một lần)
     split  chia tập F/Tdev/Ttest/G/P/X/D theo người, ghi khung gốc + ảnh cắt + manifest.csv (nhanh, TẤT ĐỊNH: cùng cache
@@ -71,7 +71,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_manifest as cm  # noqa: E402
 from check_manifest import (DF_MIN_GAP_IMGS, FLAGS, INC_COLUMNS, MAX_PER_VIDEO, MEASURES, MIN_GAP_S)  # noqa: E402
 from m28core import steps  # noqa: E402
-from wflw import OUT, crop_geometry, square_crop  # noqa: E402
+from m28core.cat_mat import OUT, crop_geometry, square_crop  # noqa: E402
 
 # ---------- hằng số trích khung ----------
 SAMPLE_STEP_S = 1.0          # lấy một khung ứng viên mỗi chừng này giây

@@ -1,4 +1,4 @@
-"""Thử split/crop/check_manifest bằng dữ liệu GIẢ (ngẫu nhiên, không phải mặt thật)."""
+"""Thử split/crop (LỊCH SỬ, tool/legacy_wflw) và check_manifest bằng dữ liệu GIẢ (ngẫu nhiên, không phải mặt thật)."""
 import csv
 import os
 import random
@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tool'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tool', 'legacy_wflw'))
 import check_manifest  # noqa: E402
 import crop  # noqa: E402
 import split  # noqa: E402

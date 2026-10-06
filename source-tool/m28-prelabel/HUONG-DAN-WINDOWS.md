@@ -2,7 +2,7 @@
 
 Dành cho cả 5 người (P1–P5). Mọi lệnh viết cho **cmd** (không phải PowerShell), Python 3.14, CPU, không cần GPU.
 Bản này **chưa ai thử trên Windows thật**: gặp lỗi thì ghi lại nguyên văn rồi báo P1 (xem mục 8).
-Ảnh WFLW là CC BY-NC-ND: chỉ dùng nội bộ, không gửi cho ai ngoài nhóm, không đưa vào chat AI nào khác.
+Ảnh trong xe (YawDD, DrivFace) là ảnh người lái xe, giấy phép chỉ cho dùng học tập/nghiên cứu: chỉ dùng nội bộ, không đăng, không gửi cho ai ngoài nhóm, không đưa vào chat AI nào khác.
 
 > **Cách nhanh nhất:** sau khi lấy code (mục 1) và giải nén dữ liệu (mục 4), **nhấp đúp `chay.bat`** trong thư mục
 > `source-tool\m28-prelabel`. File này tự cài môi trường Python lần đầu, tải model, rồi hiện menu: mở trang rà soát
@@ -81,8 +81,8 @@ python tool\m28.py all --run F5 --list data\f5_list.csv --images data\crops --bo
 ```
 Kết quả đúng: các bước `crop`, `mediapipe`, `map50`, `flags`, `autoqc`, `overlays` đều "xong", `push` in "Chạy thử (--dry-run)" rồi dừng,
 và có `runs\F5\xml\prelabel.xml` (5 mặt × 50 điểm). Lần chạy này `low_conf` = 0 vì `t_flip` trong `config\m28_config.json` còn `null` (P2 chốt sau họp 12/10).
-Lưu ý: `config\map_mp50.json` hiện còn là ánh xạ học trên WFLW (sẽ thay ở giai đoạn 2), nên một số điểm trong 50 điểm có thể lệch nghĩa trên mặt tài xế.
-Để thấy điểm đỏ trên trang rà soát khi thử: mở `config\m28_config.json`, đổi `"t_flip": null` thành `"t_flip": 0.0672` rồi chạy lại các bước từ `flags`:
+Lưu ý: 50 điểm là các đỉnh MediaPipe chọn sẵn (`config\m28_config.json`, `mp_idx`); khi mặt quay quá ~25-30 độ, các điểm viền phía xa nằm trong má chứ không trên đường viền nhìn thấy (xem README, mục "Ánh xạ 478→50 bằng chọn đỉnh").
+Để thấy điểm đỏ trên trang rà soát khi thử: mở `config\m28_config.json`, đổi `"t_flip": null` thành `"t_flip": 0.0464` (số đề xuất cho họp 12/10, chưa chốt) rồi chạy lại các bước từ `flags`:
 `python tool\m28.py prepare --run F5 --list data\f5_list.csv --images data\crops --box wflw --force flags autoqc overlays`.
 (Đừng commit file config sau khi sửa số này; hoàn lại bằng `git checkout config\m28_config.json`.)
 
@@ -164,7 +164,7 @@ Làm một lần trên máy có CVAT, trước khi đẩy ảnh thật (mất kh
 ```bat
 python -m pytest tests -q
 ```
-Phải ra `539 passed` (hoặc hơn; có thể thêm 1 `skipped`). Test chỉ dùng dữ liệu giả, không cần ảnh WFLW hay mạng.
+Phải ra `657 passed` (hoặc hơn; có thể thêm 1 `skipped`). Test chỉ dùng dữ liệu giả, không cần ảnh mặt thật hay mạng.
 
 | Triệu chứng | Cách xử lý |
 |---|---|
@@ -173,7 +173,7 @@ Phải ra `539 passed` (hoặc hơn; có thể thêm 1 `skipped`). Test chỉ d�
 | `Cổng 7860 bận` | Đã có bản trang rà soát đang chạy: đóng nó, hoặc `set GRADIO_SERVER_PORT=7861` |
 | Trình duyệt không tự mở | `set M28_NO_BROWSER=1` rồi tự mở http://127.0.0.1:7860 |
 | `Thiếu file config\...` / `Thiếu m28core.push` | Chưa `git pull`, hoặc phần đó là của P4 chưa commit |
-| `không đọc được ảnh` ở bước crop | Sai `--images`: phải trỏ tới thư mục chứa `0--Parade`, `1--Handshaking`... |
+| `không đọc được ảnh` ở bước crop | Sai `--images`: phải trỏ tới `data\frames` (khung gốc) hoặc `data\crops` (chỉ có gói, kèm `--box wflw`) |
 | `import mediapipe` lỗi | Python 3.14 chưa hỗ trợ trên máy bạn: tạo lại venv bằng `py -3.12`; ghi lại phiên bản và báo P2 |
 
 Khi báo lỗi gửi: bản Windows (`winver`), `python --version`, lệnh đã gõ và 10 dòng cuối của `runs\<run>\log.txt`. **Không** gửi ảnh mặt, `gt98.json`, file xuất CVAT hay token.
