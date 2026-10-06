@@ -496,7 +496,7 @@ def test_missing_push_module(tmp_path, world, monkeypatch):
     imgs = tmp_path / 'imgs'
     write_images(imgs)
     to_review_auto('A', imgs, 'auto')
-    monkeypatch.delitem(sys.modules, 'm28core.push')
+    monkeypatch.setitem(sys.modules, 'm28core.push', None)       # giả lập thiếu module (m28core/push.py thật đã có trong repo)
     with pytest.raises(SystemExit, match='m28core.push'):
         m28.main(['push', '--run', 'A', '--review', 'auto', '--images', str(imgs)])
 
@@ -584,3 +584,73 @@ def test_review_ui_ctrl_c_stops_cleanly_and_skip_hint(tmp_path, world, monkeypat
     open('runs/A/review/done.txt', 'w').write('ok')
     m28.main(['review', '--run', 'A', '--review', 'ui', '--reviewer', 'P5'])
     assert '--force review' in capsys.readouterr().out                  # bỏ qua vì đã xong: gợi ý cách rà lại
+
+
+# 11 --------------------------------------------------------------------------
+def test_soft_deleted_faces_are_filtered_everywhere(tmp_path, world):
+    """Xoá mềm (excluded.txt) là bộ lọc lúc đọc: hàng đợi, review, push, chạy lại các bước đều trừ mặt đó; file kết quả không bị sửa."""
+    import dot_anh
+    from m28core import loai_tru
+    imgs = wflw_setup(tmp_path)
+    to_review_auto('W', imgs, 'wflw')
+    rd = os.path.join('runs', 'W')
+    before = {f: open(os.path.join(rd, *f.split('/')), 'rb').read() for f in ('crop/meta.json', 'flags/flags.json', 'map50/mp50.json')}
+    dot_anh.soft_delete_image(rd, 'F_002')                        # mặt tốt
+    dot_anh.soft_delete_image(rd, 'F_004')                        # ảnh đen: no_face ở bước mediapipe
+    assert loai_tru.read_excluded(rd) == {'F_002', 'F_004'}
+    args = parse(['review', '--run', 'W', '--review', 'auto'])
+    names, fl, _sug = steps._queue(args)
+    assert 'F_002' not in names and 'F_002' not in fl and sorted(names) == ['F_001', 'F_003']
+    assert 'F_004' not in steps._no_face(args) and 'F_005' in steps._no_face(args)
+    # review auto chạy lại không còn dòng của mặt đã xoá
+    m28.main(['review', '--run', 'W', '--review', 'auto', '--force', 'review'])
+    rows = open(os.path.join(rd, 'review', 'triage_auto.csv'), encoding='utf-8').read()
+    assert 'F_002' not in rows and 'F_004' not in rows and 'F_001.png,nhan' in rows
+    m28.main(['push', '--run', 'W', '--review', 'auto', '--force', 'push'])
+    c = world.push[-1]
+    assert sorted(os.path.basename(p) for p in c['nhan']) == ['F_001.png', 'F_003.png'] and c['tay'] == []
+    assert sorted(read_xml('W')) == ['F_001.png', 'F_003.png']
+    assert open('runs/W/push/rejected.csv').read().splitlines() == [
+        'name,reason', 'F_005,khong_doc_duoc_anh', 'F_002,da_xoa', 'F_004,da_xoa']
+    # chạy lại các bước (--force) với crop/overlays đã chuyển vào _trash: không lỗi, không tạo lại file, không mất mục cũ trong file kết quả
+    m28.main(prep_args('W', imgs, '--box', 'wflw', '--force', *m28.PREPARE))
+    assert not os.path.exists(os.path.join(rd, 'crop', 'images', 'F_002.png'))
+    assert not os.path.exists(os.path.join(rd, 'overlays', 'F_002.png'))
+    meta, flags_, mp50 = (json.load(open(os.path.join(rd, *f.split('/')))) for f in ('crop/meta.json', 'flags/flags.json', 'map50/mp50.json'))
+    assert 'F_002' in meta and 'F_002' in flags_ and 'F_002' in mp50             # mục cũ giữ nguyên (khôi phục được)
+    assert json.loads(before['flags/flags.json'])['F_002'] == flags_['F_002']
+    csv_rows = list(csv.reader(open(os.path.join(rd, 'autoqc', 'autoqc.csv'), encoding='utf-8')))
+    assert 'F_002.png' in [r[0] for r in csv_rows]
+    # khôi phục: gỡ tên khỏi danh sách và trả file về chỗ cũ -> lại có trong hàng đợi
+    item = [t for t in dot_anh.list_trash(rd) if t['ten'] == 'F_002'][0]
+    assert dot_anh.restore_image(rd, item['folder'], reviewer='auto')['ten'] == 'F_002'
+    assert os.path.exists(os.path.join(rd, 'crop', 'images', 'F_002.png'))
+    assert 'F_002' in steps._queue(args)[0]
+
+
+def test_load_items_skips_excluded_names(tmp_path, world):
+    from m28core import loai_tru
+    imgs = tmp_path / 'imgs'
+    write_images(imgs)
+    os.makedirs('runs/A')
+    loai_tru.add('runs/A', ['face_b'])
+    items = steps.load_items(parse(['prepare', '--run', 'A', '--images', str(imgs), '--box', 'auto']))
+    assert sorted(i['name'] for i in items) == ['face_a', 'face_c']
+
+
+def test_dot_plan_counts_equal_steps_push(tmp_path, world, capsys):
+    """Hộp xác nhận đếm bằng cùng hàm phân loại với steps.push: số Nhận/Gán tay/Bỏ khớp dòng 'push: …' in ra."""
+    import day_cvat
+    import dot_anh
+    imgs = wflw_setup(tmp_path)
+    to_review_auto('W', imgs, 'wflw')
+    rd = os.path.join('runs', 'W')
+    dot_anh.soft_delete_image(rd, 'F_003')
+    with pytest.raises(SystemExit):
+        m28.main(['push', '--run', 'W', '--review', 'auto', '--dry-run', '--force', 'push'])
+    out = capsys.readouterr().out
+    import re
+    n, t, b, x = map(int, re.search(r'push: (\d+) mặt nhận, (\d+) mặt gán tay, (\d+) bỏ, (\d+) đã xoá mềm', out).groups())
+    p = day_cvat.plan_counts(rd, 'auto', os.getcwd())
+    assert (p['nhan'], p['tay'], p['bo'], p['xoa']) == (n, t, b, x) == (2, 0, 2, 1)
+    assert p['jobs'] == 1 and p['remaining'] == 0

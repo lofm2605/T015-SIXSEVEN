@@ -92,14 +92,32 @@ bấm **Bắt đầu chuẩn bị**, chờ thanh tiến độ xong (có nút Hu�
 lượt cũ không bị đụng, mở lại bằng lệnh cmd in ra (ví dụ `python tool\review_app.py runs\F5 P1`). Ảnh mặt người thật chỉ xử lý trên máy bạn, không đưa vào chat AI.
 
 ## 7. Nhập vào CVAT (khi đã có CVAT trên máy)
-Cài CVAT theo `de-tai-m28\huong-dan-chung.md` (mục cài CVAT). Token chỉ đặt trong biến môi trường, không ghi vào file hay chat:
+**Lưu ý: `push`, `collect`, xoá task và label `face50` mới chỉ thử bằng CVAT giả, CHƯA thử trên CVAT thật.** Lần đầu chạy trên task thử `demo-…` và báo P4 nếu có lỗi.
+
+Cài CVAT theo `de-tai-m28\huong-dan-chung.md` (mục cài CVAT), rồi cài SDK cùng bản với server và sinh file label:
+```bat
+python -m pip install cvat-sdk==2.77.0
+python tool\make_label.py
+```
+Token chỉ đặt trong biến môi trường, **trong cùng cửa sổ cmd sẽ chạy lệnh hoặc mở trang**; không ghi vào file, không dán vào chat. `set` chỉ có tác dụng trong cửa sổ đó;
+`setx CVAT_ACCESS_TOKEN <token>` lưu lâu dài nhưng chỉ thấy ở cửa sổ cmd MỞ SAU đó (và để lại token trong máy: ngày 24/10 thu hồi token và xoá biến).
 ```bat
 set CVAT_URL=http://localhost:8080
 set CVAT_ACCESS_TOKEN=<dán token của bạn>
-python tool\m28.py push --run F5 --task demo-F5
-python tool\m28.py collect --task demo-F5
+python tool\m28.py push --run F5 --reviewer P2 --task demo-F5
+python tool\m28.py collect --task demo-F5 --reviewer P2
 ```
-Chỉ tạo task bắt đầu bằng `demo-`; không bao giờ chạy trên task `m28-`. `push` và `collect` thật là phần của P4, **chưa có**: hiện chỉ dùng `push --dry-run`.
+- **Từ trang rà soát:** mở trang từ **cùng cửa sổ cmd** đã `set` (`python tool\review_app.py runs\F5 P2`). Rà hết mặt thì nút **Đẩy lên CVAT** (dưới nút Xong) bật; bấm → hộp xác nhận (nút Huỷ là mặc định, Esc = Huỷ) → Đẩy.
+  Thiếu `CVAT_URL`/`CVAT_ACCESS_TOKEN` thì nút khoá và trang nhắc lệnh `set`. Trang không có ô nhập token.
+- **Lần push dở** (mất mạng, nhập nhãn lỗi): `python tool\m28.py push --run F5 --resume` làm nốt trên đúng task đã tạo, hoặc `python tool\m28.py push --run F5 --cleanup --confirm-name demo-F5` để xoá task dở rồi đẩy lại.
+  Sau khi `push` xong, gõ lại `push`/`all` ở cmd chỉ in "bỏ qua push" (đã ghi `runs\F5\push\done.txt`).
+- **`collect`** chỉ xuất nhãn về `raw\<task>_<người>_<ngàyDDMM>.xml` (không ghi đè) và lập `outputs\collect_<task>.md`; luôn thêm `--reviewer P<số của bạn>`. `--skip-export` chỉ đọc `raw\`; `--dry-run` chỉ liệt kê job.
+- **Tab Các đợt**: xem các lượt đã nạp (thẻ: ngày, ghi chú, số ảnh, Nhận/Gán tay/Bỏ/Chưa rà, trạng thái), xem lưới ảnh, xoá ảnh (rê chuột lên ảnh, bấm thùng rác), khôi phục, xoá cả đợt.
+- **CẢNH BÁO khi xoá:**
+  - Xoá ảnh hoặc đợt ở trang là **xoá mềm, chỉ trên máy bạn** (thùng rác `runs\<lượt>\_trash`, `runs\_trash`; khôi phục được). Nó **không xoá gì trên CVAT**: ảnh đã đẩy vẫn nằm trong task `demo-…`.
+  - **Dọn thùng rác** và **Xoá vĩnh viễn** là xoá thật, không khôi phục được.
+  - **Xoá task trên CVAT** (nút ở khu CVAT của đợt đã đẩy) **không hoàn tác được và mất cả nhãn đã sửa trong CVAT**: chạy `collect` trước. Hộp xác nhận bắt gõ lại đúng tên task và tick ô "Tôi hiểu…". Chỉ xoá được task do chính tool tạo (`demo-…` ghi trong `push.json`); không bao giờ task `m28-`.
+Chỉ tạo task bắt đầu bằng `demo-`; không bao giờ chạy trên task `m28-`.
 
 ## 8. Chạy test và báo lỗi
 ```bat

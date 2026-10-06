@@ -13,6 +13,7 @@ Phần Gradio nằm ở review_app.py (`_nap_tab`); ở đây có cả mô hình
 """
 import collections
 import csv
+import datetime
 import hashlib
 import html
 import importlib.util
@@ -28,6 +29,9 @@ import unicodedata
 import warnings
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+if TOOL_DIR not in sys.path:
+    sys.path.insert(0, TOOL_DIR)
+from m28core import cvat_io, dang_chay, loai_tru  # noqa: E402  (chỉ thư viện chuẩn)
 
 # ---------- hằng số ----------
 PREPARE = ["crop", "mediapipe", "map50", "flags", "autoqc", "overlays"]      # chép từ m28.PREPARE (test so khớp)
@@ -47,6 +51,7 @@ NO_FACE_VI = {"khong_thay_mat": "MediaPipe không thấy mặt", "khong_doc_duoc
 STEP_VI = {"xong": "xong", "bo_qua": "bỏ qua (đã xong từ trước)", "dung": "dừng giữa chừng", "loi": "lỗi", None: "chưa chạy"}
 MULTI_FACE_NOTE = ("Ảnh nhiều mặt: `--box auto` chỉ lấy **mặt lớn nhất**; cần mặt khác thì Gán tay trong CVAT.")
 LOG_LINES = 500
+NOTE_MAX = 500                      # ghi chú của đợt (dot.json)
 
 
 class RunError(Exception):
@@ -187,9 +192,10 @@ def next_run_name(runs_root):
     """NAP_001, NAP_002... : số lớn nhất trong các thư mục runs/NAP_<số> (không phân biệt hoa thường) + 1."""
     names = _listing(runs_root)
     n = 0
-    for d in names:
+    deleted = [d.split("__")[0] for d in _listing(os.path.join(runs_root, "_trash"))]      # đợt đã xoá mềm: không dùng lại tên
+    for d in names + deleted:
         m = re.fullmatch(r"NAP_(\d+)", d, re.IGNORECASE)
-        if m and os.path.isdir(os.path.join(runs_root, d)):
+        if m and (d in deleted or os.path.isdir(os.path.join(runs_root, d))):
             n = max(n, int(m.group(1)))
     taken = {d.lower() for d in names}
     n += 1
@@ -230,8 +236,15 @@ def _inside(path, base):
         return False
 
 
-def stage_upload(runs_root, run, plan, cleanup_root=None):
-    """Tạo runs/<lượt>/inbox/ (giữ chỗ nguyên tử), chép NGUYÊN BYTE các ảnh nhận, ghi nap_ten_goc.csv. Trả đường dẫn runs/<lượt>.
+def clean_note(note):
+    """Ghi chú của đợt: bỏ ký tự điều khiển, gọn khoảng trắng, tối đa NOTE_MAX ký tự."""
+    t = "".join(c if c in "\n\t" or ord(c) >= 32 else " " for c in str(note or ""))
+    return re.sub(r"[ \t]+", " ", t).strip()[:NOTE_MAX]
+
+
+def stage_upload(runs_root, run, plan, cleanup_root=None, note="", reviewer=""):
+    """Tạo runs/<lượt>/inbox/ (giữ chỗ nguyên tử), chép NGUYÊN BYTE các ảnh nhận, ghi nap_ten_goc.csv và dot.json (tên đợt, ngày nạp,
+    ghi chú, người nạp, số ảnh). Trả đường dẫn runs/<lượt>.
     Lượt đã có -> RunError, không bao giờ ghi vào lượt cũ. cleanup_root: xoá (best effort) bản tạm trong thư mục này sau khi chép."""
     run = check_run_name(run, runs_root)
     if not plan["ok"]:
@@ -268,6 +281,9 @@ def stage_upload(runs_root, run, plan, cleanup_root=None):
             w = csv.writer(f)
             w.writerow(["ten_goc", "ten_moi", "bytes", "sha256"])
             w.writerows(rows)
+        cvat_io.atomic_write_json(os.path.join(run_dir, "dot.json"), dict(
+            ten=run, ngay_nap=datetime.datetime.now().isoformat(timespec="seconds"), ghi_chu=clean_note(note),
+            nguoi_nap=str(reviewer or ""), so_anh=len(rows)))
     except BaseException:
         shutil.rmtree(run_dir, ignore_errors=True)       # lượt vừa tạo dở ở trên, chưa ai dùng
         raise
@@ -382,10 +398,12 @@ def job_progress(run_dir, lines):
 
 
 # ---------- tiến trình con ----------
-class PrepareJob:
-    """Một lần chạy prepare bằng tiến trình con, một job một lúc. Luồng nền đọc stdout (UTF-8), giữ 500 dòng cuối
-    và nối vào runs/<lượt>/nap_log.txt (log còn sau lỗi/huỷ/tải lại trang). state: chua | dang_chay | xong | loi | da_huy.
-    popen thay được khi test (nhận như subprocess.Popen)."""
+class ChildJob:
+    """Một việc chạy bằng tiến trình con, một job một lúc. Luồng nền đọc stdout (UTF-8, đã lọc token), giữ 500 dòng cuối và nối vào
+    runs/<lượt>/<LOG_NAME> (log còn sau lỗi/huỷ/tải lại trang). Ghi file khoá runs/<lượt>/.dang_chay khi chạy (để xoá ảnh/đợt/task bị
+    chặn, kể cả khi trang khác đang chạy). state: chua | dang_chay | xong | loi | da_huy. popen thay được khi test."""
+    KIND = "job"
+    LOG_NAME = "job_log.txt"
 
     def __init__(self, popen=subprocess.Popen):
         self._popen = popen
@@ -400,38 +418,35 @@ class PrepareJob:
     def running(self):
         return self.state == "dang_chay"
 
-    def start(self, run, runs_root, project_root, tool_dir=None, python=None):
-        """Chạy prepare cho lượt `run` (thư mục runs_root/run đã có inbox/). Đang chạy thì RunError. Chạy lại được sau loi/da_huy."""
-        with self._lock:
-            if self.running:
-                raise RunError(f"Đang chuẩn bị lượt {self.run}: chờ xong hoặc bấm Huỷ.")
-            run_dir = os.path.join(runs_root, run)
-            if not _inside(run_dir, runs_root) or not os.path.isdir(os.path.join(run_dir, "inbox")):
-                raise RunError(f"Lượt {run} chưa có thư mục inbox: không chạy được.")
-            self.run, self.run_dir = run, run_dir
-            self.lines.clear()
-            self.returncode, self._cancelled = None, False
-            self._t0, self._t1 = time.monotonic(), None
-            cmd = prepare_cmd(run, tool_dir, python)
-            log_path = os.path.join(run_dir, "nap_log.txt")
-            try:
-                with open(log_path, "a", encoding="utf-8", newline="\n") as f:
-                    f.write(f"=== {time.strftime('%Y-%m-%d %H:%M:%S')} prepare --run {run} ===\n")
-                self._proc = self._popen(cmd, cwd=project_root, env=child_env(), stdin=subprocess.DEVNULL,
-                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            except OSError as e:
-                self.lines.append(f"Không chạy được tiến trình prepare: {e}")
-                self.state, self._t1 = "loi", time.monotonic()
-                return
-            self.state = "dang_chay"
-            self._thread = threading.Thread(target=self._read, args=(self._proc, log_path), daemon=True)
-            self._thread.start()
+    def _launch(self, run, run_dir, cmd, project_root, header):
+        """Gọi trong self._lock. Ghi khoá, mở log, chạy tiến trình con, bật luồng đọc."""
+        self.run, self.run_dir = run, run_dir
+        self.lines.clear()
+        self.returncode, self._cancelled = None, False
+        self._t0, self._t1 = time.monotonic(), None
+        log_path = os.path.join(run_dir, self.LOG_NAME)
+        if not dang_chay.acquire(run_dir, self.KIND):
+            other = dang_chay.busy(run_dir)
+            raise RunError(f"Lượt {run} đang có việc khác chạy ({other[0] if other else '?'}): chờ xong rồi thử lại.")
+        try:
+            with open(log_path, "a", encoding="utf-8", newline="\n") as f:
+                f.write(f"=== {time.strftime('%Y-%m-%d %H:%M:%S')} {header} ===\n")
+            self._proc = self._popen(cmd, cwd=project_root, env=child_env(), stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        except OSError as e:
+            dang_chay.release(run_dir)
+            self.lines.append(f"Không chạy được tiến trình {self.KIND}: {e}")
+            self.state, self._t1 = "loi", time.monotonic()
+            return
+        self.state = "dang_chay"
+        self._thread = threading.Thread(target=self._read, args=(self._proc, log_path, run_dir), daemon=True)
+        self._thread.start()
 
-    def _read(self, proc, log_path):
+    def _read(self, proc, log_path, run_dir):
         try:
             with open(log_path, "a", encoding="utf-8", newline="\n") as log:
                 for raw in iter(proc.stdout.readline, b""):
-                    line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                    line = cvat_io.scrub(raw.decode("utf-8", errors="replace").rstrip("\r\n"))      # token không bao giờ vào log
                     self.lines.append(line)
                     log.write(line + "\n")
                     log.flush()
@@ -442,6 +457,7 @@ class PrepareJob:
             self.returncode = rc
             self.state = "xong" if rc == 0 else "da_huy" if self._cancelled else "loi"
             self._t1 = time.monotonic()
+        dang_chay.release(run_dir)
 
     def cancel(self):
         """terminate(), chờ 5 giây, rồi kill(). Trả True nếu có job đang chạy để huỷ."""
@@ -466,9 +482,79 @@ class PrepareJob:
     def snapshot(self):
         with self._lock:
             end = self._t1 if self._t1 is not None else time.monotonic()
-            return dict(state=self.state, returncode=self.returncode, run=self.run, run_dir=self.run_dir,
+            return dict(state=self.state, returncode=self.returncode, run=self.run, run_dir=self.run_dir, kind=self.KIND,
                         lines=list(self.lines), elapsed=0.0 if self._t0 is None else end - self._t0,
                         cancelling=self._cancelled and self.state == "dang_chay")
+
+
+class PrepareJob(ChildJob):
+    """Một lần chạy prepare bằng tiến trình con (log: runs/<lượt>/nap_log.txt). Chạy lại được sau loi/da_huy."""
+    KIND = "prepare"
+    LOG_NAME = "nap_log.txt"
+
+    def start(self, run, runs_root, project_root, tool_dir=None, python=None):
+        """Chạy prepare cho lượt `run` (thư mục runs_root/run đã có inbox/). Đang chạy thì RunError."""
+        with self._lock:
+            if self.running:
+                raise RunError(f"Đang chuẩn bị lượt {self.run}: chờ xong hoặc bấm Huỷ.")
+            run_dir = os.path.join(runs_root, run)
+            if not _inside(run_dir, runs_root) or not os.path.isdir(os.path.join(run_dir, "inbox")):
+                raise RunError(f"Lượt {run} chưa có thư mục inbox: không chạy được.")
+            self._launch(run, run_dir, prepare_cmd(run, tool_dir, python), project_root, f"prepare --run {run}")
+
+
+TASK_RE = re.compile(r"demo-[A-Za-z0-9_-]{1,100}")
+REVIEWER_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
+
+
+def push_cmd(run, reviewer, task, tool_dir=None, python=None):
+    """Lệnh push (list đối số, không shell). CVAT_URL/CVAT_ACCESS_TOKEN đi qua MÔI TRƯỜNG kế thừa, không bao giờ qua đối số."""
+    tool_dir = TOOL_DIR if tool_dir is None else tool_dir
+    return [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "push", "--run", run, "--reviewer", reviewer, "--task", task]
+
+
+def delete_task_cmd(run, task, tool_dir=None, python=None):
+    """Lệnh xoá task (push --cleanup): chỉ xoá task ghi trong push.json của lượt, và chỉ khi --confirm-name gõ đúng tên."""
+    tool_dir = TOOL_DIR if tool_dir is None else tool_dir
+    return [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "push", "--run", run, "--cleanup", "--confirm-name", task]
+
+
+def _check_cvat_start(job, run, runs_root, task):
+    run_dir = os.path.join(runs_root, run)
+    if not RUN_RE.fullmatch(run or "") or not os.path.isdir(run_dir) or not _inside(run_dir, runs_root):
+        raise RunError(f"Lượt {run!r} không có trong {os.path.normpath(runs_root)}.")
+    if not TASK_RE.fullmatch(task or ""):
+        raise RunError(f"Tên task {task!r} không hợp lệ: phải bắt đầu bằng demo- (chỉ chữ không dấu, số, _ -).")
+    return run_dir
+
+
+class PushJob(ChildJob):
+    """Một lần đẩy lên CVAT bằng `m28.py push` (tiến trình con; chỉ tiến trình con gọi mạng). Log: runs/<lượt>/push_log.txt."""
+    KIND = "push"
+    LOG_NAME = "push_log.txt"
+
+    def start(self, run, runs_root, project_root, reviewer, task, tool_dir=None, python=None):
+        with self._lock:
+            if self.running:
+                raise RunError(f"Đang đẩy lượt {self.run} lên CVAT: chờ xong hoặc bấm Huỷ.")
+            run_dir = _check_cvat_start(self, run, runs_root, task)
+            if not REVIEWER_RE.fullmatch(reviewer or ""):
+                raise RunError(f"Tên người rà {reviewer!r} không hợp lệ.")
+            self._launch(run, run_dir, push_cmd(run, reviewer, task, tool_dir, python), project_root, f"push --run {run} --task {task}")
+
+
+class DeleteTaskJob(ChildJob):
+    """Xoá task trên CVAT bằng `m28.py push --cleanup --confirm-name <tên>`. Cùng log push_log.txt của lượt."""
+    KIND = "xoa_task"
+    LOG_NAME = "push_log.txt"
+
+    def start(self, run, runs_root, project_root, task, tool_dir=None, python=None):
+        with self._lock:
+            if self.running:
+                raise RunError(f"Đang xoá task của lượt {self.run}: chờ xong.")
+            run_dir = _check_cvat_start(self, run, runs_root, task)
+            self._launch(run, run_dir, delete_task_cmd(run, task, tool_dir, python), project_root,
+                         f"xoa task --run {run} --confirm-name {task}")
 
 
 # ---------- đọc kết quả prepare ----------
@@ -508,19 +594,19 @@ def read_prepare_result(run_dir, read_no_face=None):
     review_app._read_no_face)."""
     if read_no_face is None:
         from review_app import _read_no_face as read_no_face
-    flags = {}
+    flags, gone = {}, loai_tru.read_excluded(run_dir)
     fpath = os.path.join(run_dir, "flags", "flags.json")
     if os.path.isfile(fpath):
         try:
             data = _jload(fpath)
-            flags = data if isinstance(data, dict) else {}
+            flags = {k: v for k, v in data.items() if k not in gone} if isinstance(data, dict) else {}
         except (OSError, ValueError):
             flags = {}
     origs = _orig_names(run_dir)
     crop_dir = os.path.join(run_dir, "crop", "images")
     no_crop, no_draft = [], []
     for name, (why, step) in sorted(read_no_face(run_dir).items()):
-        if name in flags:
+        if name in flags or name in gone:
             continue
         row = dict(name=name, orig=origs.get(name, name), reason=NO_FACE_VI.get(why, why or "không rõ"), step=step)
         (no_draft if os.path.isfile(os.path.join(crop_dir, name + ".png")) else no_crop).append(row)

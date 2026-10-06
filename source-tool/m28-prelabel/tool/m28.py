@@ -3,11 +3,14 @@
     python tool\\m28.py prepare --run R1610 --list data\\r_list_1610.csv --images <WFLW_images> --box auto
     python tool\\m28.py review  --run R1610 --review ui --reviewer P5
     python tool\\m28.py push    --run R1610 --task demo-R1610 [--dry-run]
+    python tool\\m28.py push    --run R1610 --resume            (lần push trước dừng sau khi đã tạo task: làm nốt trên đúng task đó)
+    python tool\\m28.py push    --run R1610 --cleanup --confirm-name demo-R1610   (xoá ĐÚNG task trong push.json trên CVAT, không hoàn tác được)
     python tool\\m28.py collect --task demo-R1610
     python tool\\m28.py all     --run thuP1 --list data\\f5_list.csv --images <WFLW_images> --box wflw --review auto --task demo-thuP1
 
 Mỗi bước ghi vào runs/<run>/<bước>/ và để lại done.txt khi xong thật; chạy lại thì bước đã xong được bỏ qua
-(trừ khi tên bước nằm trong --force). Địa chỉ CVAT và token đọc từ CVAT_URL, CVAT_ACCESS_TOKEN.
+(trừ khi tên bước nằm trong --force). Địa chỉ CVAT và token đọc từ CVAT_URL, CVAT_ACCESS_TOKEN (tuỳ chọn CVAT_ORG).
+push chỉ tạo task MỚI demo-…; collect chỉ xuất (--skip-export, --dry-run, nhiều --task, --reviewer). --cleanup xoá task đã đẩy rồi lượt đẩy lại được.
 """
 import argparse
 import os
@@ -68,6 +71,10 @@ def build_parser():
     p.add_argument("--tag")
     p.add_argument("--skip-export", action="store_true")
     p.add_argument("--force", nargs="*", default=[])
+    p.add_argument("--resume", action="store_true", help="push: làm nốt phần còn lại (nhập nhãn, kiểm) trên đúng task_id trong push.json")
+    p.add_argument("--cleanup", action="store_true",
+                   help="push: xoá đúng task trong push.json trên CVAT (cần --confirm-name), đánh dấu task_deleted để đẩy lại được")
+    p.add_argument("--confirm-name", help="push --cleanup: gõ lại đúng tên task sẽ xoá")
     p.add_argument("--dry-run", action="store_true",
                    help="push: chỉ ghi XML; collect: chỉ in danh sách job; không ghi done.txt")
     return p
@@ -84,6 +91,15 @@ def main(argv=None):
         return
     if not args.run:
         p.error("lệnh này cần --run")
+    if (args.resume or args.cleanup or args.confirm_name) and args.cmd != "push":
+        p.error("--resume, --cleanup và --confirm-name chỉ dùng với lệnh push")
+    if args.resume and args.cleanup:
+        p.error("--resume và --cleanup không đi cùng nhau")
+    if args.confirm_name and not args.cleanup:
+        p.error("--confirm-name chỉ dùng với --cleanup")
+    if args.cmd == "push" and args.cleanup:
+        steps.cleanup(args)               # không ghi done.txt: push --cleanup chỉ dọn task, lượt đẩy lại được sau đó
+        return
     if args.cmd in ("prepare", "all"):
         for s in PREPARE:
             run_step(s, args)
