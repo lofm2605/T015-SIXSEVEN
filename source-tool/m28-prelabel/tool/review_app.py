@@ -929,7 +929,7 @@ def header_html(store, ses):
     chips += f'<span class="m28-chip c-chua">Còn lại <b>{p["remaining"]}</b></span>'
     again = ('<span class="m28-chip c-gan_tay">Lượt này đã bấm Xong trước đó</span>'
              if store.had_done and not store.finished else "")
-    done = (f'<div class="m28-done-bar" role="status">{html.escape(DONE_BAR_TEXT)}</div>' if store.finished else "")
+    done = (f'<div class="m28-done-bar" role="status">{html.escape(DONE_BAR_TEXT, quote=False)}</div>' if store.finished else "")
     return (f'{done}<div class="m28-head"><div class="m28-top"><div class="m28-title">Rà soát nhãn nháp M28</div>'
             f'<div class="m28-sub">lượt <b>{html.escape(run_name(store.run_dir))}</b> · người rà '
             f'<b>{html.escape(store.reviewer)}</b></div>{again}</div>'

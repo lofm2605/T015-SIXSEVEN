@@ -586,6 +586,50 @@ def test_review_ui_ctrl_c_stops_cleanly_and_skip_hint(tmp_path, world, monkeypat
     assert '--force review' in capsys.readouterr().out                  # bỏ qua vì đã xong: gợi ý cách rà lại
 
 
+def test_review_ui_ctrl_c_after_xong_says_done_and_still_stops(tmp_path, world, monkeypatch, capsys):
+    """Đã bấm Xong (done.txt có) rồi mới Ctrl+C: nói đúng là đã Xong, vẫn dừng (không tự đi sang push); chạy lại thì bước review được bỏ qua."""
+    imgs = tmp_path / 'imgs'
+    write_images(imgs)
+    m28.main(['prepare', '--run', 'A', '--images', str(imgs)])
+    monkeypatch.setattr(steps, '_need_file', lambda p, why: p)
+
+    def xong_then_ctrl_c(cmd):
+        os.makedirs('runs/A/review', exist_ok=True)
+        open('runs/A/review/done.txt', 'w').write('xong\tP5')
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(steps.subprocess, 'call', xong_then_ctrl_c)
+    capsys.readouterr()
+    args = parse(['review', '--run', 'A', '--review', 'ui', '--reviewer', 'P5'])
+    assert steps.review(args, 'runs/A/review') is False                  # Ctrl+C vẫn là dừng
+    out = capsys.readouterr().out
+    assert 'Đã bấm Xong nhưng m28 dừng vì Ctrl+C' in out and 'chưa bấm Xong' not in out and 'gõ lại đúng lệnh' in out
+    m28.main(['review', '--run', 'A', '--review', 'ui', '--reviewer', 'P5'])         # gõ lại: đã có done.txt nên bỏ qua
+    assert 'bỏ qua review' in capsys.readouterr().out
+
+
+def test_review_ui_closed_after_xong_continues(tmp_path, world, monkeypatch):
+    """Tiến trình con thoát mã 0 sau khi bấm Xong rồi Đóng: review xong; đóng mà chưa Xong thì dừng."""
+    imgs = tmp_path / 'imgs'
+    write_images(imgs)
+    m28.main(['prepare', '--run', 'A', '--images', str(imgs)])
+    monkeypatch.setattr(steps, '_need_file', lambda p, why: p)
+    monkeypatch.setattr(steps.subprocess, 'call', lambda cmd: 0)
+    with pytest.raises(SystemExit, match='Dừng ở bước review'):
+        m28.main(['review', '--run', 'A', '--review', 'ui', '--reviewer', 'P5'])        # đóng mà chưa bấm Xong
+    assert not os.path.exists('runs/A/review/done.txt')
+
+    def xong_then_close(cmd):
+        os.makedirs('runs/A/review', exist_ok=True)
+        open('runs/A/review/done.txt', 'w').write('xong\tP5')
+        return 0
+
+    monkeypatch.setattr(steps.subprocess, 'call', xong_then_close)
+    m28.main(['review', '--run', 'A', '--review', 'ui', '--reviewer', 'P5'])
+    lines = open('runs/A/log.txt', encoding='utf-8').read().splitlines()
+    assert lines[-1].split('\t')[1:3] == ['review', 'xong'] and open('runs/A/review/done.txt').read() == 'ok'
+
+
 # 11 --------------------------------------------------------------------------
 def test_soft_deleted_faces_are_filtered_everywhere(tmp_path, world):
     """Xoá mềm (excluded.txt) là bộ lọc lúc đọc: hàng đợi, review, push, chạy lại các bước đều trừ mặt đó; file kết quả không bị sửa."""
