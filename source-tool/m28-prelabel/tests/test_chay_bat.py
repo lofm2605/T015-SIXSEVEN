@@ -1,0 +1,28 @@
+"""Kiểm tĩnh chay.bat (không chạy được cmd ở Linux): nhãn, CRLF, ASCII, không có lệnh nguy hiểm."""
+import os
+import re
+
+BAT = os.path.join(os.path.dirname(__file__), '..', 'chay.bat')
+
+
+def _text():
+    raw = open(BAT, 'rb').read()
+    assert b'\r\n' in raw and b'\n' not in raw.replace(b'\r\n', b''), 'chay.bat phải dùng CRLF'
+    raw.decode('ascii')                                        # không dấu: cmd mọi codepage đều đọc được
+    return raw.decode('ascii')
+
+
+def test_all_goto_and_call_targets_exist():
+    t = _text()
+    labels = set(re.findall(r'^:([a-z_0-9]+)\s*$', t, re.M))
+    used = set(re.findall(r'\b(?:goto|call)\s+:([a-z_0-9]+)', t, re.I))
+    assert used <= labels, used - labels
+
+
+def test_menu_covers_choice_range_and_safe_launch():
+    t = _text()
+    assert 'choice /C 123456' in t and t.count('if errorlevel') >= 6
+    assert 'review_app.py --nap' in t and '127.0.0.1' in t
+    assert 'share=' not in t.lower() and 'CVAT_ACCESS_TOKEN' not in t    # không đụng token, không chia sẻ
+    assert 'findstr /V /I "torch"' in t                             # không cài torch
+    assert 'rmdir /s /q ".venv"' in t and 'rmdir /s /q "runs' not in t    # chỉ xoá .venv, không bao giờ xoá runs\

@@ -5,8 +5,9 @@ không kéo gradio hay torch. Logic thuần nằm ở dot_anh.py (đợt, ảnh,
 chúng với Gradio.
 
 An toàn:
-  * TRANG KHÔNG GỌI MẠNG: push và xoá task chạy bằng tiến trình con (nap_anh.PushJob/DeleteTaskJob); token chỉ đến từ biến môi trường
-    của tiến trình trang (kế thừa cho tiến trình con), không bao giờ có ô nhập, không bao giờ hiện trên trang.
+  * TRANG KHÔNG GỌI MẠNG: push và xoá task chạy bằng tiến trình con (nap_anh.PushJob/DeleteTaskJob); link/token lấy từ cai_dat.py (tab
+    Cài đặt hoặc biến môi trường) và chỉ vào tiến trình con qua môi trường của nó. Khung này và tab Các đợt không có ô nhập token;
+    token không bao giờ hiện trên trang.
   * Tên đợt/ảnh từ trình duyệt chỉ dùng khi là phần tử của danh sách do server tính; mọi lần xoá phải qua hộp xác nhận kèm mã ngẫu nhiên
     (dot_anh.Pending): bấm xác nhận của hộp cũ/trễ không xoá nhầm.
   * Nút Huỷ của hộp xác nhận là nút mặc định (có focus khi hộp mở), Esc = Huỷ; xoá task phải gõ lại đúng tên và tick ô hiểu hậu quả.
@@ -230,7 +231,7 @@ def push_panel(gr, demo, store, ctx):
 
     def model():
         return day_cvat.push_model(store.run_dir, store.reviewer, ctx.project_root, remaining=store.progress()["remaining"],
-                                   environ=os.environ, job_running=any_running())
+                                   job_running=any_running())
 
     def render(note=""):
         m = model()
@@ -279,7 +280,7 @@ def push_panel(gr, demo, store, ctx):
         if ctx.switch_to is not None:
             return render("Trang đang chuyển sang đợt khác.") + close
         try:
-            job.start(run, ctx.runs_root, ctx.project_root, store.reviewer, m["task"])
+            job.start(run, ctx.runs_root, ctx.project_root, store.reviewer, m["task"], images=m.get("images_dir"))
         except RunError as e:
             return render(str(e)) + close
         return render() + close
@@ -488,7 +489,7 @@ def dot_tab(gr, demo, store, ctx, deps):
             raise RunError(f"Đợt {a['run']} chưa có flags.json (prepare chưa xong): chạy lại ở tab Nạp ảnh hoặc bằng python tool\\m28.py prepare.")
         if dot_anh.run_busy(run_dir):
             raise RunError(f"Đợt {a['run']} đang có việc chạy: chờ xong.")
-        new_store = Store(run_dir, reviewer)                                   # dựng TRƯỚC: lỗi thì báo ở đây, chưa đóng gì
+        new_store = Store(run_dir, ctx.next_reviewer())                        # tên người rà cho lượt kế tiếp (tab Cài đặt); dựng TRƯỚC: lỗi thì báo ở đây
         if not ctx.begin_switch((run_dir, new_store)):
             raise RunError(nap_anh.CLOSING_MSG)
         threading.Timer(0.8, lambda: demo.close(verbose=False)).start()
@@ -562,7 +563,7 @@ def dot_tab(gr, demo, store, ctx, deps):
 
     def _ask_deltask(a, s):
         run_dir = run_of(a)
-        m = day_cvat.delete_model(run_dir, ctx.project_root, environ=os.environ, job_running=any_running())
+        m = day_cvat.delete_model(run_dir, ctx.project_root, job_running=any_running())
         if not m["ok"]:
             raise RunError(m["reason"] or "Chưa xoá task được.")
         it = modal_for("deltask", run=a["run"], task=m["task"])
@@ -632,11 +633,11 @@ def dot_tab(gr, demo, store, ctx, deps):
             m = day_cvat.push_model(run_dir, reviewer, ctx.project_root, remaining=rem, job_running=any_running())
             if not m["enabled"]:
                 raise RunError(m["reason"] or "Chưa đẩy được.")
-            ctx.push_job.start(it["run"], ctx.runs_root, ctx.project_root, reviewer, m["task"])
+            ctx.push_job.start(it["run"], ctx.runs_root, ctx.project_root, reviewer, m["task"], images=m.get("images_dir"))
             return render(s, f"Đang đẩy đợt {it['run']} lên CVAT (theo dõi ở khung phía trên).", "ok")
         if kind == "deltask":
             run_dir = run_of(it)
-            m = day_cvat.delete_model(run_dir, ctx.project_root, environ=os.environ, job_running=any_running())
+            m = day_cvat.delete_model(run_dir, ctx.project_root, job_running=any_running())
             if not m["ok"] or m["task"] != it["task"] or typed_v != it["task"]:
                 raise RunError(m["reason"] or "Thông tin task đã đổi: không xoá gì, hãy mở lại hộp xoá task.")
             ctx.del_job.start(it["run"], ctx.runs_root, ctx.project_root, m["task"])

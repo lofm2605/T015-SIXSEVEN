@@ -1,7 +1,9 @@
 """Hàm dùng chung của push.py và collect.py: biến môi trường CVAT, lọc token, kết nối, dịch lỗi, đọc annotations.xml.
 
 Chỉ thư viện chuẩn; `cvat_sdk` nạp LƯỜI trong connect() nên import module này (và test) không cần cài SDK. Không numpy/gradio/torch.
-Token chỉ đọc từ CVAT_ACCESS_TOKEN, không bao giờ in/ghi/log: mọi chuỗi đi ra ngoài (thông báo lỗi, push.json, log) qua scrub().
+Token chỉ đọc từ CVAT_ACCESS_TOKEN (tiến trình con push/collect nhận nó qua môi trường; trang rà soát có thể giữ token do người dùng nhập
+ở tab Cài đặt, xem tool/cai_dat.py, và đăng ký bằng register_secret()), không bao giờ in/ghi/log: mọi chuỗi đi ra ngoài (thông báo lỗi,
+push.json, log) qua scrub().
 """
 import datetime
 import io
@@ -9,6 +11,7 @@ import json
 import os
 import re
 import socket
+import threading
 import zipfile
 import xml.etree.ElementTree as ET
 
@@ -55,12 +58,27 @@ def status_line(env):
     return f"CVAT: {env['url'] or '(thiếu CVAT_URL)'} | token: {'có' if env['token'] else 'thiếu'}"
 
 
+_SECRETS = set()
+_SECRETS_LOCK = threading.Lock()
+
+
+def register_secret(token):
+    """Đăng ký thêm một chuỗi bí mật (token người dùng nhập ở tab Cài đặt, không nằm trong os.environ) để scrub() cũng lọc nó.
+    Chỉ giữ trong bộ nhớ của tiến trình, không bao giờ ghi ra đâu cả."""
+    if isinstance(token, str) and len(token) >= 4:
+        with _SECRETS_LOCK:
+            _SECRETS.add(token)
+
+
 def scrub(text, token=None):
-    """Bỏ token (và dạng 'Authorization: Bearer/Token …') khỏi chuỗi trước khi in/ghi."""
+    """Bỏ token (và dạng 'Authorization: Bearer/Token …') khỏi chuỗi trước khi in/ghi. Lọc: token truyền vào (hoặc CVAT_ACCESS_TOKEN
+    trong os.environ) và mọi chuỗi đã register_secret()."""
     s = str(text)
     token = (token if token is not None else os.environ.get(ENV_TOKEN, "")) or ""
-    if len(token) >= 4:
-        s = s.replace(token, "***")
+    with _SECRETS_LOCK:
+        known = list(_SECRETS)
+    for tok in sorted(set(known + ([token] if len(token) >= 4 else [])), key=len, reverse=True):
+        s = s.replace(tok, "***")
     return re.sub(r"(?i)\b(authorization|bearer|token)(\s*[:=]\s*|\s+)(?!\*\*\*)([A-Za-z0-9._~+/=-]{12,})", r"\1\2***", s)
 
 

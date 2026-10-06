@@ -2,8 +2,9 @@
 
 Quy ước (giống nap_anh.py):
   * Chỉ thư viện chuẩn. Không import gradio, numpy, steps, torch, cvat_sdk. TRANG KHÔNG GỌI MẠNG: chỉ tiến trình con
-    (`m28.py push ...`, xem nap_anh.PushJob/DeleteTaskJob) gọi CVAT. Trang chỉ đọc biến môi trường CVAT_URL và CVAT_ACCESS_TOKEN
-    (đọc lại mỗi lần vẽ); token KHÔNG bao giờ nhập vào trang, không bao giờ hiện lên trang, không đi qua đối số dòng lệnh.
+    (`m28.py push ...`, xem nap_anh.PushJob/DeleteTaskJob) gọi CVAT. Link/token/tổ chức lấy từ cai_dat.py (một nguồn: giá trị vừa Lưu ở
+    tab Cài đặt > biến môi trường CVAT_URL + CVAT_ACCESS_TOKEN > file đã lưu; đọc lại mỗi lần vẽ). Khung "Đẩy lên CVAT" không có ô nhập
+    token (ô nhập chỉ nằm ở tab Cài đặt); token KHÔNG bao giờ hiện lên trang, không đi qua đối số dòng lệnh.
   * Số Nhận / Gán tay / Bỏ trong hộp xác nhận tính bằng ĐÚNG hàm m28core.phan_loai.classify mà steps.push dùng.
 """
 import html
@@ -16,13 +17,15 @@ TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 if TOOL_DIR not in sys.path:
     sys.path.insert(0, TOOL_DIR)
 import dot_anh  # noqa: E402
+import cai_dat  # noqa: E402  (nguồn link/token CVAT; chỉ thư viện chuẩn, không mạng)
 from m28core import cvat_io, loai_tru, phan_loai  # noqa: E402
 
 PHASES = ["kiểm tra", "kết nối", "project", "tải ảnh", "nhập nhãn", "xuất kiểm"]
 PHASE_RE = re.compile(r"^\[(\d)/6\]")
 STATE_VI = {"dang_chay": "Đang chạy", "xong": "Xong", "loi": "Lỗi", "da_huy": "Đã huỷ", "chua": ""}
-ENV_HELP = ("Đóng trang (Ctrl+C), trong <b>cùng cửa sổ cmd</b> gõ <code>set CVAT_URL=http://localhost:8080</code> và "
-            "<code>set CVAT_ACCESS_TOKEN=&lt;token của bạn&gt;</code> rồi mở lại trang. Trang không có ô nhập token: không dán token vào chat hay file.")
+ENV_HELP = ("Mở tab <b>Cài đặt</b>, nhập link <code>http://localhost:8080</code> và token CVAT của bạn, bấm <b>Lưu</b> (không cần đóng trang). "
+            "Cách khác: đóng trang (Ctrl+C), trong <b>cùng cửa sổ cmd</b> gõ <code>set CVAT_URL=http://localhost:8080</code> và "
+            "<code>set CVAT_ACCESS_TOKEN=&lt;token của bạn&gt;</code> rồi mở lại trang. Không dán token vào chat hay file.")
 
 
 def _e(x):
@@ -31,8 +34,10 @@ def _e(x):
 
 # ---------- môi trường ----------
 def env_state(environ=None):
-    """dict(ok, url, reason|None). Đọc os.environ mỗi lần gọi. reason KHÔNG chứa giá trị token."""
-    env = cvat_io.read_env(environ)
+    """dict(ok, url, org, source, reason|None). environ=None: lấy từ cài đặt của trang (cai_dat: vừa Lưu > biến môi trường > file), đọc lại
+    mỗi lần gọi; truyền environ (test) thì chỉ đọc đúng dict đó. reason KHÔNG chứa giá trị token."""
+    env = cai_dat.cvat_env(environ)
+    source = "env" if environ is not None else cai_dat.get().effective()["source"]
     bad = cvat_io.env_problem(env)
     reason = None
     if bad:
@@ -43,7 +48,7 @@ def env_state(environ=None):
             reason = f"CVAT_URL phải bắt đầu bằng http:// (đang là {env['url']})."
         else:
             reason = "CVAT_URL không được chứa tên đăng nhập hay mật khẩu."
-    return dict(ok=bad is None, url=cvat_io.norm_url(env["url"]), org=env["org"], reason=reason)
+    return dict(ok=bad is None, url=cvat_io.norm_url(env["url"]), org=env["org"], source=source, reason=reason)
 
 
 def pipeline_of(project_root):
@@ -63,8 +68,20 @@ def _no_face(run_dir):
     return phan_loai.read_no_face(run_dir)
 
 
-def plan_counts(run_dir, reviewer, project_root=None, pipe=None):
-    """Số Nhận / Gán tay / Bỏ / xoá mềm sẽ đẩy, số job dự kiến, số mặt chưa rà, ảnh thiếu. Cùng hàm với steps.push."""
+def _under_images(images_dir, rel):
+    """<images_dir>/<rel> (rel dạng a/b.jpg như steps._upload_path), hoặc None nếu thiếu một trong hai hay rel thoát khỏi thư mục."""
+    if not images_dir or not isinstance(rel, str) or not rel:
+        return None
+    parts = rel.split("/")
+    if any(x in ("", "..") or os.path.isabs(x) or "\\" in x or ":" in x for x in parts):
+        return None
+    return os.path.join(images_dir, *parts)
+
+
+def plan_counts(run_dir, reviewer, project_root=None, pipe=None, images_dir=None):
+    """Số Nhận / Gán tay / Bỏ / xoá mềm sẽ đẩy, số job dự kiến, số mặt chưa rà, ảnh thiếu. Cùng hàm với steps.push.
+    images_dir (thư mục WFLW_images đã cài ở tab Cài đặt): ảnh gốc không còn ở đường dẫn ghi trong meta nhưng có ở <images_dir>/<rel> thì
+    KHÔNG tính là thiếu, và `via_images` đếm số ảnh như vậy (lúc đó lệnh push phải kèm --images, xem push_model)."""
     pipe = pipe or dict(cvat_io.DEFAULT_PIPELINE)
     excluded = loai_tru.read_excluded(run_dir)
     names, unusable = dot_anh.queue_names(run_dir, excluded)
@@ -80,30 +97,39 @@ def plan_counts(run_dir, reviewer, project_root=None, pipe=None):
             mode = f.read().strip() or "auto"
     except OSError:
         pass
-    missing = []
+    missing, via_images = [], 0
     for n in pl["nhan"] + pl["tay"]:
         m = meta.get(n) or {}
         path = (os.path.join(run_dir, "crop", "images", n + ".png") if mode == "wflw" else m.get("src"))
         if not path or not os.path.exists(path):
-            missing.append(n)
+            alt = _under_images(images_dir, m.get("rel")) if mode != "wflw" else None
+            if alt and os.path.exists(alt):
+                via_images += 1
+            else:
+                missing.append(n)
     return dict(nhan=len(pl["nhan"]), tay=len(pl["tay"]), bo=len(pl["rejected"]), xoa=len(pl["removed"]), lost=len(pl["lost"]),
                 nhan_khong_nhap=len(pl["nhan_khong_nhap"]), jobs=phan_loai.n_jobs(len(pl["nhan"]), len(pl["tay"]), pipe["job_size"]),
-                remaining=remaining, missing=missing, loi_triage=err)
+                remaining=remaining, missing=missing, via_images=via_images, loi_triage=err)
 
 
 # ---------- mô hình nút Đẩy ----------
-def push_model(run_dir, reviewer, project_root, *, remaining=None, environ=None, job_running=False):
+def push_model(run_dir, reviewer, project_root, *, remaining=None, environ=None, job_running=False, images_dir=None):
     """Mô hình của khung "Đẩy lên CVAT" cho một lượt.
     remaining: số mặt chưa rà theo trang (đợt đang rà); None thì tính từ triage_<người rà>.csv.
-    Trả dict(kind: "done"|"button", enabled, reason, task, plan, env, push, pipe)."""
+    images_dir: thư mục WFLW_images; None thì lấy từ cài đặt (chỉ khi environ=None, tức chạy thật trên trang).
+    Trả dict(kind: "done"|"button", enabled, reason, task, plan, env, push, pipe, images_dir) trong đó images_dir chỉ có giá trị khi lượt
+    CẦN --images (ảnh gốc ở đường dẫn cũ không còn nhưng có trong thư mục đã cài)."""
     pipe = pipeline_of(project_root)
     run = os.path.basename(os.path.normpath(run_dir))
     env = env_state(environ)
     ps = dot_anh.read_push(run_dir)
     st = (ps or {}).get("trang_thai")
-    plan = plan_counts(run_dir, reviewer, project_root, pipe)
+    if images_dir is None and environ is None:
+        images_dir = cai_dat.get().images_dir()
+    plan = plan_counts(run_dir, reviewer, project_root, pipe, images_dir)
     rem = plan["remaining"] if remaining is None else remaining
-    m = dict(kind="button", enabled=False, reason="", task=task_name(run, pipe), plan=plan, env=env, push=ps, pipe=pipe, run=run, remaining=rem)
+    m = dict(kind="button", enabled=False, reason="", task=task_name(run, pipe), plan=plan, env=env, push=ps, pipe=pipe, run=run, remaining=rem,
+             images_dir=images_dir if plan["via_images"] else None)
     if st == "xong":
         m["kind"] = "done"
         return m
@@ -119,7 +145,8 @@ def push_model(run_dir, reviewer, project_root, *, remaining=None, environ=None,
     elif plan["nhan"] + plan["tay"] == 0:
         m["reason"] = "Không có mặt nào để đẩy (cả Nhận và Gán tay đều trống)."
     elif plan["missing"]:
-        m["reason"] = f"Không thấy {len(plan['missing'])} ảnh để tải lên (ví dụ {plan['missing'][0]}): ảnh gốc đã bị chuyển đi?"
+        m["reason"] = (f"Không thấy {len(plan['missing'])} ảnh để tải lên (ví dụ {plan['missing'][0]}): ảnh gốc đã bị chuyển đi? "
+                       "Nếu là ảnh WFLW, chọn thư mục WFLW_images ở tab Cài đặt > Đường dẫn.")
     elif not env["ok"]:
         m["reason"] = env["reason"]
         m["env_help"] = True
@@ -128,9 +155,9 @@ def push_model(run_dir, reviewer, project_root, *, remaining=None, environ=None,
     return m
 
 
-def push_command(run, reviewer, task):
-    """Lệnh cmd tương đương (để người dùng chạy tay nếu muốn)."""
-    return f"python tool\\m28.py push --run {run} --reviewer {reviewer} --task {task}"
+def push_command(run, reviewer, task, images_dir=None):
+    """Lệnh cmd tương đương (để người dùng chạy tay nếu muốn). Chạy ở cmd thì phải tự set CVAT_URL / CVAT_ACCESS_TOKEN (tool không đọc cài đặt của trang)."""
+    return f"python tool\\m28.py push --run {run} --reviewer {reviewer} --task {task}" + (f' --images "{images_dir}"' if images_dir else "")
 
 
 def panel_html(m):
@@ -288,7 +315,7 @@ def delete_model(run_dir, project_root, *, environ=None, job_running=False):
     elif job_running or dot_anh.run_busy(run_dir):
         m["reason"] = "Lượt đang có việc chạy (đẩy lên CVAT hoặc chuẩn bị): chờ xong rồi xoá."
     elif not env["ok"]:
-        m["reason"] = env["reason"] + " " + "Đặt biến môi trường như hướng dẫn ở khung Đẩy lên CVAT rồi mở lại trang."
+        m["reason"] = env["reason"] + " " + "Nhập link và token ở tab Cài đặt (hoặc đặt biến môi trường CVAT_URL, CVAT_ACCESS_TOKEN rồi mở lại trang)."
     elif env["url"] != cvat_io.norm_url(ps.get("cvat_url")):
         m["reason"] = f"Task này nằm ở {cvat_io.norm_url(ps.get('cvat_url'))} nhưng CVAT_URL đang là {env['url']}: id task chỉ có nghĩa trên đúng server đã đẩy."
     else:
@@ -308,4 +335,4 @@ def delete_confirm_html(m):
     return ('<div class="modal-title modal-danger" id="task-modal-title">Xoá task trên CVAT?</div>'
             f'<div class="nap-box nap-err" role="alert"><b>Không hoàn tác được.</b><ul>{items}</ul></div>'
             f'<div class="nap-note">Nếu cần giữ nhãn đã sửa: đóng hộp này, chạy <code>python tool\\m28.py collect --task {_e(m["task"])} --reviewer {_e("<tên bạn>")}</code> '
-            'trước, rồi quay lại xoá. Token không nhập ở trang này (chỉ đọc từ biến môi trường).</div>')
+            'trước, rồi quay lại xoá. Link và token lấy từ tab Cài đặt (hoặc biến môi trường), không nhập ở hộp này.</div>')

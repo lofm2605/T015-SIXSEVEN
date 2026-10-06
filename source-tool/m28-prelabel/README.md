@@ -24,7 +24,7 @@ Mọi đường dẫn trong kế hoạch tính từ thư mục này:
 ```
 m28-prelabel/
 ├── tool/          m28.py, m28core/ (steps, push, collect, cvat_io, loai_tru, dang_chay, phan_loai…), review_app.py, day_cvat.py,
-│                  dot_anh.py, dot_ui.py, nap_anh.py, ca_kho.py, make_label.py (giao cho khách: không torch, không ảnh)
+│                  dot_anh.py, dot_ui.py, nap_anh.py, ca_kho.py, cai_dat.py, cai_dat_ui.py, cai_dat_thu.py, make_label.py (giao cho khách: không torch, không ảnh)
 ├── config/        m28_config.json (50 điểm), pipeline.json (không có bí mật), face50_label.json (sinh bằng make_label.py)
 ├── snippets/      đoạn code + prompt mẫu trích từ kế hoạch, CHƯA chạy thử
 ├── data/          ảnh cắt, manifest, gt*.json        ← KHÔNG commit (repo công khai)
@@ -157,11 +157,11 @@ rem hoặc từ trang đang rà dở: bấm tab Nạp ảnh
 ### Nút "Đẩy lên CVAT" (tab Rà soát)
 Dưới nút **Xong** có khung **Đẩy lên CVAT**: bấm là đẩy lượt đang rà lên CVAT mà không gõ lệnh. Trang **không gọi mạng**: nó chạy tiến trình con
 `python -u tool\m28.py push --run <lượt> --reviewer <người rà> --task demo-<lượt>` (thư mục chạy = thư mục chứa `runs\`), tiến trình con mới gọi CVAT.
-- **Khi nào bật:** hết mặt chưa rà (đã trừ ảnh xoá mềm), có ít nhất một mặt Nhận hoặc Gán tay, chưa đẩy xong, ảnh gốc còn đủ, biến môi trường đủ và không có việc nào khác chạy
+- **Khi nào bật:** hết mặt chưa rà (đã trừ ảnh xoá mềm), có ít nhất một mặt Nhận hoặc Gán tay, chưa đẩy xong, ảnh gốc còn đủ, link/token CVAT đủ (tab Cài đặt hoặc biến môi trường) và không có việc nào khác chạy
   cho lượt. Còn mặt chưa rà: nút khoá kèm "Còn N mặt chưa rà". Không cần bấm Xong trước khi đẩy; bấm Xong rồi đẩy vẫn được (Xong không tắt trang). Đang đẩy thì nút Đóng trang rà soát bị từ chối.
-- **Biến môi trường:** `CVAT_URL` (ghi rõ `http://`) và `CVAT_ACCESS_TOKEN` (tuỳ chọn `CVAT_ORG`) đọc từ môi trường của tiến trình trang mỗi lần vẽ, rồi tiến trình con kế thừa.
-  Thiếu thì nút khoá và trang hiện hướng dẫn: đóng trang (Ctrl+C), trong **cùng cửa sổ cmd** gõ `set CVAT_URL=http://localhost:8080` và `set CVAT_ACCESS_TOKEN=<token của bạn>`
-  rồi mở lại trang. **Không có ô nhập token hay URL nào trên trang**; token không bao giờ hiện trên trang, không đi qua đối số dòng lệnh, và bị lọc khỏi log (`***`).
+- **Link và token CVAT:** lấy từ tab **Cài đặt** (cách chính: nhập link `http://localhost:8080` và token, bấm Lưu) hoặc biến môi trường `CVAT_URL` / `CVAT_ACCESS_TOKEN` (tuỳ chọn `CVAT_ORG`), đọc lại mỗi lần vẽ;
+  tiến trình con nhận chúng qua môi trường của nó. Thiếu thì nút khoá và trang hiện hướng dẫn (mở tab Cài đặt; hoặc đóng trang, trong **cùng cửa sổ cmd** gõ `set CVAT_URL=http://localhost:8080` và `set CVAT_ACCESS_TOKEN=<token của bạn>` rồi mở lại).
+  **Khung Đẩy lên CVAT không có ô nhập nào** (ô token duy nhất nằm ở tab Cài đặt); token không bao giờ hiện trên trang, không đi qua đối số dòng lệnh, và bị lọc khỏi log (`***`).
 - **Hộp xác nhận** (nút **Huỷ** là mặc định có focus, **Esc** = Huỷ): tên task `demo-<lượt>`, số Nhận / Gán tay / Bỏ (tính bằng đúng `m28core.phan_loai.classify` mà `steps.push` dùng),
   số job dự kiến, địa chỉ CVAT, và câu "chỉ tạo task MỚI, không đụng task `m28-`". Hộp mở thì phím N/G/B/Z/←/→/0–8 không tác dụng.
 - **Đang chạy:** thanh tiến độ theo pha (kiểm tra, kết nối, project, tải ảnh, nhập nhãn, xuất kiểm), log (đã lọc token), thời gian, nút **Huỷ** (`terminate`, 5 giây, `kill`; sau huỷ
@@ -188,6 +188,30 @@ Ba phần cùng nằm trong trang rà soát (chỉ 127.0.0.1), mã trong `tool/c
 - Mã loại: SWAP, MIRROR, COLLAPSE, MISPLACED, OCC_FLAG (lỗi đặt điểm, như xem chéo 16/10), RULE, GL_CHUA_NOI, GL_MO_HO, GL_MAU_THUAN, CONG_CU, KHAC.
   Lỗi đặt điểm mặc định không vào backlog (người tổ chức đổi được).
 - Gói chứa ảnh mặt người: chỉ gửi trong đội, không đăng công khai, không đưa vào chat AI, không commit (`outputs/` và `*.zip` đã bị `.gitignore` chặn).
+
+## Tab Cài đặt (CVAT, người rà, đường dẫn, cờ low_conf)
+Tab cuối của trang rà soát (`tool\cai_dat.py` logic, `tool\cai_dat_ui.py` giao diện, `tool\cai_dat_thu.py` tiến trình con thử kết nối). Năm khung:
+- **CVAT:** `Link CVAT`, `Token CVAT` (ô password, rỗng sau khi Lưu, chỉ còn dạng `••••3456`; nút **Hiện / ẩn** đổi kiểu ô ngay ở trình duyệt), `Tổ chức` (tuỳ chọn),
+  hộp **Nhớ trên máy này** (TẮT mặc định), nút **Lưu**, **Thử kết nối CVAT**, **Quên token** (có hộp xác nhận). Dòng trạng thái: `○ Chưa có link/token`, `○ Chưa thử`,
+  `● Đã kết nối (thử lúc …)`, `● Lỗi: <nguyên nhân>`, kèm nguồn (từ biến môi trường / đã lưu trên máy / nhập trong phiên này). Lưu bị từ chối khi đang đẩy hay xoá task
+  (tiến trình con đang dùng token hiện tại) và khi trang đang đóng. Lưu xong, khung Đẩy lên CVAT và tab Các đợt thấy giá trị mới ngay (nút Đẩy mở khoá, không cần mở lại cmd).
+- **Người rà:** lưu tên mặc định. Lượt đang mở vẫn ghi `triage_<tên cũ>.csv` (phần rà dở nằm ở file đó); tên mới dùng **từ lượt kế tiếp** (Rà lượt này, chuyển đợt).
+- **Đường dẫn:** thư mục `WFLW_images` và file `face_landmarker.task`, mỗi ô có **Kiểm** (tồn tại, đọc được, đếm ảnh có giới hạn 5.000 file / 2 giây, 3 tên mẫu; model: kích thước, đuôi `.task`, là zip) và **Lưu**.
+  Tab Nạp ảnh dùng model đã cài (`--model`); thư mục WFLW được thêm `--images` vào lệnh `push` của lượt chạy bằng lệnh trên ảnh WFLW khi ảnh gốc không còn ở đường dẫn cũ (chỉ khi cần).
+- **Cờ low_conf:** xem và đặt `t_flip` trong `config\m28_config.json` (chỉ đổi khoá này, giữ nguyên mọi trường khác và định dạng), luôn qua hộp xác nhận (Huỷ mặc định, Esc = Huỷ); từ chối khi có việc đang chạy;
+  khi `status` đã đóng băng (không còn bắt đầu bằng `NHAP`) phải tick thêm ô xác nhận. Sau khi ghi liệt kê các lượt đã có `flags.json` (tính theo ngưỡng cũ; tính lại bằng `prepare --force flags autoqc overlays`).
+- **Pipeline:** `config\pipeline.json`, chỉ đọc.
+
+**Nơi lưu (ngoài repo):** Windows `%APPDATA%\m28\` (thiếu thì `%USERPROFILE%\AppData\Roaming\m28`), Linux/macOS `$XDG_CONFIG_HOME/m28/` hoặc `~/.config/m28/`; biến `M28_CONFIG_DIR` ghi đè (chỉ cho test/máy đặc biệt).
+Thư mục nằm trong repo bị từ chối. `cvat.json` (link, token, tổ chức) chỉ có khi bật Nhớ; `cai_dat.json` (người rà, đường dẫn) không có bí mật. Ghi nguyên tử (file tạm `O_EXCL` 0600, fsync, `os.replace`);
+Linux/macOS thư mục 0700 và file 0600 (kiểm lại bằng `stat`). **Windows không có 0600 thật**: file chỉ được bảo vệ bởi quyền hồ sơ người dùng; **không dùng keyring/DPAPI**. File hỏng không làm vỡ trang
+(báo "hỏng", không hiện nội dung; bấm Quên token hoặc Lưu lại).
+
+**Ưu tiên nguồn (quyết định tự chốt, xem báo cáo):** giá trị vừa Lưu trong phiên > biến môi trường `CVAT_URL` + `CVAT_ACCESS_TOKEN` (khi có cả hai) > file đã lưu. Biến môi trường của cmd không đổi; Lưu chỉ đổi giá trị trang này dùng.
+Quên token xoá file và giá trị đã nhập; nếu còn biến môi trường thì nguồn quay về đó và trang nói rõ ("đóng cmd hoặc `set CVAT_ACCESS_TOKEN=`").
+**Thử kết nối** chạy bằng tiến trình con (trang vẫn không gọi mạng; token qua môi trường của nó, không qua đối số, hết 20 giây thì kill): tiền kiểm `GET <link>/api/server/about` không mang token và **không theo redirect**
+(3xx sang địa chỉ khác thì dừng, "không gửi token"), rồi `make_client`, so bản server với `cvat_version`, `users.retrieve_current_user()`, tìm project (chỉ đọc). Lệnh cmd `m28.py push/collect` vẫn cần `set CVAT_URL` / `set CVAT_ACCESS_TOKEN` (tool không đọc `cvat.json`).
+**Chưa thử:** CVAT thật (chỉ CVAT giả; `users.retrieve_current_user` chỉ đối chiếu chữ ký), Windows/cmd/Python 3.14, `%APPDATA%` thật, HTTPS tự ký, máy sau proxy công ty.
 
 ## Tab Các đợt (quản lý đợt, xoá mềm ảnh)
 Tab thứ ba của trang. Mỗi **đợt** là một thư mục lượt `runs\<lượt>` (tên do bạn đặt khi nạp, ví dụ `Khoi`, `Nam`, `Cuong`, hoặc `NAP_001`); thư mục bắt đầu bằng `_` (`_nap`, `_trash`) không phải đợt.
@@ -221,6 +245,7 @@ python -m pip install cvat-sdk==2.77.0
 python tool\make_label.py                          rem sinh config\face50_label.json từ config\m28_config.json (chạy lại ra cùng byte)
 set CVAT_URL=http://localhost:8080
 set CVAT_ACCESS_TOKEN=<token của bạn, không dán vào file hay chat>
+rem (lệnh cmd này vẫn cần set như trên: tool\m28.py không đọc cvat.json của tab Cài đặt)
 python tool\m28.py push    --run Khoi --reviewer P2 --task demo-Khoi
 python tool\m28.py push    --run Khoi --resume                         rem lần trước dừng sau khi đã tạo task: làm nốt trên ĐÚNG task đó
 python tool\m28.py push    --run Khoi --cleanup --confirm-name demo-Khoi   rem xoá ĐÚNG task trong push.json trên CVAT (không hoàn tác)
@@ -241,7 +266,7 @@ python tool\m28.py collect --task demo-Khoi --dry-run                   rem ch�
 - **Xoá task trên CVAT** (`push --cleanup --confirm-name <tên>` hoặc nút **Xoá task trên CVAT…** ở tab Các đợt): chỉ xoá được task **chính tool đã tạo** (id và tên ghi trong `push.json`), tên bắt đầu đúng `demo-` (không bao giờ task `m28-` hay task lạ).
   Trước khi gọi API tool lấy lại task **theo id** từ CVAT và kiểm tên khớp `push.json`, tên bắt đầu `demo-`, task thuộc project m28, `CVAT_URL` trùng với lúc đẩy; không khớp thì từ chối và không gọi lệnh xoá. Không xoá khi lượt đang đẩy/chuẩn bị (file khoá `.dang_chay`).
   Trên trang: hộp xác nhận nói rõ **không hoàn tác được, mất cả nhãn đã sửa trong CVAT, nên chạy `collect` trước**; phải gõ lại **đúng tên task** (phân biệt hoa thường, không dấu cách thừa) **và** tick "Tôi hiểu nhãn đã sửa trong CVAT sẽ mất" thì nút xoá mới bật; **Huỷ** là mặc định, **Esc** = Huỷ.
-  Token không bao giờ nhập vào trang (chỉ biến môi trường). Xoá xong: ghi vào `log.txt` (`xoa_task`) và `push_log.txt`, `push.json` đổi thành `task_deleted` (giữ id/tên cũ), `push\done.txt` bị gỡ, đợt **đẩy lại được** (`push.json` mới ghi lịch sử ở `truoc_do`). Task đã mất sẵn trên CVAT (xoá tay) thì chỉ đánh dấu.
+  Link/token lấy từ tab Cài đặt hoặc biến môi trường (không nhập ở hộp xoá). Xoá xong: ghi vào `log.txt` (`xoa_task`) và `push_log.txt`, `push.json` đổi thành `task_deleted` (giữ id/tên cũ), `push\done.txt` bị gỡ, đợt **đẩy lại được** (`push.json` mới ghi lịch sử ở `truoc_do`). Task đã mất sẵn trên CVAT (xoá tay) thì chỉ đánh dấu.
 - **`collect`** (chỉ xuất; không bao giờ `import_annotations` hay tạo/sửa/xoá gì trên CVAT): nhận nhiều `--task`. Task `demo-…` (không `--skip-export`): tìm theo tên (0 hoặc ≥ 2 task trùng tên thì báo và bỏ), xuất `"CVAT for images 1.1"` chỉ nhãn vào `raw\<task>_<người>_<ngàyDDMM>.xml` kèm `.txt`
   cùng tên (bản server, id, số ảnh, giờ tạo theo giờ Việt Nam UTC+7, số job và stage/state từng job), **không ghi đè** (đã có thì dùng file đó). `<người>` = `--reviewer` (mặc định `RA`: nên đặt `--reviewer P4`). Task không bắt đầu `demo-` (ví dụ `m28-manual`): không gọi CVAT, chỉ đọc
   `raw\<task>_*_*.xml` mới nhất của mỗi người. Báo cáo `outputs\collect_<tag hoặc task đầu>.md`: số ảnh, mặt đủ 50 điểm, điểm thiếu, điểm `low_conf` bật, file còn thiếu, job chưa `completed`, thời gian từng bước, QC của P2 (nếu có `m28core.qc.run(xml_paths, outputs_dir)`; chưa có thì một dòng "bỏ qua").
@@ -253,10 +278,11 @@ python -m pytest tests -q
 Test chỉ dùng dữ liệu giả (ảnh ngẫu nhiên, landmarker/mapping giả, **CVAT giả** ở `tests\fake_cvat\cvat_sdk\`); không cần mediapipe, CVAT thật hay mạng.
 `tests\test_push.py` thử push/collect/xoá task bằng gói `cvat_sdk` giả (giữ "server" trong bộ nhớ, ghi mọi lời gọi, giả lỗi theo lệnh) và so từng lời gọi với chữ ký của cvat-sdk **thật** nếu import được
 (`pip install cvat-sdk==2.77.0`, hoặc đặt `M28_REAL_CVAT_SDK_PATH=<thư mục chứa gói cvat_sdk>`; không có thì bài đó `skip`). `tests\test_make_label.py` thử label skeleton. `tests\test_dot_anh.py` thử tab Các đợt, xoá mềm,
-nút Đẩy, PushJob/DeleteTaskJob. `tests\test_review_app.py` thử phần logic của trang rà soát mà không cần gradio hay trình duyệt. Kiểm thử trên trình duyệt thật
+nút Đẩy, PushJob/DeleteTaskJob. `tests\test_cai_dat.py` thử tab Cài đặt (lưu/nạp/quên, quyền file, ưu tiên nguồn, kiểm link/token/đường dẫn, t_flip, thử kết nối bằng tiến trình con với CVAT giả, tiền kiểm redirect bằng http.server cục bộ, không rò token); `tests\conftest.py` trỏ `M28_CONFIG_DIR` vào thư mục tạm cho mọi test. `tests\test_review_app.py` thử phần logic của trang rà soát mà không cần gradio hay trình duyệt. Kiểm thử trên trình duyệt thật
 (tuỳ chọn, cần playwright, không nằm trong requirements): `python tests\e2e_review_ui.py --work <thư mục có runs\F5 và runs\ALL616> --shots <thư mục ảnh chụp>`
 (pha F thử tab Nạp ảnh bằng ảnh WFLW thật: thêm `--wflw <WFLW_images>` nếu không nằm cạnh thư mục work) và
-`python tests\e2e_dot_push.py --work <thư mục có config\ và face_landmarker.task> --wflw <WFLW_images> --shots <thư mục ảnh chụp>` (nạp ba đợt Khoi, Nam, Cuong bằng MediaPipe thật, xoá mềm, rà, đẩy lên CVAT giả, xoá task, màn 1440 và 420 px).
+`python tests\e2e_dot_push.py --work <thư mục có config\ và face_landmarker.task> --wflw <WFLW_images> --shots <thư mục ảnh chụp>` (nạp ba đợt Khoi, Nam, Cuong bằng MediaPipe thật, xoá mềm, rà, đẩy lên CVAT giả, xoá task, màn 1440 và 420 px) và
+`python tests\e2e_cai_dat.py --work <…> --wflw <WFLW_images> --shots <thư mục ảnh chụp>` (tab Cài đặt, bảy pha A–G, xem đầu file).
 
 ## Giao diện m28 giả định từ P2/P3/P4
 Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nhận**. Ai thấy khác thì sửa bảng này hoặc báo P1.

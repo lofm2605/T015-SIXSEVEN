@@ -11,6 +11,10 @@ Giả lỗi theo lệnh bằng biến môi trường M28_FAKE_CVAT_CONTROL (JSON
   drop_point: true              xuất ra thiếu một điểm ở skeleton đầu tiên
   project_missing_sublabels: N  project tạo ra thiếu N sublabel
   tasks_without_project: true   task mới không gắn project
+  hang: N                       make_client treo N giây (true = 60) để thử timeout của "Thử kết nối" (tiến trình con bị kill)
+  username: "ten"               tên người dùng retrieve_current_user() trả về (mặc định "m28-fake-user")
+Thuộc tính M28_FAKE_CVAT = True đánh dấu gói giả: tool/cai_dat_thu.py bỏ qua tiền kiểm HTTP /api/server/about (không có server HTTP);
+CVAT thật không có thuộc tính này nên luôn qua tiền kiểm.
 Giả định về hành vi server bám mã nguồn CVAT v2.77.0 (job_file_mapping: frame xếp theo thứ tự mapping, sorting_method phải mặc định).
 """
 import copy
@@ -18,6 +22,7 @@ import datetime
 import functools
 import json
 import os
+import time
 import zipfile
 import xml.etree.ElementTree as ET
 
@@ -25,6 +30,7 @@ from . import exceptions  # noqa: F401
 from .api_client.exceptions import ApiException
 from .core.proxies.tasks import ResourceType  # noqa: F401
 
+M28_FAKE_CVAT = True
 STATE_ENV, CONTROL_ENV = "M28_FAKE_CVAT_STATE", "M28_FAKE_CVAT_CONTROL"
 CONTROL = {}
 _MEM = {}
@@ -140,6 +146,10 @@ class Client:
         return ProjectsRepo(self)
 
     @property
+    def users(self):
+        return UsersRepo(self)
+
+    @property
     def tasks(self):
         return TasksRepo(self)
 
@@ -148,6 +158,8 @@ def make_client(host, *, port=None, credentials=None, access_token=None):
     _log("make_client", host, port=port, credentials=None if credentials is None else "<redacted>",
          access_token=None if access_token is None else "<redacted>")
     c = _control()
+    if c.get("hang"):
+        time.sleep(60 if c["hang"] is True else float(c["hang"]))
     if c.get("connect_fail"):
         raise MaxRetryError(f"HTTPConnectionPool(host='{host}'): Max retries exceeded (NewConnectionError)")
     return Client(host.rstrip("/"), access_token)
@@ -169,6 +181,16 @@ class Project:
     @logged("Project.get_labels")
     def get_labels(self):
         return copy.deepcopy(self._rec["labels"])
+
+
+class UsersRepo:
+    @logged("users.retrieve_current_user")
+    def retrieve_current_user(self):
+        _check_auth(self._c)
+        return _Model(dict(id=1, username=_control().get("username", "m28-fake-user")))
+
+    def __init__(self, client):
+        self._c = client
 
 
 class ProjectsRepo:

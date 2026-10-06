@@ -4,6 +4,10 @@ Dành cho cả 5 người (P1–P5). Mọi lệnh viết cho **cmd** (không ph�
 Bản này **chưa ai thử trên Windows thật**: gặp lỗi thì ghi lại nguyên văn rồi báo P1 (xem mục 8).
 Ảnh WFLW là CC BY-NC-ND: chỉ dùng nội bộ, không gửi cho ai ngoài nhóm, không đưa vào chat AI nào khác.
 
+> **Cách nhanh nhất:** sau khi lấy code (mục 1) và giải nén dữ liệu (mục 4), **nhấp đúp `chay.bat`** trong thư mục
+> `source-tool\m28-prelabel`. File này tự cài môi trường Python lần đầu, tải model, rồi hiện menu: mở trang rà soát
+> (Nạp ảnh, Các đợt, Ca khó, Cài đặt), rà lại lượt cũ, chạy thử 5 mặt, chạy test. Các mục dưới là cách làm tay từng bước.
+
 ## 0. Chuẩn bị
 - Windows 10/11, ổ C còn trống ≥ 5 GB. Đặt thư mục ở đường dẫn **ngắn**, ví dụ `C:\m28`.
 - Cài **Python 3.14** (python.org, tick "Add python.exe to PATH" và "py launcher") và **Git**. `curl` và `tar` có sẵn trong Windows 10/11.
@@ -112,7 +116,11 @@ Cài CVAT theo `de-tai-m28\huong-dan-chung.md` (mục cài CVAT), rồi cài SDK
 python -m pip install cvat-sdk==2.77.0
 python tool\make_label.py
 ```
-Token chỉ đặt trong biến môi trường, **trong cùng cửa sổ cmd sẽ chạy lệnh hoặc mở trang**; không ghi vào file, không dán vào chat. `set` chỉ có tác dụng trong cửa sổ đó;
+**Cách chính (từ trang rà soát):** mở trang → tab **Cài đặt** → dán link `http://localhost:8080` và token CVAT vào ô → **Lưu** → **Thử kết nối CVAT** (phải thấy "Kết nối được", bản 2.77.0, tên tài khoản).
+Mặc định token chỉ nằm trong bộ nhớ của trang này. Bật **Nhớ trên máy này** thì token lưu ở `%APPDATA%\m28\cvat.json` (ngoài repo; Windows không có quyền 0600 thật, file dựa vào quyền hồ sơ của bạn). Ngày 24/10 bấm **Quên token** và thu hồi token trong CVAT.
+Không dán token vào chat hay file trong repo.
+
+**Phương án thay thế (bắt buộc cho `m28.py push/collect` chạy ở cmd; lệnh cmd KHÔNG đọc `cvat.json`):** đặt token trong biến môi trường, **trong cùng cửa sổ cmd sẽ chạy lệnh hoặc mở trang**; `set` chỉ có tác dụng trong cửa sổ đó;
 `setx CVAT_ACCESS_TOKEN <token>` lưu lâu dài nhưng chỉ thấy ở cửa sổ cmd MỞ SAU đó (và để lại token trong máy: ngày 24/10 thu hồi token và xoá biến).
 ```bat
 set CVAT_URL=http://localhost:8080
@@ -120,8 +128,8 @@ set CVAT_ACCESS_TOKEN=<dán token của bạn>
 python tool\m28.py push --run F5 --reviewer P2 --task demo-F5
 python tool\m28.py collect --task demo-F5 --reviewer P2
 ```
-- **Từ trang rà soát:** mở trang từ **cùng cửa sổ cmd** đã `set` (`python tool\review_app.py runs\F5 P2`). Rà hết mặt thì nút **Đẩy lên CVAT** (dưới nút Xong) bật; bấm → hộp xác nhận (nút Huỷ là mặc định, Esc = Huỷ) → Đẩy.
-  Thiếu `CVAT_URL`/`CVAT_ACCESS_TOKEN` thì nút khoá và trang nhắc lệnh `set`. Trang không có ô nhập token.
+- **Từ trang rà soát:** mở trang (`python tool\review_app.py runs\F5 P2`), nhập link/token ở tab Cài đặt (hoặc mở từ cửa sổ cmd đã `set`). Rà hết mặt thì nút **Đẩy lên CVAT** (dưới nút Xong) bật; bấm → hộp xác nhận (nút Huỷ là mặc định, Esc = Huỷ) → Đẩy.
+  Thiếu link/token (tab Cài đặt hoặc biến môi trường) thì nút khoá và trang nhắc mở tab Cài đặt (hoặc lệnh `set`). Ô nhập token chỉ nằm ở tab Cài đặt.
 - **Lần push dở** (mất mạng, nhập nhãn lỗi): `python tool\m28.py push --run F5 --resume` làm nốt trên đúng task đã tạo, hoặc `python tool\m28.py push --run F5 --cleanup --confirm-name demo-F5` để xoá task dở rồi đẩy lại.
   Sau khi `push` xong, gõ lại `push`/`all` ở cmd chỉ in "bỏ qua push" (đã ghi `runs\F5\push\done.txt`).
 - **`collect`** chỉ xuất nhãn về `raw\<task>_<người>_<ngàyDDMM>.xml` (không ghi đè) và lập `outputs\collect_<task>.md`; luôn thêm `--reviewer P<số của bạn>`. `--skip-export` chỉ đọc `raw\`; `--dry-run` chỉ liệt kê job.

@@ -14,7 +14,7 @@ Kịch bản (một mạch): nạp 3 đợt Khoi, Nam, Cuong (prepare thật) ->
 -> rà đợt Khoi (có Gán tay và Bỏ) -> nút Đẩy lên CVAT (khoá khi còn mặt chưa rà; hộp xác nhận; Huỷ/Esc; đẩy; thẻ kết quả; không đẩy lần hai)
 -> thẻ Khoi ghi Đã đẩy CVAT, cảnh báo CVAT khi xoá ảnh -> xoá TASK trên CVAT (hộp xác nhận gõ lại tên + tick, Huỷ/Esc không xoá, xoá thật
 đúng một lần, đợt đẩy lại được) -> xoá cả đợt Cuong, khôi phục -> trang không có biến CVAT -> phím tắt không chạy ở tab Các đợt, bí mật không lộ.
-Cổng 7881-7889, M28_NO_BROWSER=1, mọi tiến trình được dọn ở finally. Ảnh chụp: <shots>/push_*.png (có mặt người thật: để ngoài git).
+Cổng 7881-7889, M28_NO_BROWSER=1 (CVAT_URL / CVAT_ACCESS_TOKEN lấy từ biến môi trường như trước; tab Cài đặt chỉ được kiểm là có đúng một ô password), mọi tiến trình được dọn ở finally. Ảnh chụp: <shots>/push_*.png (có mặt người thật: để ngoài git).
 """
 import argparse
 import csv
@@ -588,7 +588,13 @@ def run(pw, W, wflw, shots, port):
         txt = g.inner_text('#push-panel')
         check(g.locator('#btn-push').is_disabled(), 'thiếu biến môi trường: nút Đẩy khoá')
         check('set CVAT_URL=http://localhost:8080' in txt and 'set CVAT_ACCESS_TOKEN=' in txt and 'cùng cửa sổ cmd' in txt, f'hướng dẫn set trong cmd: {txt[:200]!r}')
-        check(g.locator('#push-panel input, #push-panel textarea, input[type=password]').count() == 0, 'không có ô nhập token/URL nào trên trang')
+        check('tab Cài đặt' in txt, 'hướng dẫn chính: mở tab Cài đặt')
+        check(g.locator('#push-panel input, #push-panel textarea').count() == 0 and g.locator('#tab-ra input[type=password], #tab-dot input[type=password]').count() == 0,
+              'khung Đẩy lên CVAT và các tab khác không có ô nhập token/URL nào (ô nhập chỉ nằm ở tab Cài đặt)')
+        g.get_by_role('tab', name='Cài đặt').click()
+        g.wait_for_selector('#cd-token input', timeout=20000)
+        check(g.locator('input[type=password]').count() == 1 and g.locator('#tab-caidat input[type=password]').count() == 1, 'đúng một ô password trên trang, nằm ở tab Cài đặt')
+        g.get_by_role('tab', name='Rà soát').click()
         g.get_by_role('tab', name='Các đợt').click()
         g.wait_for_selector('#dot-root .dot-card', timeout=20000)
         open_grid(g, 'Khoi')
