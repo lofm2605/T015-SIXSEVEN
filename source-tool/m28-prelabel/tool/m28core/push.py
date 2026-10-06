@@ -11,6 +11,10 @@ Nguyên tắc an toàn (kiểm TRƯỚC khi kết nối):
   * Xoá task chỉ theo id ghi trong push.json, sau khi lấy lại task theo id từ CVAT và kiểm tên khớp push.json, tên bắt đầu `demo-`,
     thuộc project m28, cùng CVAT_URL với lúc push; phải có xác nhận gõ lại đúng tên task. Không bao giờ tìm task theo tên để xoá.
 
+Gán tay: mặt Gán tay nằm trong MỘT job riêng ở cuối task. Mặt Gán tay CÓ nháp (có <image> trong xml_path, mọi điểm low_conf=true) được nhập
+nhãn cùng mặt Nhận; mặt Gán tay ẢNH TRỐNG (không có trong XML) không có nhãn. push suy ra nhóm này từ XML, nên chữ ký push không đổi.
+push.json phien_ban 2 ghi gan_tay_co_nhap; push.json bản cũ (phien_ban 1) khi --resume giữ nghĩa cũ (mọi Gán tay là ảnh trống).
+
 Hợp đồng với steps.push: push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project=, prefix=, label_json=) trả đường dẫn
 check.zip; lỗi là SystemExit("<lý do tiếng Việt>"). In các dòng "[k/6] <pha> …" cho trang rà soát đọc tiến độ, và dòng cuối
 "push xong: task <tên> id <id>, <n> job (<a> Nhận, <b> Gán tay), <url>".
@@ -127,6 +131,29 @@ def check_inputs(task_name, prefix, label_json, xml_path, nhan_imgs, tay_imgs):
     return load_label_names(label_json)
 
 
+def xml_tay_nhap(xml_path, nhan_imgs, tay_imgs):
+    """Tên file các mặt Gán tay CÓ nháp = ảnh trong tay_imgs có <image name=…> trong XML (theo thứ tự tay_imgs). Kiểm TRƯỚC khi kết nối:
+    mọi <image> trong XML phải thuộc Nhận ∪ Gán tay; mỗi mặt Nhận (nếu có) phải có trong XML. XML không tồn tại mà chỉ có Gán tay thì
+    mọi mặt Gán tay là ảnh trống (tương thích người gọi cũ)."""
+    tb = [os.path.basename(p) for p in tay_imgs]
+    if not os.path.isfile(xml_path):
+        return []
+    try:
+        names = [im.get("name") for im in ET.parse(xml_path).getroot().iter("image")]
+    except ET.ParseError as e:
+        raise SystemExit(f"File nhãn nháp {xml_path} không phải XML hợp lệ ({e}): chạy lại bước push để steps ghi lại XML.")
+    nb = [os.path.basename(p) for p in nhan_imgs]
+    la = sorted({n for n in names if n not in set(nb) | set(tb)})
+    if la:
+        raise SystemExit(f"XML nhãn nháp {xml_path} có {len(la)} ảnh không thuộc Nhận hay Gán tay của lần đẩy này (ví dụ {la[0]}): "
+                         "dừng, chưa tạo task nào. Chạy lại bước push để steps ghi lại XML.")
+    thieu = [n for n in nb if n not in set(names)]
+    if thieu:
+        raise SystemExit(f"{len(thieu)} mặt Nhận không có trong XML nhãn nháp {xml_path} (ví dụ {thieu[0]}): dừng, chưa tạo task nào. "
+                         "Chạy lại bước push để steps ghi lại XML.")
+    return [n for n in tb if n in set(names)]
+
+
 def plan_jobs(nhan_imgs, tay_imgs, job_size=8):
     """Chia job: các nhóm job_size mặt Nhận (theo thứ tự đã nhận) + MỘT job Gán tay riêng ở cuối (nếu có).
     Trả (job_file_mapping theo tên file, danh sách kind)."""
@@ -239,13 +266,19 @@ def _jobs_of(task, kinds):
     return out
 
 
-def _xml_for_frames(xml_path, frames, run_dir):
+def _xml_for_frames(xml_path, frames, run_dir, keep=None):
     """Ghép id ảnh trong XML theo THỨ TỰ FRAME THẬT của task (ghép theo tên ảnh). Giống nhau thì dùng nguyên XML;
-    khác thì ghi bản tạm runs/<lượt>/xml/prelabel_cvat.xml (không sửa prelabel.xml gốc)."""
+    khác thì ghi bản tạm runs/<lượt>/xml/prelabel_cvat.xml (không sửa prelabel.xml gốc).
+    keep (tập tên ảnh, hoặc None = giữ hết): ảnh ngoài keep bị bỏ khỏi bản nhập (lượt đẩy bằng bản cũ: chỉ nhập mặt Nhận)."""
     tree = ET.parse(xml_path)
     idx = {n: i for i, n in enumerate(frames)}
     changed = False
-    for im in tree.getroot().iter("image"):
+    root = tree.getroot()
+    if keep is not None:
+        for im in [im for im in root.findall("image") if im.get("name") not in keep]:
+            root.remove(im)
+            changed = True
+    for im in root.iter("image"):
         n = im.get("name")
         if n not in idx:
             raise SystemExit(f"Ảnh {n} có trong XML nhãn nháp nhưng không có trong task trên CVAT: dừng, chưa nhập nhãn.")
@@ -285,6 +318,7 @@ def push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project="m28", prefi
          label_json=os.path.join("config", "face50_label.json"), *, resume=False, pipeline=None):
     """Xem docstring module. resume=True: chỉ làm phần còn lại trên đúng task_id trong push.json."""
     labels, point_names = check_inputs(task_name, prefix, label_json, xml_path, nhan_imgs, tay_imgs)
+    tay_nhap_xml = xml_tay_nhap(xml_path, nhan_imgs, tay_imgs)
     env = io_.read_env()
     print(io_.status_line(env), flush=True)
     bad = io_.env_problem(env)
@@ -293,8 +327,28 @@ def push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project="m28", prefi
     pipe = io_.load_pipeline(pipeline)
     with dang_chay.Guard(run_dir, "push", "chạy push lại"):
         mode, st, truoc = _gate(run_dir, task_name, resume)
-        _say(1, f"ổn: task {task_name}, {len(nhan_imgs)} Nhận, {len(tay_imgs)} Gán tay" + (" (làm tiếp --resume)" if resume else ""))
-        return _run(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, labels, point_names, env, pipe, mode, st, truoc)
+        tay_nhap, cu = _resolve_tay_nhap(mode, st, tay_nhap_xml)
+        _say(1, f"ổn: task {task_name}, {len(nhan_imgs)} Nhận, {len(tay_imgs)} Gán tay ({len(tay_nhap)} có nháp, {len(tay_imgs) - len(tay_nhap)} ảnh trống)"
+                + (" (làm tiếp --resume)" if resume else ""))
+        if cu:
+            print("  lượt đẩy bằng bản cũ: Gán tay giữ ảnh trống (không nhập nháp cho mặt Gán tay).", flush=True)
+        return _run(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, labels, point_names, env, pipe, mode, st, truoc,
+                    tay_nhap, cu)
+
+
+def _resolve_tay_nhap(mode, st, tay_nhap_xml):
+    """(danh sách tên Gán tay có nháp, cu). Lượt mới: lấy từ XML. --resume push.json bản 2: lấy từ push.json, phải khớp XML hiện tại.
+    --resume push.json bản cũ (không có phien_ban hoặc 1): giữ nghĩa cũ, mọi Gán tay là ảnh trống (cu=True)."""
+    if mode != "resume":
+        return list(tay_nhap_xml), False
+    if (st.get("phien_ban") or 1) < 2:
+        return [], True
+    da_ghi = st.get("gan_tay_co_nhap")
+    if not isinstance(da_ghi, list) or set(da_ghi) != set(tay_nhap_xml):
+        raise SystemExit(f"--resume: nhóm Gán tay có nháp trong push.json ({len(da_ghi) if isinstance(da_ghi, list) else '?'} mặt) khác XML nhãn nháp "
+                         f"hiện tại ({len(tay_nhap_xml)} mặt): kết quả rà soát đã đổi sau lần đẩy trước. Chưa nhập gì. Xoá task dở bằng "
+                         "--cleanup (hoặc nút Xoá task trên CVAT ở tab Các đợt) rồi đẩy lại.")
+    return list(da_ghi), False
 
 
 class _Doing:
@@ -317,7 +371,8 @@ def _note_loi(run_dir, msg):
             pass
 
 
-def _run(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, labels, point_names, env, pipe, mode, st, truoc):
+def _run(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, labels, point_names, env, pipe, mode, st, truoc,
+         tay_nhap=(), cu=False):
     t0 = time.time()
     doing = _Doing()
     doing("kết nối")
@@ -330,7 +385,7 @@ def _run(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, lab
     try:
         with client:
             return _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, labels, point_names, env, pipe,
-                          mode, st, truoc, t0, doing)
+                          mode, st, truoc, t0, doing, tay_nhap, cu)
     except SystemExit as e:
         _note_loi(run_dir, e.code)
         raise
@@ -343,7 +398,7 @@ def _run(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, lab
 
 
 def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, prefix, labels, point_names, env, pipe, mode, st, truoc,
-           t0, doing):
+           t0, doing, tay_nhap=(), cu=False):
     from cvat_sdk.core.proxies.tasks import ResourceType
 
     doing("kiểm bản server")
@@ -363,9 +418,10 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
         if same:
             raise SystemExit(f"Trong project {project} đã có task tên {task_name} (id {same[0].id}): dừng để không có hai task cùng tên. "
                              "Đổi tên task (--task demo-…) hoặc xoá task cũ trong CVAT.")
-        st = dict(tool="m28", phien_ban=1, task=task_name, project=project, cvat_url=io_.norm_url(env["url"]), trang_thai=S_DANG_TAO,
-                  bat_dau=io_.now_iso(), so_anh=dict(nhan=len(nhan_imgs), gan_tay=len(tay_imgs)),
-                  job_file_mapping=[len(g) for g in groups])
+        st = dict(tool="m28", phien_ban=2, task=task_name, project=project, cvat_url=io_.norm_url(env["url"]), trang_thai=S_DANG_TAO,
+                  bat_dau=io_.now_iso(),
+                  so_anh=dict(nhan=len(nhan_imgs), gan_tay=len(tay_imgs), gan_tay_co_nhap=len(tay_nhap), gan_tay_trong=len(tay_imgs) - len(tay_nhap)),
+                  gan_tay_co_nhap=list(tay_nhap), job_file_mapping=[len(g) for g in groups])
         if truoc:
             st["truoc_do"] = truoc
         write_state(run_dir, st)                                  # TRƯỚC khi gọi create_from_data: chết giữa chừng vẫn biết
@@ -385,6 +441,7 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
         _say(4, f"đã tạo task id {task.id}, {len(jobs)} job")
     nhan_names = [os.path.basename(p) for p in nhan_imgs]
     tay_names = [os.path.basename(p) for p in tay_imgs]
+    tay_nhap = list(tay_nhap)
     doing("đọc danh sách frame")
     frames = _frame_names(task)
     if sorted(frames) != sorted(nhan_names + tay_names):
@@ -392,19 +449,20 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
                            f"id {task.id} trong CVAT, rồi --cleanup và push lại.")
     # nhập nhãn đúng một lần, chỉ khi task còn 0 nhãn
     if st["trang_thai"] == S_DA_TAO:
-        if nhan_imgs:
+        if nhan_imgs or tay_nhap:
             doing("kiểm nhãn đã có trong task")
             n_ann = _n_annotations(task)
             if n_ann > 0:
                 _say(5, f"task đã có {n_ann} nhãn: KHÔNG nhập lại (nhập sẽ ghi đè nhãn đã có)")
             else:
-                xml_use = _xml_for_frames(xml_path, frames, run_dir)
+                keep = set(nhan_names) if cu else None                          # bản cũ: XML có ảnh Gán tay thì lọc, chỉ nhập Nhận
+                xml_use = _xml_for_frames(xml_path, frames, run_dir, keep)
                 doing("nhập nhãn nháp")
-                _say(5, f"nhập {len(nhan_imgs)} mặt bằng {io_.FORMAT_IMPORT}"
+                _say(5, f"nhập {len(nhan_imgs)} Nhận + {len(tay_nhap)} Gán tay có nháp bằng {io_.FORMAT_IMPORT}"
                         + ("" if xml_use == xml_path else " (id ảnh đã ghép theo frame thật)"))
                 task.import_annotations(io_.FORMAT_IMPORT, xml_use)
         else:
-            _say(5, "không có mặt Nhận, không nhập nhãn")
+            _say(5, "không có mặt Nhận và không có Gán tay có nháp, không nhập nhãn")
         st["trang_thai"] = S_DA_NHAP
         write_state(run_dir, st)
     else:
@@ -413,11 +471,13 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
     check_path = os.path.join(run_dir, "check.zip")
     _say(6, f"xuất {io_.FORMAT_EXPORT} (chỉ nhãn) để kiểm")
     task.export_dataset(io_.FORMAT_EXPORT, check_path, include_images=False)
-    res = io_.check_faces(io_.parse_annotations(io_.read_zip_annotations(check_path)), nhan_names, tay_names, point_names)
+    res = io_.check_faces(io_.parse_annotations(io_.read_zip_annotations(check_path)), nhan_names, tay_names, point_names, tay_nhap)
     st["check"] = res
     if not res["ok"]:
         _fail(run_dir, st, f"Kiểm sau khi nhập KHÔNG đạt: {res['n_day_du']}/{res['n_nhan']} mặt Nhận có đủ {len(point_names)} điểm kèm low_conf"
-                           f" (thiếu: {res['thieu'][:3] + res['thieu_anh'][:3]}; Gán tay lỡ có nhãn: {res['gan_tay_co_nhan'][:3]}). "
+                           f" (thiếu: {res['thieu'][:3] + res['thieu_anh'][:3]}); "
+                           f"{res['n_tay_nhap_day_du']}/{res['n_tay_nhap']} mặt Gán tay có nháp đủ điểm, mọi low_conf=true "
+                           f"(sai: {res['tay_nhap_thieu'][:3]}); Gán tay ảnh trống lỡ có nhãn: {res['gan_tay_co_nhan'][:3]}. "
                            f"Task id {task.id} được giữ nguyên để bạn xem; chạy --resume để kiểm lại hoặc --cleanup để xoá.")
     url = io_.task_url(env["url"], task.id)
     st.update(trang_thai=S_XONG, task_url=url, thoi_gian_giay=round(time.time() - t0, 1))

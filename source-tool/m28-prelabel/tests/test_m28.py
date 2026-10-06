@@ -403,9 +403,10 @@ def test_push_real_with_fake_push(tmp_path, world, monkeypatch, capsys):
     assert sorted(os.path.basename(p) for p in c['nhan']) == ['face_a.png', 'face_c.png']
     assert [os.path.basename(p) for p in c['tay']] == ['face_b.png']
     assert not set(c['nhan']) & set(c['tay']) and all(os.path.exists(p) for p in c['nhan'] + c['tay'])
-    assert sorted(read_xml('A')) == sorted(os.path.basename(p) for p in c['nhan'])   # ảnh tải lên = ảnh XML dùng
+    assert sorted(read_xml('A')) == sorted(os.path.basename(p) for p in c['nhan'] + c['tay'])   # XML = Nhận + Gán tay có nháp (face_b có nháp)
     assert os.path.exists('runs/A/push/done.txt')
-    assert open('runs/A/push/manual_list.txt').read() == 'face_b.png'
+    assert steps.read_manual_list('runs/A/push/manual_list.txt') == [('face_b.png', 'co_nhap')]
+    assert open('runs/A/push/manual_list.txt').read() == 'face_b.png\tco_nhap'
     m28.main(['push', '--run', 'A', '--review', 'auto', '--images', str(imgs), '--task', 'demo-A'])
     assert len(world.push) == 1 and 'bỏ qua push' in capsys.readouterr().out
 
