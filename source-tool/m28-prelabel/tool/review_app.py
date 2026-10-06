@@ -9,10 +9,13 @@ Sửa điểm không làm ở đây (làm trong CVAT).
 
 Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
 ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà
-không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team".
+không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team",
+"Cài đặt" (cai_dat.py + cai_dat_ui.py: link/token/tổ chức CVAT, người rà mặc định, đường dẫn ảnh WFLW và model, t_flip của cờ low_conf).
 Nút Xong chỉ ghi done.txt và khoá việc bấm quyết định (hiện dải xanh ở đầu trang); trang KHÔNG tự tắt, vẫn Đẩy lên CVAT, xem Các đợt,
 xuất Ca khó được. Chỗ duy nhất tắt trang là nút "Đóng trang rà soát" (có hộp xác nhận, đứng trên các tab), Ctrl+C, hoặc chuyển lượt.
-Trang KHÔNG gọi mạng: đẩy lên CVAT và xoá task chạy bằng tiến trình con `m28.py push ...`; CVAT_URL/CVAT_ACCESS_TOKEN chỉ đọc từ biến môi trường.
+Trang KHÔNG gọi mạng: đẩy lên CVAT, xoá task và "Thử kết nối CVAT" chạy bằng tiến trình con (`m28.py push ...`, cai_dat_thu.py). Link/token CVAT
+lấy từ cai_dat.py: giá trị vừa Lưu ở tab Cài đặt > biến môi trường CVAT_URL/CVAT_ACCESS_TOKEN > file đã lưu ngoài repo (chỉ khi bật "Nhớ trên máy
+này"); token chỉ vào tiến trình con qua môi trường của nó, không bao giờ qua đối số dòng lệnh, log, runs/ hay HTML.
 
 Đọc  runs/<run>/flags/flags.json, overlays/, autoqc/autoqc.csv, no_face.csv, map50/mp50.json, crop/images/.
 Ghi  runs/<run>/review/triage_<người rà>.csv (name,decision,reason,seconds; chỉ nối thêm dòng, mỗi dòng fsync)
@@ -46,6 +49,8 @@ if TOOL_DIR not in sys.path:
     sys.path.insert(0, TOOL_DIR)
 import ca_kho  # noqa: E402  (ca khó, tab Ca khó và Họp team; chỉ thư viện chuẩn ở đầu module)
 import dot_anh  # noqa: E402
+import cai_dat  # noqa: E402  (cài đặt dùng chung cả tiến trình: CVAT, người rà, đường dẫn; chỉ thư viện chuẩn)
+import cai_dat_ui  # noqa: E402  (tab Cài đặt; không import gradio ở đầu module)
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
 from m28core import loai_tru  # noqa: E402  (danh sách mặt xoá mềm excluded.txt)
@@ -95,10 +100,7 @@ def _shown(path):
 
 
 def check_reviewer(name):
-    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", name):
-        raise RunError(f"Tên người rà {name!r} không hợp lệ: chỉ dùng chữ không dấu, số, gạch dưới, gạch ngang "
-                       "(tối đa 32 ký tự), ví dụ P2. Tên này nằm trong tên file triage_<tên>.csv.")
-    return name
+    return nap_anh.check_reviewer(name)            # một quy tắc duy nhất (nap_anh.REVIEWER_RE), tab Cài đặt cũng dùng
 
 
 def notebook_env(environ=None, modules=None):
@@ -1280,7 +1282,7 @@ PAGE_JS = r"""() => {
   mark();
 }"""
 PAGE_JS = PAGE_JS[:-1] + dot_ui.JS_BODY + "}"          # JS của hộp xác nhận và tab Các đợt chạy một lần, cùng hàm với phím tắt
-CSS = CSS + dot_ui.CSS + ca_kho.CSS
+CSS = CSS + dot_ui.CSS + ca_kho.CSS + cai_dat_ui.CSS
 
 
 def prepare_env(run_dir, environ=None):
@@ -1499,6 +1501,11 @@ class AppCtx:
     project_root: str = ""
     layout_error: object = None
 
+    def next_reviewer(self):
+        """Tên người rà cho LƯỢT MỞ TIẾP THEO (Rà lượt này, chuyển đợt): tên mặc định đã lưu ở tab Cài đặt, không có thì tên của trang này.
+        `reviewer` của ctx KHÔNG đổi giữa chừng: lượt đang mở vẫn ghi vào triage_<tên cũ>.csv."""
+        return cai_dat.get().next_reviewer(self.reviewer)
+
     def begin_close(self):
         """Đặt cờ đang đóng. True đúng một lần (lần đầu), False nếu đã đóng rồi hoặc đang chuyển lượt: chống bấm hai lần / hai tab."""
         with self.close_lock:
@@ -1701,7 +1708,7 @@ def _nap_tab(gr, demo, store, ctx):
         if not res["n_queue"]:
             return refuse("Lượt này không có mặt nào để rà.")
         try:
-            new_store = Store(snap["run_dir"], ctx.reviewer)           # dựng TRƯỚC: lỗi thì báo ở đây, chưa đóng gì
+            new_store = Store(snap["run_dir"], ctx.next_reviewer())    # tên người rà cho lượt kế tiếp (tab Cài đặt); dựng TRƯỚC: lỗi thì báo ở đây
         except RunError as e:
             return refuse(str(e))
         if not ctx.begin_switch((snap["run_dir"], new_store)):
@@ -1711,13 +1718,15 @@ def _nap_tab(gr, demo, store, ctx):
 
     start_outs = [drop, plan_state, gal, rej, count, name_tb, note_tb, msg] + job_outs
     nap = dict(opts, concurrency_id="nap")
-    demo.load(on_load, [plan_state], [env_html, name_tb] + job_outs, **dict(opts, concurrency_id="nap"))
+    nap_load = (on_load, [plan_state], [env_html, name_tb] + job_outs, dict(opts, concurrency_id="nap"))
+    demo.load(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])
     drop.change(on_files, [drop, plan_state], [plan_state, gal, rej, count, b_start], **nap)
     b_start.click(on_start, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
     b_retry.click(on_retry, [plan_state], [msg] + job_outs, **nap)
     b_cancel.click(on_cancel, [plan_state], [msg] + job_outs, **dict(opts, concurrency_id="nap_huy"))
     timer.tick(on_tick, [plan_state], job_outs, **dict(opts, concurrency_id="nap_tick"))
     b_go.click(on_go, [plan_state], [msg, target], **nap).then(None, [target], None, js=NAP_SWITCH_JS)
+    return nap_load                         # build_ui gọi lại khi chọn tab Nạp ảnh: model/cấu hình vừa cài ở tab Cài đặt có hiệu lực ngay
 
 
 def _close_bar(gr, demo, store, ctx):
@@ -1793,8 +1802,8 @@ def build_ui(store, ctx=None):
                     review = None
                 else:
                     review = _review_tab(gr, demo, store, ctx, header)
-            with gr.Tab("Nạp ảnh", id="nap", elem_id="tab-nap"):
-                _nap_tab(gr, demo, store, ctx)
+            with gr.Tab("Nạp ảnh", id="nap", elem_id="tab-nap") as tab_nap:
+                nap_load = _nap_tab(gr, demo, store, ctx)
             with gr.Tab("Các đợt", id="dot", elem_id="tab-dot") as tab_dot:
                 refresh, dot_ses, dot_outs, dot_opts = dot_ui.dot_tab(
                     gr, demo, store, ctx, dict(Store=Store, switch_js=NAP_SWITCH_JS, run_name=run_name))
@@ -1802,8 +1811,18 @@ def build_ui(store, ctx=None):
                 ck_fn, ck_in, ck_out, ck_opts = ca_kho.member_tab(gr, demo, store, ctx)
             with gr.Tab("Họp team", id="hop", elem_id="tab-hop"):
                 ca_kho.meeting_tab(gr, demo, ctx)
+            with gr.Tab("Cài đặt", id="caidat", elem_id="tab-caidat") as tab_cd:
+                def after_cvat(ev):                         # Lưu/Quên token xong: khung Đẩy lên CVAT và tab Các đợt thấy ngay giá trị mới
+                    if review is not None:
+                        ev.then(review.push_refresh, None, review.push_outs, **dict(review.push_opts, concurrency_id="push_view"))
+                    ev.then(refresh, [dot_ses], dot_outs, **dot_opts)
+                def after_model(ev):                        # Lưu đường dẫn model xong: tab Nạp ảnh kiểm lại ngay (chế độ --nap không phát sự kiện chọn tab Nạp ảnh)
+                    ev.then(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])
+                cd_fn, cd_in, cd_out, cd_opts = cai_dat_ui.settings_tab(gr, demo, store, ctx, after_cvat, run_name, after_model)
         tab_ck.select(ck_fn, ck_in, ck_out, **ck_opts)                      # tab Ca khó tự làm mới khi chọn (ca vừa đánh dấu ở tab Rà soát)
         tab_dot.select(refresh, [dot_ses], dot_outs, **dot_opts)           # tự làm mới khi chọn tab (không quét lại mỗi giây)
+        tab_nap.select(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])  # kiểm lại model/cấu hình khi chọn tab (vừa đổi đường dẫn ở tab Cài đặt)
+        tab_cd.select(cd_fn, cd_in, cd_out, **cd_opts)                     # tab Cài đặt: nạp lại trạng thái từ server khi chọn (nhiều tab trình duyệt)
         if review is not None:                                             # chọn lại tab Rà soát: vẽ lại (ảnh vừa xoá/khôi phục ở tab Các đợt)
             n_outs = len(review.all_outs)
 
@@ -1920,11 +1939,12 @@ def main(argv=None):
             if store is not None:
                 left = store.progress()["remaining"]
                 print(f"Chuyển sang lượt {run_name(new_dir)}. Lượt {run_name(store.run_dir)} còn {left} mặt chưa rà "
-                      f"(các lần bấm đã lưu); mở lại bằng: {nap_anh.reopen_command(store.run_dir, reviewer)}", flush=True)
+                      f"(các lần bấm đã lưu); mở lại bằng: {nap_anh.reopen_command(store.run_dir, store.reviewer)}", flush=True)
             else:
                 print(f"Chuyển sang lượt {run_name(new_dir)}.", flush=True)
             store, first = new_store, False
-            ctx = AppCtx(reviewer=reviewer, run_dir=new_dir)       # job mới, ctx mới (lượt đã chuyển không giữ job cũ)
+            ctx = AppCtx(reviewer=new_store.reviewer, run_dir=new_dir)      # job mới, ctx mới; tên người rà là tên của lượt mới (cài đặt ở tab Cài đặt)
+            reviewer = ctx.reviewer
     except KeyboardInterrupt:
         if store is not None and os.path.exists(store.done_path):
             print(f"Đã đóng trang rà soát bằng Ctrl+C: lượt {run_name(store.run_dir)} đã bấm Xong ({_shown(store.done_path)}).", flush=True)

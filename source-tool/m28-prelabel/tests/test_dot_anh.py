@@ -596,7 +596,8 @@ def test_push_button_locked_with_reasons(world):
     m = model(rd, env={})
     assert not m['enabled'] and m['reason'] == 'Thiếu CVAT_URL và CVAT_ACCESS_TOKEN.' and m['env_help']
     h = day_cvat.panel_html(m)
-    assert 'set CVAT_URL=http://localhost:8080' in h and 'set CVAT_ACCESS_TOKEN=' in h and 'cùng cửa sổ cmd' in h and 'Trang không có ô nhập token' in h
+    assert 'set CVAT_URL=http://localhost:8080' in h and 'set CVAT_ACCESS_TOKEN=' in h and 'cùng cửa sổ cmd' in h
+    assert 'tab <b>Cài đặt</b>' in h and 'bấm <b>Lưu</b>' in h and 'type="password"' not in h      # ô nhập token chỉ ở tab Cài đặt, không ở khung Đẩy
     m = model(rd, env={'CVAT_URL': 'localhost:8080', 'CVAT_ACCESS_TOKEN': TOKEN})
     assert not m['enabled'] and 'http://' in m['reason'] and TOKEN not in day_cvat.panel_html(m)
     m = model(rd, env={'CVAT_URL': 'http://localhost:8080'})
@@ -714,7 +715,7 @@ def test_delete_confirm_requires_exact_name_and_checkbox(world):
 def test_delete_confirm_html_describes_consequences(world):
     m = dict(task='demo-Khoi', task_id=12, url='http://localhost:8080')
     h = day_cvat.delete_confirm_html(m)
-    for s in ('KHÔNG HOÀN TÁC', 'nhãn đã sửa', 'collect', 'demo-Khoi', 'id 12', 'Token không nhập'):
+    for s in ('KHÔNG HOÀN TÁC', 'nhãn đã sửa', 'collect', 'demo-Khoi', 'id 12', 'tab Cài đặt', 'không nhập ở hộp này'):
         assert s in h, s
 
 

@@ -34,6 +34,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 from urllib.parse import urlsplit
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -322,7 +323,8 @@ def check_images_dir(path, limit_files=5000, limit_seconds=2.0, clock=time.monot
 
 
 def check_model(path):
-    """Kiểm file face_landmarker.task: tồn tại, là file, đọc được, kích thước (khoảng 3,7 MB là bình thường), đuôi .task, chữ ký zip 'PK'."""
+    """Kiểm file face_landmarker.task: tồn tại, là file, đọc được, kích thước (khoảng 3,7 MB là bình thường), đuôi .task, và là file zip (file thật của
+    MediaPipe là zip có 2 byte 00 đứng trước 'PK', nên dùng zipfile.is_zipfile, không so chữ ký ở đầu file)."""
     try:
         p = clean_path(path)
     except SettingsError as e:
@@ -335,15 +337,14 @@ def check_model(path):
         return _res("err", p, [f"{p} là một thư mục, cần đường dẫn tới file face_landmarker.task."], size=0)
     try:
         size = os.path.getsize(p)
-        with open(p, "rb") as f:
-            head = f.read(4)
+        is_zip = zipfile.is_zipfile(p)
     except OSError as e:
         return _res("err", p, [f"Có file nhưng không đọc được ({e.strerror or 'lỗi quyền truy cập'})."], size=0)
     if size == 0:
         return _res("err", p, ["File rỗng (tải dở?): tải lại model (HUONG-DAN-WINDOWS mục 3)."], size=0)
     level, lines = "ok", [f"File đọc được, {_mb(size)} (khoảng 3,7 MB là bình thường)."]
-    if not head.startswith(b"PK"):
-        return _res("err", p, [f"File {_mb(size)} nhưng không phải file .task (file .task là zip, bắt đầu bằng 'PK'): tải lại model."], size=size)
+    if not is_zip:
+        return _res("err", p, [f"File {_mb(size)} nhưng không phải file .task (file .task của MediaPipe là một gói zip): tải lại model."], size=size)
     if not p.lower().endswith(".task"):
         level = "warn"
         lines.append("Đuôi file không phải .task: chắc chắn đây là face_landmarker.task?")

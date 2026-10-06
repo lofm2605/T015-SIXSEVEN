@@ -31,6 +31,7 @@ import shutil
 import socket
 import statistics
 import subprocess
+import tempfile
 import sys
 import time
 import urllib.error
@@ -99,6 +100,7 @@ def big_fixed(pg):
 # ---------- tiến trình ----------
 def start(cmd, cwd, port, extra_env=None, out=None):
     env = dict(os.environ, GRADIO_SERVER_PORT=str(port), M28_NO_BROWSER='1', PYTHONUNBUFFERED='1')
+    env.setdefault('M28_CONFIG_DIR', os.path.join(tempfile.gettempdir(), 'm28-e2e-cfg'))     # tab Cài đặt: không đọc/ghi hồ sơ người dùng thật
     for k in ('NO_PROXY', 'no_proxy', 'GRADIO_SERVER_NAME'):
         env.pop(k, None)                           # để app tự thêm localhost vào NO_PROXY
     env.update(extra_env or {})

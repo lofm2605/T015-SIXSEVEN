@@ -754,10 +754,10 @@ def _real_sdk():
         sys.path.insert(0, extra)
     try:
         import cvat_sdk
-        from cvat_sdk.core.proxies import projects, tasks
+        from cvat_sdk.core.proxies import projects, tasks, users
         if not hasattr(cvat_sdk, 'make_client') or 'fake_cvat' in os.path.abspath(cvat_sdk.__file__):
             return None
-        return types.SimpleNamespace(sdk=cvat_sdk, tasks=tasks, projects=projects, restore=lambda: (sys.path.__setitem__(slice(None), saved_path),
+        return types.SimpleNamespace(sdk=cvat_sdk, tasks=tasks, projects=projects, users=users, restore=lambda: (sys.path.__setitem__(slice(None), saved_path),
                                                                                                           _purge(), sys.modules.update(saved)))
     except ImportError:
         sys.path[:] = saved_path
@@ -775,6 +775,9 @@ def test_signatures_match_real_sdk(cvat, monkeypatch):
     collect.collect(collect_args(task=['demo-Khoi', 'demo-Khong-Co']))
     pushmod.delete_task(w['rd'], confirm_name='demo-Khoi')
     pushmod.cleanup(w['rd'])                                                          # task_deleted: không gọi gì thêm
+    import cai_dat_thu                                                                # "Thử kết nối" của tab Cài đặt: users.retrieve_current_user (chỉ đọc)
+    res = cai_dat_thu.check(cvat_io.read_env(), '2.77.0', 'm28')
+    assert res['ok'] and res['username'] == 'm28-fake-user' and res['project_found'] is True
     log = list(cvat.calls())
     real = _real_sdk()
     if real is None:
@@ -787,7 +790,8 @@ def test_signatures_match_real_sdk(cvat, monkeypatch):
                  'tasks.create_from_data': T.TasksRepo.create_from_data, 'Task.get_jobs': T.Task.get_jobs,
                  'Task.get_frames_info': T.Task.get_frames_info, 'Task.get_annotations': T.Task.get_annotations,
                  'Task.import_annotations': T.Task.import_annotations, 'Task.export_dataset': T.Task.export_dataset,
-                 'Task.remove': T.Task.remove, 'Task.fetch': T.Task.fetch}
+                 'Task.remove': T.Task.remove, 'Task.fetch': T.Task.fetch,
+                 'users.retrieve_current_user': real.users.UsersRepo.retrieve_current_user}
         seen = set()
         for c in log:
             m = c['m']
@@ -798,13 +802,13 @@ def test_signatures_match_real_sdk(cvat, monkeypatch):
             assert m in table, f'lời gọi {m} chưa có trong bảng chữ ký'
             sig = inspect.signature(table[m])
             args = list(c['args'])
-            if m.startswith(('projects.', 'tasks.', 'Task.', 'Project.', 'Client.')):
+            if m.startswith(('projects.', 'tasks.', 'Task.', 'Project.', 'Client.', 'users.')):
                 args = [None] + args                                                   # self
             sig.bind(*args, **c['kwargs'])
             seen.add(m)
         assert {'make_client', 'tasks.create_from_data', 'Task.import_annotations', 'Task.export_dataset', 'Task.remove', 'projects.create',
                 'tasks.list', 'tasks.retrieve', 'Task.get_annotations', 'Task.get_frames_info', 'Task.get_jobs', 'Project.get_labels',
-                'Client.organization_slug'} <= seen
+                'Client.organization_slug', 'users.retrieve_current_user'} <= seen
         # make_client thật nhận access_token=
         assert 'access_token' in inspect.signature(C.make_client).parameters
         # ResourceType thật có LOCAL; DataRequest thật có các khoá đã dùng

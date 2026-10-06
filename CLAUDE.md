@@ -58,8 +58,8 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
   `http://localhost:8080`). P4 dựng mọi task một lần bằng script rồi phát file sao lưu (`backups/<Pk>/`);
   mỗi người khôi phục task của mình đúng buổi và tự xuất nhãn bằng `export.py` vào `raw/`. Ở công ty thật
   chỉ có một CVAT chung: cùng công cụ, đổi `CVAT_URL` và token.
-- cvat-sdk và cvat-cli cùng bản 2.77.0 với server. Đăng nhập bằng Personal Access Token trong biến môi
-  trường `CVAT_ACCESS_TOKEN`, địa chỉ trong `CVAT_URL`.
+- cvat-sdk và cvat-cli cùng bản 2.77.0 với server. Đăng nhập bằng Personal Access Token (biến môi
+  trường `CVAT_ACCESS_TOKEN` hoặc nhập ở tab Cài đặt của trang rà soát), địa chỉ trong `CVAT_URL` (hoặc tab Cài đặt).
 - Thí nghiệm: mỗi Pk gán tay khối Xk và sửa nhãn nháp khối X(k+1) (P5 sửa X1); hai điều kiện tạo task
   giống hệt nhau, nháp chỉ nằm trong task "assisted", task chỉ khôi phục đầu buổi của chính nó.
 
@@ -70,7 +70,7 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
   hàng vào git. `.gitignore` vẫn chặn các thư mục này; chỉ gỡ khi chủ repo yêu cầu rõ. Gói dữ liệu cho đội
   gửi qua file zip (tải về hoặc Drive riêng tư của đội), không đẩy lên git. Nếu repo bị đổi lại thành công
   khai thì dữ liệu phải ra khỏi repo ngay.
-- Không bao giờ ghi token, mật khẩu, địa chỉ email riêng vào code, file hay chat.
+- Token CVAT được phép nhập ở tab **Cài đặt** của trang rà soát chạy cục bộ (chỉ 127.0.0.1) và có thể lưu ngoài repo trong thư mục người dùng khi người dùng bật "Nhớ trên máy này". Vẫn **không bao giờ** ghi token, mật khẩu, địa chỉ email riêng vào code, repo, chat, log, `runs/`, `outputs/`.
 - Ảnh và đáp án **WFLW** (bộ công khai) được phép xử lý trong phiên Claude cloud của chủ repo, kèm điều kiện
   ở trên. **Ảnh, đáp án, file xuất CVAT của khách hàng, và ảnh mặt người thật ngoài WFLW** (bộ in-cabin, ảnh
   đồng đội) không bao giờ được đưa vào chat AI nào (kể cả Gemini trong Colab).
