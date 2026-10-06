@@ -142,11 +142,20 @@ python tool\m28.py collect --task demo-F5 --reviewer P2
   - **Xoá task trên CVAT** (nút ở khu CVAT của đợt đã đẩy) **không hoàn tác được và mất cả nhãn đã sửa trong CVAT**: chạy `collect` trước. Hộp xác nhận bắt gõ lại đúng tên task và tick ô "Tôi hiểu…". Chỉ xoá được task do chính tool tạo (`demo-…` ghi trong `push.json`); không bao giờ task `m28-`.
 Chỉ tạo task bắt đầu bằng `demo-`; không bao giờ chạy trên task `m28-`.
 
+### Kiểm tra nhanh trước lần push đầu tiên
+Làm một lần trên máy có CVAT, trước khi đẩy ảnh thật (mất khoảng 1-2 phút):
+1. Bật CVAT (Ubuntu WSL: `docker compose up -d`, chờ 1-2 phút).
+2. Đưa token cho tool: **Lưu** token ở tab Cài đặt và bật **Nhớ trên máy này** (để lệnh cmd cũng thấy), hoặc `set CVAT_URL=http://localhost:8080` và `set CVAT_ACCESS_TOKEN=<token>` trong cùng cửa sổ cmd. Không dán token vào chat hay file.
+3. Chạy `python tool\cvat_smoke.py` (hoặc menu `chay.bat` mục "Kiem tra nhanh CVAT", hoặc nút **Chạy kiểm tra nhanh CVAT** ở tab Cài đặt). Tool tạo task `demo-smoke` từ 4 ảnh xám giả (không phải ảnh mặt), nhập nhãn nháp, xuất lại, kiểm, rồi **xoá task đó** (và project m28 nếu chính nó vừa tạo). Không đụng task nào khác. `--dry-run` chỉ kiểm cục bộ, không cần CVAT.
+4. Đọc bảng cuối: `ĐẠT` là ổn; `HỎNG` kèm nguyên nhân tiếng Việt ở cột Ghi chú; `BỎ QUA` là bước không chạy vì bước trước hỏng hoặc vì bạn chọn cờ. Dòng cuối là `Tất cả ĐẠT` hoặc `Có N bước HỎNG`.
+5. Muốn nhìn tận mắt: `python tool\cvat_smoke.py --giu-task`, mở link task in ra trong CVAT, kiểm 50 điểm, các cạnh và ô `low_conf`; lần chạy sau tự xoá task đó.
+6. Có `HỎNG`: gửi P4 file `runs\_smoke\bao_cao_<giờ>.txt` (không gửi token, không gửi ảnh). Đừng tự xoá `runs\_smoke\dang_mo.json` trừ khi đã xoá task `demo-smoke` tay trong CVAT.
+
 ## 8. Chạy test và báo lỗi
 ```bat
 python -m pytest tests -q
 ```
-Phải ra `116 passed` (hoặc hơn). Test chỉ dùng dữ liệu giả, không cần ảnh WFLW hay mạng.
+Phải ra `539 passed` (hoặc hơn; có thể thêm 1 `skipped`). Test chỉ dùng dữ liệu giả, không cần ảnh WFLW hay mạng.
 
 | Triệu chứng | Cách xử lý |
 |---|---|

@@ -770,6 +770,10 @@ def test_signatures_match_real_sdk(cvat, monkeypatch):
     json.dump(json.load(open(os.path.join(HERE, '..', 'config', 'm28_config.json'), encoding='utf-8')), open('config/m28_config.json', 'w'))
     monkeypatch.setenv('CVAT_ORG', 'congty')
     w = make_run(n_nhan=10, n_tay=2)
+    import argparse
+    import cvat_smoke                                                                 # kiểm tra nhanh CVAT: tạo+xoá project m28 và task demo-smoke
+    code, rep = cvat_smoke.run(argparse.Namespace(dry_run=False, url=None, org=None, giu_task=False, giu_project=False, timeout=60, root=os.getcwd()))
+    assert code == 0, rep
     do_push(w)
     from m28core import collect
     collect.collect(collect_args(task=['demo-Khoi', 'demo-Khong-Co']))
@@ -786,6 +790,8 @@ def test_signatures_match_real_sdk(cvat, monkeypatch):
         T, P, C = real.tasks, real.projects, real.sdk
         table = {'make_client': C.make_client, 'Client.get_server_version': C.Client.get_server_version,
                  'projects.list': P.ProjectsRepo.list, 'projects.create': P.ProjectsRepo.create, 'Project.get_labels': P.Project.get_labels,
+                 'projects.retrieve': P.ProjectsRepo.retrieve, 'Project.get_tasks': P.Project.get_tasks, 'Project.remove': P.Project.remove,
+                 'Project.fetch': P.Project.fetch,
                  'tasks.list': T.TasksRepo.list, 'tasks.retrieve': T.TasksRepo.retrieve, 'tasks.remove_by_ids': T.TasksRepo.remove_by_ids,
                  'tasks.create_from_data': T.TasksRepo.create_from_data, 'Task.get_jobs': T.Task.get_jobs,
                  'Task.get_frames_info': T.Task.get_frames_info, 'Task.get_annotations': T.Task.get_annotations,
@@ -808,7 +814,7 @@ def test_signatures_match_real_sdk(cvat, monkeypatch):
             seen.add(m)
         assert {'make_client', 'tasks.create_from_data', 'Task.import_annotations', 'Task.export_dataset', 'Task.remove', 'projects.create',
                 'tasks.list', 'tasks.retrieve', 'Task.get_annotations', 'Task.get_frames_info', 'Task.get_jobs', 'Project.get_labels',
-                'Client.organization_slug', 'users.retrieve_current_user'} <= seen
+                'Client.organization_slug', 'users.retrieve_current_user', 'projects.retrieve', 'Project.get_tasks', 'Project.remove'} <= seen
         # make_client thật nhận access_token=
         assert 'access_token' in inspect.signature(C.make_client).parameters
         # ResourceType thật có LOCAL; DataRequest thật có các khoá đã dùng

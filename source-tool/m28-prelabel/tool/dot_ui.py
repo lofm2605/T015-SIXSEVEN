@@ -227,7 +227,7 @@ def push_panel(gr, demo, store, ctx):
     run = os.path.basename(os.path.normpath(store.run_dir))
 
     def any_running():
-        return ctx.push_job.running or ctx.del_job.running or ctx.job.running
+        return ctx.push_job.running or ctx.del_job.running or ctx.job.running or ctx.smoke_job.running
 
     def model():
         return day_cvat.push_model(store.run_dir, store.reviewer, ctx.project_root, remaining=store.progress()["remaining"],
@@ -348,7 +348,7 @@ def dot_tab(gr, demo, store, ctx, deps):
         return s if isinstance(s, dict) and "view" in s else new_ses()
 
     def any_running():
-        return ctx.push_job.running or ctx.del_job.running or ctx.job.running
+        return ctx.push_job.running or ctx.del_job.running or ctx.job.running or ctx.smoke_job.running
 
     def is_active(run):
         return bool(active_dir) and os.path.realpath(os.path.join(ctx.runs_root, run)) == os.path.realpath(active_dir)

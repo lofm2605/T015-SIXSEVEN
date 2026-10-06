@@ -13,6 +13,12 @@ Giả lỗi theo lệnh bằng biến môi trường M28_FAKE_CVAT_CONTROL (JSON
   tasks_without_project: true   task mới không gắn project
   hang: N                       make_client treo N giây (true = 60) để thử timeout của "Thử kết nối" (tiến trình con bị kill)
   username: "ten"               tên người dùng retrieve_current_user() trả về (mặc định "m28-fake-user")
+  label_reject: true            projects.create ném 400 có body (CVAT từ chối định nghĩa skeleton)
+  remove_fail: true             Task.remove ném 500 (không xoá được task)
+  sublabel_order_shuffle: true  project tạo ra có sublabel đảo ngược thứ tự (để thử nhánh "thứ tự lệch")
+  svg_label_ids: true           project tạo ra có sublabel id và svg đổi data-label-name thành data-label-id như server thật
+Cho tool/cvat_smoke.py: projects.retrieve(id) (404 nếu không có), Project.get_tasks(), Project.remove() (xoá luôn task của project như server
+thật), Project.fetch(); xuất nhãn ghi width/height thật của ảnh PNG đã tải lên (không đọc được thì 512).
 Thuộc tính M28_FAKE_CVAT = True đánh dấu gói giả: tool/cai_dat_thu.py bỏ qua tiền kiểm HTTP /api/server/about (không có server HTTP);
 CVAT thật không có thuộc tính này nên luôn qua tiền kiểm.
 Giả định về hành vi server bám mã nguồn CVAT v2.77.0 (job_file_mapping: frame xếp theo thứ tự mapping, sorting_method phải mặc định).
@@ -111,6 +117,21 @@ def _check_auth(client):
         raise ApiException(status=401, reason="Unauthorized")
 
 
+def _png_size(rec, name):
+    """(rộng, cao) đọc từ IHDR của file PNG đã tải lên task; không đọc được (file giả b'x') thì 512x512."""
+    import struct
+    for f in rec.get("files", []):
+        if os.path.basename(f) == name:
+            try:
+                with open(f, "rb") as fh:
+                    head = fh.read(24)
+                if head[:8] == b"\x89PNG\r\n\x1a\n":
+                    return struct.unpack(">II", head[16:24])
+            except OSError:
+                pass
+    return 512, 512
+
+
 class _V(str):
     pass
 
@@ -182,6 +203,23 @@ class Project:
     def get_labels(self):
         return copy.deepcopy(self._rec["labels"])
 
+    @logged("Project.get_tasks")
+    def get_tasks(self):
+        return [Task(self._c, t) for t in load()["tasks"] if t["project_id"] == self.id]
+
+    @logged("Project.fetch")
+    def fetch(self):
+        return self
+
+    @logged("Project.remove")
+    def remove(self):
+        st = load()
+        if not any(p["id"] == self.id for p in st["projects"]):
+            raise ApiException(status=404, reason="Not Found")
+        st["projects"] = [p for p in st["projects"] if p["id"] != self.id]
+        st["tasks"] = [t for t in st["tasks"] if t["project_id"] != self.id]          # server thật xoá luôn task của project
+        save(st)
+
 
 class UsersRepo:
     @logged("users.retrieve_current_user")
@@ -202,18 +240,36 @@ class ProjectsRepo:
         _check_auth(self._c)
         return [Project(self._c, p) for p in load()["projects"]]
 
+    @logged("projects.retrieve")
+    def retrieve(self, obj_id):
+        _check_auth(self._c)
+        for p in load()["projects"]:
+            if p["id"] == obj_id:
+                return Project(self._c, p)
+        raise ApiException(status=404, reason="Not Found")
+
     @logged("projects.create")
     def create(self, spec):
         _check_auth(self._c)
+        c = _control()
+        if c.get("label_reject"):
+            raise ApiException(status=400, reason="Bad Request", http_resp=_Model(dict(
+                status=400, reason="Bad Request", data="label skeleton bị từ chối (giả)")))
         st = load()
         labels = []
         for lb in spec.get("labels", []):
             lb = copy.deepcopy(lb)
-            miss = int(_control().get("project_missing_sublabels", 0))
+            miss = int(c.get("project_missing_sublabels", 0))
             if miss and lb.get("sublabels"):
                 lb["sublabels"] = lb["sublabels"][:-miss]
+            if c.get("sublabel_order_shuffle") and lb.get("sublabels"):
+                lb["sublabels"].reverse()
             for s in lb.get("sublabels", []):
                 s.setdefault("has_parent", True)
+            if c.get("svg_label_ids") and lb.get("sublabels"):
+                for i, s in enumerate(lb["sublabels"]):
+                    s["id"] = 1000 + st["next_project"] * 100 + i
+                    lb["svg"] = lb["svg"].replace(f'data-label-name="{s["name"]}"', f'data-label-id="{s["id"]}"')
             labels.append(lb)
         rec = dict(id=st["next_project"], name=spec["name"], labels=labels)
         st["next_project"] += 1
@@ -259,6 +315,9 @@ class Task:
 
     @logged("Task.remove")
     def remove(self):
+        if _control().get("remove_fail"):
+            raise ApiException(status=500, reason="Server Error", http_resp=_Model(dict(status=500, reason="Server Error",
+                                                                                         data="không xoá được (giả)")))
         st = load()
         if not any(t["id"] == self.id for t in st["tasks"]):
             raise ApiException(status=404, reason="Not Found")
@@ -310,7 +369,8 @@ class Task:
         drop = bool(_control().get("drop_point"))
         out = ['<?xml version="1.0" encoding="utf-8"?>', "<annotations>", "  <version>1.1</version>"]
         for i, name in enumerate(rec["frames"]):
-            out.append(f'  <image id="{i}" name="{name}" width="512" height="512">')
+            w, h = _png_size(rec, name)
+            out.append(f'  <image id="{i}" name="{name}" width="{w}" height="{h}">')
             for sk in ann.get(name, []):
                 out.append(f'    <skeleton label="{sk["label"]}" source="file" occluded="0" z_order="0">')
                 for j, p in enumerate(sk["points"]):

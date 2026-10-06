@@ -113,7 +113,7 @@ def _classify(exc):
     return "other"
 
 
-def check(env, want_version, project, probe_first=True):
+def check(env, want_version, project, probe_first=True, probe_timeout=PROBE_TIMEOUT):
     """Chạy các bước ở docstring đầu file. env = dict(url, token, org) như cvat_io.read_env. Trả dict kết quả (xem _result)."""
     token = env.get("token")
     S = lambda x: cvat_io.scrub(x, token)             # noqa: E731
@@ -123,7 +123,7 @@ def check(env, want_version, project, probe_first=True):
     except ImportError:
         return _result(False, "no_sdk", INSTALL_SDK)
     if probe_first and not getattr(cvat_sdk, "M28_FAKE_CVAT", False):
-        pr = probe(url)
+        pr = probe(url) if probe_timeout == PROBE_TIMEOUT else probe(url, probe_timeout)
         if pr is not None:
             return pr
     version = ""

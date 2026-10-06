@@ -601,6 +601,78 @@ class DeleteTaskJob(ChildJob):
                          f"xoa task --run {run} --confirm-name {task}")
 
 
+SMOKE_DIR = "_smoke"                # runs/_smoke/: nơi cvat_smoke.py ghi dữ liệu giả, đánh dấu dang_mo.json và báo cáo
+SMOKE_N = 12                        # số bước của cvat_smoke.py
+SMOKE_LINE = re.compile(r"^\[(\d+)/12\] ([^:]+): (.*)$")
+SMOKE_REPORT_RE = re.compile(r"bao_cao_\d{8}_\d{6}(_\d+)?\.json")
+
+
+def smoke_cmd(tool_dir=None, python=None, giu_task=False, giu_project=False, root=None):
+    """Lệnh chạy cvat_smoke.py (list đối số, không shell). Token KHÔNG bao giờ ở đây: đi qua môi trường của tiến trình con (child_env).
+    root: thư mục m28-prelabel của trang (để runs\\_smoke của tiến trình con trùng với runs_root của trang)."""
+    tool_dir = TOOL_DIR if tool_dir is None else tool_dir
+    cmd = [python or sys.executable, "-u", os.path.join(tool_dir, "cvat_smoke.py")]
+    if root:
+        cmd += ["--root", root]
+    if giu_task:
+        cmd.append("--giu-task")
+    if giu_project:
+        cmd.append("--giu-project")
+    return cmd
+
+
+def smoke_progress(lines):
+    """Tiến độ từ các dòng `[k/12] <tên bước>: ...` của cvat_smoke.py (dòng `[k/6]` của push bị bỏ qua).
+    Trả dict(k, frac, label, ket_qua) với ket_qua là ĐẠT/HỎNG/BỎ QUA của bước cuối đã xong hoặc None khi bước đang chạy."""
+    last = None
+    for ln in lines:
+        m = SMOKE_LINE.match(ln.strip())
+        if m and 1 <= int(m.group(1)) <= SMOKE_N:
+            last = m
+    if last is None:
+        return dict(k=0, frac=0.0, label="Đang khởi động…", ket_qua=None)
+    k, name, note = int(last.group(1)), last.group(2), last.group(3)
+    running = note.startswith("đang chạy")
+    kq = None if running else next((x for x in ("ĐẠT", "HỎNG", "BỎ QUA") if note.startswith(x)), None)
+    return dict(k=k, frac=((k - 1) if running else k) / SMOKE_N, label=f"Bước {k}/{SMOKE_N} · {name}" + (f" · {kq}" if kq else ""), ket_qua=kq)
+
+
+def read_smoke_report(run_dir, lines):
+    """Báo cáo .json do dòng `SMOKE_JSON: <đường dẫn>` chỉ tới; chỉ nhận file tên bao_cao_<giờ>.json NẰM TRONG run_dir (runs/_smoke). Không có/hỏng thì None."""
+    path = None
+    for ln in lines:
+        if ln.startswith("SMOKE_JSON: "):
+            path = ln[len("SMOKE_JSON: "):].strip()
+    if not path or not run_dir or not SMOKE_REPORT_RE.fullmatch(os.path.basename(path)) or not _inside(path, run_dir):
+        return None
+    try:
+        if os.path.getsize(path) > 1024 * 1024:
+            return None
+        rep = _jload(path)
+    except (OSError, ValueError):
+        return None
+    return rep if isinstance(rep, dict) and isinstance(rep.get("buoc"), list) else None
+
+
+class SmokeJob(ChildJob):
+    """Kiểm tra nhanh CVAT bằng `python tool\\cvat_smoke.py` (tiến trình con; chỉ tiến trình con gọi mạng). Log: runs/_smoke/smoke_log.txt.
+    Token đi qua môi trường của tiến trình con (NEEDS_CVAT: link/token/tổ chức đang hiệu lực ở tab Cài đặt, kể cả giá trị nhập trong phiên)."""
+    KIND = "cvat_smoke"
+    LOG_NAME = "smoke_log.txt"
+    NEEDS_CVAT = True
+
+    def start(self, runs_root, project_root, giu_task=False, giu_project=False, tool_dir=None, python=None):
+        with self._lock:
+            if self.running:
+                raise RunError("Đang chạy kiểm tra nhanh CVAT: chờ xong hoặc bấm Huỷ.")
+            run_dir = os.path.join(runs_root, SMOKE_DIR)
+            if not _inside(run_dir, runs_root):
+                raise RunError(f"{run_dir} nằm ngoài {runs_root}: từ chối.")
+            os.makedirs(run_dir, exist_ok=True)
+            self._launch(SMOKE_DIR, run_dir, smoke_cmd(tool_dir, python, giu_task, giu_project, root=project_root), project_root,
+                         "cvat_smoke" + (" --giu-task" if giu_task else "") + (" --giu-project" if giu_project else ""))
+
+
 # ---------- đọc kết quả prepare ----------
 def _jload(path):
     with open(path, encoding="utf-8") as f:

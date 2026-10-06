@@ -9,6 +9,8 @@ Logic nằm ở cai_dat.py; tab này chỉ nối với Gradio. An toàn:
   * Handler GHI từ chối khi trang đang đóng (ctx.closing); Lưu / Quên token còn từ chối khi đang đẩy hay xoá task trên CVAT.
   * Mỗi lần ghi tăng `rev`; tab trình duyệt giữ `rev` cũ bị từ chối nhẹ nhàng và tải lại (nhiều tab trình duyệt cùng mở).
   * Thử kết nối chạy bằng tiến trình con (cai_dat.test_connection): trang vẫn không gọi mạng.
+  * "Chạy kiểm tra nhanh CVAT" chạy tool/cvat_smoke.py bằng tiến trình con (nap_anh.SmokeJob, token qua môi trường của nó): tạo task demo-smoke
+    giả, nhập nhãn, xuất lại, xoá. Có hộp xác nhận (Huỷ mặc định), khoá chéo với đẩy/xoá task, Lưu/Quên token từ chối khi đang chạy.
 """
 import functools
 import html
@@ -18,6 +20,7 @@ import time
 import traceback
 
 import cai_dat
+import day_cvat
 import dot_anh
 import nap_anh
 from m28core import cvat_io
@@ -54,6 +57,13 @@ CSS = """
 #cd-forget-ok:not(:disabled) { background: #dc2626 !important; border-color: #b91c1c !important; }
 #cd-tflip-ok:not(:disabled) { background: #d97706 !important; border-color: #b45309 !important; color: #fff !important; }
 .m28-msg.m-err { border-left-color: #dc2626; }
+.sm-tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 6px; }
+.sm-tbl th { text-align: left; padding: 4px 8px; border-bottom: 2px solid var(--border-color-primary); white-space: nowrap; }
+.sm-tbl td { padding: 4px 8px; vertical-align: top; border-bottom: 1px solid var(--border-color-primary); overflow-wrap: anywhere; }
+.sm-tbl .sm-sub td { border-bottom: 0; padding-top: 0; color: var(--body-text-color-subdued); }
+.sm-kq { font-weight: 800; white-space: nowrap; } .sm-kq.sm-dat { color: #16a34a; } .sm-kq.sm-hong { color: #dc2626; } .sm-kq.sm-bo { color: #6b7280; }
+#cd-smoke-msg:not(:has(.html-container > div > *)), #cd-smoke-result:not(:has(.html-container > div > *)), #cd-smoke-prog:not(:has(.html-container > div > *)) { display: none; }
+#cd-smoke-msg, #cd-smoke-prog, #cd-smoke-result, #cd-smoke-body { padding: 0 !important; }
 .cd-note { font-size: 13.5px; line-height: 1.55; color: var(--body-text-color-subdued); overflow-wrap: anywhere; }
 .cd-note code { font-family: var(--font-mono); font-size: 12.5px; }
 @media (max-width: 600px) {
@@ -211,6 +221,50 @@ def tflip_confirm_html(old, new, images_dir):
             f'<br><code class="cd-path">{_e(cmd1)}</code><br><code class="cd-path">{_e(cmd2)}</code></div>')
 
 
+def smoke_confirm_html(url):
+    lines = [f"Sẽ TẠO task demo-smoke (4 ảnh xám giả, không phải ảnh mặt) trong project m28 trên {url or '(chưa có link)'}, nhập nhãn nháp, "
+             "xuất lại, rồi XOÁ task đó.",
+             "Nếu chưa có project m28 thì tạo rồi xoá lại khi còn trống. Không đụng task khác.",
+             "Mất khoảng 1-2 phút. Bấm Huỷ giữa chừng có thể để lại task demo-smoke; lần chạy sau tự dọn nhờ runs\\_smoke\\dang_mo.json."]
+    return '<div class="modal-title" id="cd-smoke-title">Chạy kiểm tra nhanh CVAT?</div>' + box_html("warn", "Sẽ làm:", lines)
+
+
+def smoke_prog_html(snap, prog):
+    """Thanh tiến độ của kiểm tra nhanh (cùng kiểu .nap-prog), nhãn từ dòng [k/12] của cvat_smoke.py."""
+    st = snap["state"]
+    if st == "chua":
+        return ""
+    pct = 100 if st == "xong" else round(100 * prog["frac"])
+    label = prog["label"] if st == "dang_chay" else nap_anh.STATE_VI[st] + (
+        f" (mã thoát {snap['returncode']})" if st == "loi" and snap["returncode"] is not None else "")
+    if st == "dang_chay" and snap.get("cancelling"):
+        label = "Đang huỷ…"
+    cls = {"xong": "nap-st-ok", "loi": "nap-st-err", "da_huy": "nap-st-warn"}.get(st, "")
+    mm = int(snap["elapsed"])
+    return (f'<div class="nap-prog {cls}"><div class="nap-prog-top"><span class="nap-run">Kiểm tra nhanh <b>CVAT</b></span>'
+            f'<span class="nap-label">{_e(label)}</span><span class="nap-time">{mm // 60:02d}:{mm % 60:02d}</span></div>'
+            f'<div class="m28-bar" role="progressbar" aria-valuenow="{pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:{pct}%"></i></div></div>')
+
+
+def smoke_result_html(rep, json_path=""):
+    """Bảng Bước / Kết quả / Ghi chú từ báo cáo .json của cvat_smoke.py (mọi chuỗi được escape) + dòng tổng + đường dẫn báo cáo."""
+    cls = {"ĐẠT": "sm-dat", "HỎNG": "sm-hong", "BỎ QUA": "sm-bo"}
+    rows = []
+    for b in rep.get("buoc", []):
+        rows.append(f'<tr><td>{_e(b.get("ma"))}. {_e(b.get("ten"))}</td><td class="sm-kq {cls.get(b.get("ket_qua"), "")}">{_e(b.get("ket_qua"))}</td>'
+                    f'<td>{_e(b.get("ghi_chu"))}</td></tr>')
+        rows += [f'<tr class="sm-sub"><td></td><td></td><td>- {_e(x)}</td></tr>' for x in b.get("con", [])]
+    bad = sum(1 for b in rep.get("buoc", []) if b.get("ket_qua") == "HỎNG")
+    txt = os.path.basename(json_path)[:-5] + ".txt" if json_path else ""
+    lines = [rep.get("tong", "")]
+    if txt:
+        lines.append(f"Báo cáo: runs\\_smoke\\{txt}")
+    if bad and txt:
+        lines.append(f"Gửi cho P4 file runs\\_smoke\\{txt} (không gửi token, không gửi ảnh).")
+    box = box_html("err" if bad else "ok", lines[0], lines[1:])
+    return box + '<table class="sm-tbl"><tr><th>Bước</th><th>Kết quả</th><th>Ghi chú</th></tr>' + "".join(rows) + "</table>"
+
+
 # ---------- tab ----------
 def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_model=None):
     """Dựng NỘI DUNG tab Cài đặt (gọi trong `with gr.Tab(...)`). after_cvat(ev): gắn thêm .then(...) làm mới khung Đẩy lên CVAT và tab Các đợt
@@ -238,13 +292,28 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
             b_save = gr.Button("Lưu", variant="primary", elem_id="cd-save")
             b_test = gr.Button("Thử kết nối CVAT", elem_id="cd-test")
             b_forget = gr.Button("Quên token", variant="stop", elem_id="cd-forget")
+            b_smoke = gr.Button("Chạy kiểm tra nhanh CVAT", elem_id="cd-smoke")
         cvat_msg = gr.HTML(elem_id="cd-cvat-msg", apply_default_css=False)
+        smoke_msg = gr.HTML(elem_id="cd-smoke-msg", apply_default_css=False)
+        smoke_prog = gr.HTML(elem_id="cd-smoke-prog", apply_default_css=False)
+        smoke_log = gr.Textbox(label="Log kiểm tra nhanh CVAT (đã lọc token)", lines=6, max_lines=12, interactive=False, autoscroll=True,
+                               elem_id="cd-smoke-log", visible=False)
+        b_smoke_stop = gr.Button("Huỷ kiểm tra", variant="stop", elem_id="cd-smoke-stop", visible=False)
+        smoke_result = gr.HTML(elem_id="cd-smoke-result", apply_default_css=False)
+        smoke_timer = gr.Timer(1.0, active=False)
     with gr.Column(visible=False, elem_id="cd-forget-confirm", elem_classes=["m28-modal"]) as forget_modal:
         with gr.Column(elem_classes=["m28-modal-box"]):
             forget_body = gr.HTML(elem_id="cd-forget-body", apply_default_css=False)
             with gr.Row(elem_classes=["m28-modal-btns"]):
                 b_forget_ok = gr.Button("Quên token", variant="stop", elem_id="cd-forget-ok")
                 b_forget_no = gr.Button("Huỷ", elem_id="cd-forget-cancel")
+    with gr.Column(visible=False, elem_id="cd-smoke-confirm", elem_classes=["m28-modal"]) as smoke_modal:
+        with gr.Column(elem_classes=["m28-modal-box"]):
+            smoke_body = gr.HTML(elem_id="cd-smoke-body", apply_default_css=False)
+            smoke_keep = gr.Checkbox(label="Giữ task để xem bằng mắt (--giu-task)", value=False, elem_id="cd-smoke-keep")
+            with gr.Row(elem_classes=["m28-modal-btns"]):
+                b_smoke_ok = gr.Button("Chạy kiểm tra", variant="primary", elem_id="cd-smoke-ok")
+                b_smoke_no = gr.Button("Huỷ", elem_id="cd-smoke-cancel")
     # --- Người rà ---
     with gr.Column(elem_classes=["cd-sec"]):
         gr.HTML('<div class="cd-sec-title">Người rà</div>', apply_default_css=False)
@@ -327,6 +396,8 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
             for j, what in ((ctx.push_job, "đẩy"), (ctx.del_job, "xoá task")):
                 if j.running:
                     return f"Đang {what} lượt {j.run} lên CVAT: chờ xong rồi mới đổi cài đặt CVAT (tiến trình con đang dùng token hiện tại)."
+            if ctx.smoke_job.running:
+                return "Đang chạy kiểm tra nhanh CVAT: chờ xong hoặc bấm Huỷ kiểm tra rồi mới đổi cài đặt CVAT (tiến trình con đang dùng token hiện tại)."
         return ""
 
     def safe_with(where):
@@ -448,7 +519,7 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
 
     # ---------- t_flip ----------
     def tflip_busy():
-        for j, what in ((ctx.job, "chuẩn bị ảnh"), (ctx.push_job, "đẩy lên CVAT"), (ctx.del_job, "xoá task")):
+        for j, what in ((ctx.job, "chuẩn bị ảnh"), (ctx.push_job, "đẩy lên CVAT"), (ctx.del_job, "xoá task"), (ctx.smoke_job, "kiểm tra nhanh CVAT")):
             if j.running:
                 return f"Đang {what} (lượt {j.run}): chờ xong rồi đổi t_flip."
         b = cai_dat.busy_runs(ctx.runs_root)
@@ -512,6 +583,92 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
         pending.cancel()
         return ret({tf_modal: gr.update(visible=False), tf_body: "", tf_token: ""})
 
+    # ---------- kiểm tra nhanh CVAT (tiến trình con cvat_smoke.py; trang không gọi mạng) ----------
+    sm_outs = [smoke_modal, smoke_body, smoke_msg, smoke_prog, smoke_log, b_smoke_stop, smoke_result, smoke_timer, b_smoke]
+    sm_job = ctx.smoke_job
+
+    def smoke_busy():
+        """Lý do không chạy được kiểm tra nhanh lúc này (đang đóng, đang chuyển lượt, đẩy/xoá task/kiểm tra nhanh khác đang chạy) hoặc ''."""
+        if ctx.closing:
+            return nap_anh.CLOSING_MSG
+        if ctx.switch_to is not None:
+            return "Trang đang chuyển sang lượt khác: chờ rồi thử lại."
+        for j, what in ((ctx.push_job, "đẩy lượt"), (ctx.del_job, "xoá task của lượt"), (sm_job, "chạy kiểm tra nhanh CVAT")):
+            if j.running:
+                return f"Đang {what}" + ("" if j is sm_job else f" {j.run} (CVAT)") + ": chờ xong hoặc bấm Huỷ rồi mới chạy kiểm tra nhanh."
+        return ""
+
+    def smoke_render(note="", level="warn", modal=None):
+        snap = sm_job.snapshot()
+        running = snap["state"] == "dang_chay"
+        result = ""
+        if snap["state"] == "chua":
+            pass
+        elif snap["state"] in ("xong", "loi") and snap["run_dir"]:
+            rep = nap_anh.read_smoke_report(snap["run_dir"], snap["lines"])
+            if rep:
+                jp = next((ln[len("SMOKE_JSON: "):].strip() for ln in reversed(snap["lines"]) if ln.startswith("SMOKE_JSON: ")), "")
+                result = smoke_result_html(rep, jp)
+            else:
+                result = box_html("err", "Kiểm tra nhanh dừng, chưa có báo cáo", [day_cvat.last_message(snap["lines"]) or "Xem log bên trên."])
+        elif snap["state"] == "da_huy":
+            result = box_html("warn", "Đã huỷ kiểm tra nhanh", ["Nếu task demo-smoke còn dở trên CVAT thì lần chạy sau tự dọn "
+                                                                  "(runs\\_smoke\\dang_mo.json), hoặc xoá tay trong CVAT."])
+        lines = "\n".join(snap["lines"][-80:])
+        m = modal or {}
+        return (m.get("modal", gr.update()), m.get("body", gr.update()), msg_html(note, level) if note else "",
+                smoke_prog_html(snap, nap_anh.smoke_progress(snap["lines"])), gr.update(value=lines, visible=bool(lines)),
+                gr.update(visible=running, interactive=running and not snap.get("cancelling")), result, gr.Timer(active=running),
+                gr.update(interactive=not running))
+
+    def smoke_safe(fn):
+        @functools.wraps(fn)
+        def wrapper(*a):
+            try:
+                return fn(*a)
+            except Exception as exc:                       # noqa: BLE001 - như safe_with: chỉ thông báo đã lọc token, traceback đã lọc ra console
+                print(cvat_io.scrub(traceback.format_exc()), file=sys.stderr, flush=True)
+                return smoke_render(cvat_io.scrub(f"Lỗi không lường trước ({exc.__class__.__name__}). Chi tiết (đã lọc token) ở cửa sổ cmd."), "err")
+        return wrapper
+
+    @smoke_safe
+    def on_smoke_open():
+        why = smoke_busy()
+        if why:
+            return smoke_render(why)
+        eff = S.cvat_env()
+        if not eff["url"] or not eff["token"]:
+            return smoke_render("Chưa có link và token CVAT: nhập và Lưu ở khung CVAT (hoặc đặt CVAT_URL, CVAT_ACCESS_TOKEN trong cmd) rồi chạy lại.")
+        return smoke_render(modal=dict(modal=gr.update(visible=True), body=smoke_confirm_html(cvat_io.norm_url(eff["url"]))))
+
+    @smoke_safe
+    def on_smoke_ok(keep):
+        hide = dict(modal=gr.update(visible=False), body="")
+        why = smoke_busy()
+        if why:
+            return smoke_render(why, modal=hide)
+        eff = S.cvat_env()
+        if not eff["url"] or not eff["token"]:
+            return smoke_render("Chưa có link và token CVAT.", modal=hide)
+        try:
+            sm_job.start(ctx.runs_root, ctx.project_root, giu_task=bool(keep))
+        except RunError as e:
+            return smoke_render(str(e), modal=hide)
+        return smoke_render(modal=hide)
+
+    @smoke_safe
+    def on_smoke_cancel_dialog():
+        return smoke_render(modal=dict(modal=gr.update(visible=False), body=""))
+
+    @smoke_safe
+    def on_smoke_stop():
+        sm_job.cancel()
+        return smoke_render()
+
+    @smoke_safe
+    def on_smoke_tick():
+        return smoke_render()
+
     # ---------- nối sự kiện ----------
     wr = dict(opts, concurrency_id="cd")
     ev_save = b_save.click(on_save, [url_tb, token_tb, org_tb, remember, rev_state], outs, **wr)
@@ -536,5 +693,12 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
     b_tf_null.click(tflip_open(True), [tf_tb, tf_ack, rev_state], outs, **wr)
     b_tf_ok.click(on_tf_ok, [tf_token, tf_ack], outs, **wr)
     b_tf_no.click(on_tf_cancel, None, outs, **wr)
+    sm_opts = dict(opts, concurrency_id="cd_smoke")
+    b_smoke.click(on_smoke_open, None, sm_outs, **sm_opts)
+    b_smoke_ok.click(on_smoke_ok, [smoke_keep], sm_outs, **sm_opts)
+    b_smoke_no.click(on_smoke_cancel_dialog, None, sm_outs, **sm_opts)
+    b_smoke_stop.click(on_smoke_stop, None, sm_outs, **dict(opts, concurrency_id="cd_smoke_huy"))
+    smoke_timer.tick(on_smoke_tick, None, sm_outs, **dict(opts, concurrency_id="cd_smoke_tick"))
+    demo.load(on_smoke_tick, None, sm_outs, **dict(opts, concurrency_id="cd_smoke_tick"))
     demo.load(on_show, [rev_state], outs, **dict(opts, concurrency_id="cd"))
     return on_show, [rev_state], outs, dict(opts, concurrency_id="cd")

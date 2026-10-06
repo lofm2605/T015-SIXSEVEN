@@ -865,6 +865,8 @@ def close_check(store, ctx):
     if ctx.push_job.running or ctx.del_job.running:
         busy = ctx.push_job if ctx.push_job.running else ctx.del_job
         return False, f"Đang {'đẩy' if busy is ctx.push_job else 'xoá task của'} lượt {busy.run} (CVAT): chờ xong hoặc bấm Huỷ.", "warn"
+    if ctx.smoke_job.running:
+        return False, "Đang chạy kiểm tra nhanh CVAT (tab Cài đặt): chờ xong hoặc bấm Huỷ kiểm tra.", "warn"
     return True, "", "info"
 
 
@@ -1491,6 +1493,7 @@ class AppCtx:
     job: object = None
     push_job: object = None            # nap_anh.PushJob: đẩy lên CVAT bằng tiến trình con
     del_job: object = None             # nap_anh.DeleteTaskJob: xoá task trên CVAT bằng tiến trình con
+    smoke_job: object = None           # nap_anh.SmokeJob: kiểm tra nhanh CVAT (cvat_smoke.py) bằng tiến trình con
     push_pending: object = None        # dot_anh.Pending: yêu cầu xác nhận đẩy (mã ngẫu nhiên)
     dot_pending: object = None         # dot_anh.Pending: yêu cầu xác nhận xoá ở tab Các đợt
     switch_to: object = None           # (run_dir, Store) khi bấm "Rà lượt này"
@@ -1531,6 +1534,8 @@ class AppCtx:
             self.push_job = nap_anh.PushJob()
         if self.del_job is None:
             self.del_job = nap_anh.DeleteTaskJob()
+        if self.smoke_job is None:
+            self.smoke_job = nap_anh.SmokeJob()
         if self.push_pending is None:
             self.push_pending = dot_anh.Pending()
         if self.dot_pending is None:
@@ -1701,6 +1706,8 @@ def _nap_tab(gr, demo, store, ctx):
         if ctx.push_job.running or ctx.del_job.running:
             busy = ctx.push_job if ctx.push_job.running else ctx.del_job
             return refuse(f"Đang làm việc với CVAT cho lượt {busy.run}: chờ xong rồi chuyển lượt.")
+        if ctx.smoke_job.running:
+            return refuse("Đang chạy kiểm tra nhanh CVAT (tab Cài đặt): chờ xong rồi chuyển lượt.")
         if snap["state"] == "dang_chay":
             return refuse(f"Đang chuẩn bị lượt {snap['run']}: chờ xong hoặc bấm Huỷ.")
         if snap["state"] != "xong":
@@ -1956,9 +1963,12 @@ def main(argv=None):
             demo.close(verbose=False)
         return 0
     finally:
-        for j in (ctx.job, ctx.push_job, ctx.del_job):
+        for j in (ctx.job, ctx.push_job, ctx.del_job, ctx.smoke_job):
             if j.running:
-                if j is not ctx.job:
+                if j is ctx.smoke_job:
+                    print("Đóng trang khi kiểm tra nhanh CVAT còn chạy: đã dừng; lần chạy sau (python tool\\cvat_smoke.py) tự dọn task demo-smoke "
+                          "còn dở nhờ runs\\_smoke\\dang_mo.json.", flush=True)
+                elif j is not ctx.job:
                     print(f"Đóng trang khi còn việc CVAT đang chạy cho lượt {j.run}: đã dừng; xem runs\\{j.run}\\push.json và chạy "
                           f"python tool\\m28.py push --run {j.run} --resume hoặc --cleanup nếu task đã tạo dở.", flush=True)
                 j.cancel()
