@@ -329,9 +329,9 @@ def preflight(project_root, tool_dir=None):
         if not os.path.isfile(p):
             errs.append(f"Thiếu config\\{rel} ({who}) trong {os.path.normpath(project_root)}: "
                         "chạy trang từ thư mục source-tool\\m28-prelabel hoặc lấy lại file từ repo (git checkout config).")
-    if not any(os.path.isfile(os.path.join(d, MODEL_NAME)) for d in (project_root, tool_dir)):
+    if not configured_model() and not any(os.path.isfile(os.path.join(d, MODEL_NAME)) for d in (project_root, tool_dir)):
         errs.append(f"Thiếu {MODEL_NAME} (model MediaPipe, khoảng 3,7 MB): trong cmd, ở thư mục chạy lệnh, gõ "
-                    f"curl -L -o {MODEL_NAME} {MODEL_URL} (xem HUONG-DAN-WINDOWS mục 3).")
+                    f"curl -L -o {MODEL_NAME} {MODEL_URL} (xem HUONG-DAN-WINDOWS mục 3), hoặc chọn file ở tab Cài đặt > Đường dẫn.")
     for mod, pip in (("mediapipe", "mediapipe"), ("cv2", "opencv-python")):
         try:
             found = importlib.util.find_spec(mod) is not None
@@ -342,16 +342,35 @@ def preflight(project_root, tool_dir=None):
     return errs
 
 
-def prepare_cmd(run, tool_dir=None, python=None):
-    """Lệnh chạy prepare (list đối số, không shell). Chạy với cwd = thư mục cha của runs/."""
+def configured_model():
+    """Đường dẫn model do người dùng cài ở tab Cài đặt nếu file còn đó, không thì None (khi đó m28.py tìm model mặc định như cũ)."""
+    import cai_dat                                  # nạp lười: cai_dat import nap_anh (RunError, quy tắc tên người rà)
+    p = cai_dat.get().model_path()
+    return p if p and os.path.isfile(p) else None
+
+
+def prepare_cmd(run, tool_dir=None, python=None, model=None):
+    """Lệnh chạy prepare (list đối số, không shell). Chạy với cwd = thư mục cha của runs/. model: đường dẫn face_landmarker.task đã cài
+    ở tab Cài đặt (thêm --model); None thì m28.py tìm model mặc định. Prepare không cần và không nhận token CVAT."""
     tool_dir = TOOL_DIR if tool_dir is None else tool_dir
-    return [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "prepare", "--run", run,
-            "--images", os.path.join("runs", run, "inbox"), "--box", "auto"]
+    cmd = [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "prepare", "--run", run,
+           "--images", os.path.join("runs", run, "inbox"), "--box", "auto"]
+    if model:
+        cmd += ["--model", model]
+    return cmd
 
 
-def child_env(environ=None):
-    """Bản sao môi trường cho tiến trình con. UTF-8 bắt buộc: trên Windows stdout là pipe (cp1252) và m28 in chữ có dấu."""
+CVAT_ENV_KEYS = ("CVAT_URL", "CVAT_ACCESS_TOKEN", "CVAT_ORG")
+
+
+def child_env(environ=None, cvat=None):
+    """Bản sao môi trường cho tiến trình con. UTF-8 bắt buộc: trên Windows stdout là pipe (cp1252) và m28 in chữ có dấu.
+    Biến CVAT_* của môi trường gốc luôn bị bỏ; chỉ khi `cvat` (dict CVAT_URL/CVAT_ACCESS_TOKEN/[CVAT_ORG], xem cai_dat.child_env_updates)
+    được truyền (push, xoá task, thử kết nối) thì chúng mới vào môi trường tiến trình con. Token chỉ đi bằng đường này, không qua đối số."""
     env = dict(os.environ if environ is None else environ)
+    for k in CVAT_ENV_KEYS:
+        env.pop(k, None)
+    env.update(cvat or {})
     env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
     return env
 
@@ -407,6 +426,7 @@ class ChildJob:
     chặn, kể cả khi trang khác đang chạy). state: chua | dang_chay | xong | loi | da_huy. popen thay được khi test."""
     KIND = "job"
     LOG_NAME = "job_log.txt"
+    NEEDS_CVAT = False                  # True: tiến trình con nhận CVAT_URL/CVAT_ACCESS_TOKEN từ cài đặt của trang (push, xoá task)
 
     def __init__(self, popen=subprocess.Popen):
         self._popen = popen
@@ -434,7 +454,7 @@ class ChildJob:
         try:
             with open(log_path, "a", encoding="utf-8", newline="\n") as f:
                 f.write(f"=== {time.strftime('%Y-%m-%d %H:%M:%S')} {header} ===\n")
-            self._proc = self._popen(cmd, cwd=project_root, env=child_env(), stdin=subprocess.DEVNULL,
+            self._proc = self._popen(cmd, cwd=project_root, env=self._child_env(), stdin=subprocess.DEVNULL,
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         except OSError as e:
             dang_chay.release(run_dir)
@@ -444,6 +464,12 @@ class ChildJob:
         self.state = "dang_chay"
         self._thread = threading.Thread(target=self._read, args=(self._proc, log_path, run_dir), daemon=True)
         self._thread.start()
+
+    def _child_env(self):
+        if not self.NEEDS_CVAT:
+            return child_env()
+        import cai_dat
+        return child_env(cvat=cai_dat.child_env_updates())
 
     def _read(self, proc, log_path, run_dir):
         try:
@@ -503,17 +529,30 @@ class PrepareJob(ChildJob):
             run_dir = os.path.join(runs_root, run)
             if not _inside(run_dir, runs_root) or not os.path.isdir(os.path.join(run_dir, "inbox")):
                 raise RunError(f"Lượt {run} chưa có thư mục inbox: không chạy được.")
-            self._launch(run, run_dir, prepare_cmd(run, tool_dir, python), project_root, f"prepare --run {run}")
+            self._launch(run, run_dir, prepare_cmd(run, tool_dir, python, configured_model()), project_root, f"prepare --run {run}")
 
 
 TASK_RE = re.compile(r"demo-[A-Za-z0-9_-]{1,100}")
 REVIEWER_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
 
 
-def push_cmd(run, reviewer, task, tool_dir=None, python=None):
-    """Lệnh push (list đối số, không shell). CVAT_URL/CVAT_ACCESS_TOKEN đi qua MÔI TRƯỜNG kế thừa, không bao giờ qua đối số."""
+def check_reviewer(name):
+    """Nơi DUY NHẤT định nghĩa quy tắc tên người rà (review_app.check_reviewer và tab Cài đặt gọi hàm này). Trả tên nếu hợp lệ, không thì RunError."""
+    if not isinstance(name, str) or not REVIEWER_RE.fullmatch(name):
+        raise RunError(f"Tên người rà {name!r} không hợp lệ: chỉ dùng chữ không dấu, số, gạch dưới, gạch ngang "
+                       "(tối đa 32 ký tự), ví dụ P2. Tên này nằm trong tên file triage_<tên>.csv.")
+    return name
+
+
+def push_cmd(run, reviewer, task, tool_dir=None, python=None, images=None):
+    """Lệnh push (list đối số, không shell). CVAT_URL/CVAT_ACCESS_TOKEN đi qua MÔI TRƯỜNG của tiến trình con (child_env), không bao giờ qua
+    đối số. images: thư mục WFLW_images đã cài ở tab Cài đặt, chỉ truyền khi lượt cần (ảnh gốc ở đường dẫn cũ không còn, steps._upload_path
+    tìm lại theo <thư mục>/<rel>)."""
     tool_dir = TOOL_DIR if tool_dir is None else tool_dir
-    return [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "push", "--run", run, "--reviewer", reviewer, "--task", task]
+    cmd = [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "push", "--run", run, "--reviewer", reviewer, "--task", task]
+    if images:
+        cmd += ["--images", images]
+    return cmd
 
 
 def delete_task_cmd(run, task, tool_dir=None, python=None):
@@ -535,21 +574,23 @@ class PushJob(ChildJob):
     """Một lần đẩy lên CVAT bằng `m28.py push` (tiến trình con; chỉ tiến trình con gọi mạng). Log: runs/<lượt>/push_log.txt."""
     KIND = "push"
     LOG_NAME = "push_log.txt"
+    NEEDS_CVAT = True
 
-    def start(self, run, runs_root, project_root, reviewer, task, tool_dir=None, python=None):
+    def start(self, run, runs_root, project_root, reviewer, task, tool_dir=None, python=None, images=None):
         with self._lock:
             if self.running:
                 raise RunError(f"Đang đẩy lượt {self.run} lên CVAT: chờ xong hoặc bấm Huỷ.")
             run_dir = _check_cvat_start(self, run, runs_root, task)
             if not REVIEWER_RE.fullmatch(reviewer or ""):
                 raise RunError(f"Tên người rà {reviewer!r} không hợp lệ.")
-            self._launch(run, run_dir, push_cmd(run, reviewer, task, tool_dir, python), project_root, f"push --run {run} --task {task}")
+            self._launch(run, run_dir, push_cmd(run, reviewer, task, tool_dir, python, images), project_root, f"push --run {run} --task {task}")
 
 
 class DeleteTaskJob(ChildJob):
     """Xoá task trên CVAT bằng `m28.py push --cleanup --confirm-name <tên>`. Cùng log push_log.txt của lượt."""
     KIND = "xoa_task"
     LOG_NAME = "push_log.txt"
+    NEEDS_CVAT = True
 
     def start(self, run, runs_root, project_root, task, tool_dir=None, python=None):
         with self._lock:
