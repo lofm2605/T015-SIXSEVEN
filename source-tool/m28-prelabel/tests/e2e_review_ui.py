@@ -8,14 +8,17 @@ các lượt này chứa ảnh WFLW nên chỉ để ngoài git. Ví dụ (Linux
     PYTHONPATH=$S/pwlib PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers \\
         python tests/e2e_review_ui.py --work $W --shots $S/ui_shots
 
-Bốn pha:
+Sáu pha (A-F):
   A  chạy app thẳng trên bản chép F5UI: phím tắt, hoàn tác, đóng giữa chừng (kill) rồi mở lại, màn hẹp 800 px, nút Xong tự tắt trang,
      không có request ra ngoài 127.0.0.1, server chỉ bind 127.0.0.1 (đặt proxy chết để chứng minh không cần mạng).
   B  qua m28 thật: `m28.py review --force review` rồi `push --dry-run`, XML/manual_list/rejected khớp CSV.
   C  độ mượt trên ALL616 (616 mặt): mở trang, một quyết định, đổi trang; xoá triage_E2E.csv sau khi đo.
   D  (thêm) lỗi ghi CSV (giả lập Excel khoá file bằng cách đặt một thư mục vào chỗ file): báo "Không ghi được", giữ nguyên mặt, sửa xong bấm lại thì ghi được.
   E  sửa theo đợt kiểm 6/10: đổi bộ lọc, lưới rỗng, lớp phủ sau Xong, Host lạ bị chặn, cổng bận, tab thứ hai sau Xong, bấm lặp.
-Mọi tiến trình đã mở được dọn ở `finally`. Cổng 7871–7876, M28_NO_BROWSER=1.
+  F  tab "Nạp ảnh": kéo thả (set_input_files) ảnh WFLW thật + ảnh xấu vào trang đang rà dở F5UP, tạo lượt NAP_001, prepare thật (MediaPipe),
+     tóm tắt, màn hẹp 420 px, "Rà lượt này" (trang tự tải lại cùng cổng, lượt F5UP không bị đụng), Huỷ rồi Thử lại (NAP_002), thiếu model
+     (khung đỏ, khoá nút), và chế độ `review_app.py --nap` từ trang trống. Cần thêm --wflw (mặc định <work>/../wflw/WFLW_images).
+Mọi tiến trình đã mở được dọn ở `finally`. Cổng 7871–7879, M28_NO_BROWSER=1.
 """
 import argparse
 import csv
@@ -559,11 +562,269 @@ def phase_e(pw, W, shots, port):
         ui.close()
 
 
+# ---------- pha F ----------
+def _sha(path):
+    import hashlib
+    return hashlib.sha256(open(path, 'rb').read()).hexdigest()
+
+
+def make_nap_inputs(W, wflw, shots):
+    """Bộ file thả vào tab Nạp ảnh (ngoài repo, có mặt người thật): 6 ảnh WFLW, một bản chép đổi tên có dấu và đuôi hoa,
+    hai ảnh cùng tên ở hai thư mục, PNG xám không có mặt, file text đổi đuôi .jpg, một bản chép y nguyên (trùng nội dung)."""
+    from PIL import Image
+    d = os.path.join(shots, '_nap_in')
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d)
+    rows = read_csv_rows(os.path.join(W, 'r_list.csv'))[1:]
+    picked, seen = [], set()
+    for r in rows:
+        sub = r[0].split('/')[0]
+        if sub not in seen and os.path.exists(os.path.join(wflw, *r[0].split('/'))):
+            seen.add(sub)
+            picked.append(os.path.join(wflw, *r[0].split('/')))
+        if len(picked) == 9:
+            break
+    check(len(picked) == 9, f'tìm được 9 ảnh WFLW ở 9 thư mục con khác nhau ({wflw})')
+    six = []
+    for src in picked[:6]:
+        dst = os.path.join(d, os.path.basename(src))
+        shutil.copyfile(src, dst)
+        six.append(dst)
+    accent = os.path.join(d, 'Ảnh mặt (1).JPG')
+    with open(accent, 'wb') as f:
+        f.write(open(six[0], 'rb').read() + b'\0')          # cùng ảnh nhưng khác byte: không bị coi là trùng nội dung
+    same = []
+    for k, src in enumerate(picked[6:8], 1):
+        os.makedirs(os.path.join(d, f'thu_muc_{k}'))
+        same.append(os.path.join(d, f'thu_muc_{k}', 'mat.jpg'))
+        shutil.copyfile(src, same[-1])
+    gray = os.path.join(d, 'xam.png')
+    Image.new('RGB', (400, 400), (128, 128, 128)).save(gray)
+    fake = os.path.join(d, 'gia.jpg')
+    open(fake, 'w', encoding='utf-8').write('đây là file chữ, không phải ảnh\n' * 20)
+    dup = os.path.join(d, 'trung.jpg')
+    shutil.copyfile(six[1], dup)
+    files = six + [accent] + same + [gray, fake, dup]
+    return dict(files=files, n_ok=10, n_rej=2, accent=accent, six=six)
+
+
+def _open_nap(pg, port):
+    pg.goto(f'http://127.0.0.1:{port}/')
+    pg.wait_for_selector('#tabs', timeout=30000)
+
+
+def _goto_tab(pg):
+    pg.get_by_role('tab', name='Nạp ảnh').click()
+    pg.wait_for_selector('#nap-drop', timeout=15000)
+
+
+def _drop(pg, files, n_ok, n_rej):
+    pg.set_input_files('#nap-drop input[type=file]', files)
+    pg.wait_for_function("([a, b]) => { const t = document.querySelector('#nap-count')?.innerText || ''; "
+                         "return t.includes(a + ' ảnh hợp lệ') && t.includes(b + ' bị loại'); }", arg=[n_ok, n_rej], timeout=60000)
+
+
+def phase_f(pw, W, shots, ports, wflw):
+    log('\n== PHA F: tab Nạp ảnh (kéo thả -> prepare -> rà lượt mới) ==')
+    port, port_nomodel, port_nap = ports
+    inp = make_nap_inputs(W, wflw, shots)
+    runs = os.path.join(W, 'runs')
+    for d in os.listdir(runs):
+        if d.upper().startswith('NAP_'):
+            shutil.rmtree(os.path.join(runs, d), ignore_errors=True)
+    run = os.path.join(runs, 'F5UP')
+    shutil.rmtree(run, ignore_errors=True)
+    shutil.copytree(os.path.join(runs, 'F5'), run)
+    for d in ('review', 'push', 'xml', '_tmp'):
+        shutil.rmtree(os.path.join(run, d), ignore_errors=True)
+    f5_csv = os.path.join(run, 'review', 'triage_P2.csv')
+    out_log = os.path.join(shots, 'app_f.log')
+    p = start([sys.executable, os.path.join(CODE, 'tool', 'review_app.py'), 'runs/F5UP', 'P2'], W, port, None, out_log)
+    wait_port(port, p)
+    ui = Ui(pw, port)
+    pg = ui.page
+    try:
+        # 1. rà dở F5UP: hai quyết định Nhận
+        ui.open()
+        pg.keyboard.press('n')
+        ui.wait_done(1)
+        ui.wait_cur('F_002.png')
+        pg.keyboard.press('n')
+        ui.wait_done(2)
+        before = open(f5_csv, encoding='utf-8', newline='').read()
+        check(len(read_csv_rows(f5_csv)) == 3, f'F5UP: 2 dòng quyết định sau header: {before!r}')
+        # 2. mở tab Nạp ảnh, thả file
+        _goto_tab(pg)
+        env = pg.inner_text('#nap-env')
+        check('Đủ model và cấu hình' in env, f'khung môi trường xanh: {env!r}')
+        check(pg.locator('#nap-start').is_disabled(), 'chưa chọn ảnh: nút Bắt đầu khoá')
+        check('NAP_001' in (pg.locator('#nap-name textarea, #nap-name input').first.get_attribute('placeholder') or ''), 'ô tên lượt gợi ý NAP_001')
+        _drop(pg, inp['files'], inp['n_ok'], inp['n_rej'])
+        pg.wait_for_function("document.querySelectorAll('#nap-list img').length === 10", timeout=30000)
+        caps = ' | '.join(pg.locator('#nap-list .caption-label').all_inner_texts())
+        check('Anh_mat_1.jpg' in caps and 'mat.jpg' in caps and 'mat_2.jpg' in caps and 'xam.png' in caps,
+              f'lưới 10 ảnh hợp lệ, tên sạch Anh_mat_1, mat, mat_2: {caps[:200]}')
+        check('MB' in caps or 'KB' in caps, 'chú thích có dung lượng')
+        rej = pg.inner_text('#nap-rejected')
+        check('gia.jpg' in rej and 'trung.jpg' in rej and 'trùng nội dung' in rej, f'danh sách bị loại có gia.jpg và trung.jpg: {rej!r}')
+        check(pg.locator('#nap-start').is_enabled(), 'có ảnh hợp lệ: nút Bắt đầu bật')
+        pg.locator('#nap-count').click()                 # đưa focus ra khỏi ô nhập rồi thử phím tắt của tab Rà soát
+        pg.keyboard.press('n')
+        pg.keyboard.press('g')
+        pg.wait_for_timeout(1000)
+        check(open(f5_csv, encoding='utf-8', newline='').read() == before, 'phím N/G ở tab Nạp ảnh không ghi gì vào triage của F5UP')
+        pg.screenshot(path=os.path.join(shots, 'upload_01_chon_desktop.png'))
+        # 3. bắt đầu
+        pg.click('#nap-start')
+        pg.wait_for_selector('#nap-prog .nap-label', timeout=30000)
+        check(pg.locator('#nap-start').is_disabled(), 'đang chạy: nút Bắt đầu khoá')
+        pg.wait_for_function("document.querySelectorAll('#nap-list img').length === 0 || !document.querySelector('#nap-list img')?.offsetParent",
+                             timeout=15000)
+        check('Chưa chọn ảnh nào' in pg.inner_text('#nap-count'), 'sau khi bắt đầu: vùng thả và lưới đã xoá')
+        pg.screenshot(path=os.path.join(shots, 'upload_02_dang_chay.png'))
+        label = pg.inner_text('#nap-prog .nap-label')
+        check(label.startswith(('Đang nạp MediaPipe', 'Bước')), f'nhãn tiến độ: {label!r}')
+        pg.wait_for_selector('#nap-summary .nap-sum', timeout=300000)
+        n1 = os.path.join(runs, 'NAP_001')
+        names = sorted(os.listdir(os.path.join(n1, 'inbox')))
+        check(len(names) == 10 and all(re.fullmatch(r'[A-Za-z0-9_-]+\.(jpg|png)', n) for n in names), f'NAP_001/inbox: 10 file tên ASCII, đuôi thường: {names}')
+        check({'Anh_mat_1.jpg', 'mat.jpg', 'mat_2.jpg', 'xam.png'} <= set(names) and not any(n.startswith(('gia', 'trung')) for n in names),
+              'inbox có Anh_mat_1, mat, mat_2, xam; không có gia, trung')
+        check(_sha(os.path.join(n1, 'inbox', 'Anh_mat_1.jpg')) == _sha(inp['accent']), 'ảnh được chép nguyên byte (sha256 khớp)')
+        tab = read_csv_rows(os.path.join(n1, 'nap_ten_goc.csv'))
+        check(tab[0] == ['ten_goc', 'ten_moi', 'bytes', 'sha256'] and len(tab) == 11 and ['Ảnh mặt (1).JPG', 'Anh_mat_1.jpg'] == tab[[r[1] for r in tab].index('Anh_mat_1.jpg')][:2],
+              'nap_ten_goc.csv: 10 dòng, tên gốc có dấu ghi đúng')
+        check(os.path.getsize(os.path.join(n1, 'nap_log.txt')) > 0, 'nap_log.txt có nội dung')
+        flags = json.load(open(os.path.join(n1, 'flags', 'flags.json'), encoding='utf-8'))
+        check(len(flags) >= 5, f'flags.json có {len(flags)} mặt (>= 5)')
+        nf = read_csv_rows(os.path.join(n1, 'no_face.csv'))
+        check('xam' in [r[0] for r in nf[1:]], f'ảnh xám nằm trong no_face.csv: {nf[1:]}')
+        summ = pg.inner_text('#nap-summary')
+        check('Mặt dùng được' in summ and 'Không thấy mặt' in summ and 'Vào hàng đợi rà' in summ and 'xam.png' in summ
+              and 'mặt lớn nhất' in summ and 'm28.py push --run NAP_001' in summ, f'tóm tắt có thẻ số, xam.png, ghi chú nhiều mặt, lệnh push: {summ[:160]!r}')
+        check('Xong' in pg.inner_text('#nap-prog') and pg.locator('#nap-go').is_enabled(), 'nút Rà lượt này bật')
+        pg.screenshot(path=os.path.join(shots, 'upload_03_ket_qua_desktop.png'), full_page=True)
+        pg.set_viewport_size({'width': 420, 'height': 900})
+        pg.wait_for_timeout(600)
+        check(pg.evaluate('document.documentElement.scrollWidth') <= 420, f"420 px: không cuộn ngang (scrollWidth {pg.evaluate('document.documentElement.scrollWidth')})")
+        check(pg.locator('#nap-go').bounding_box()['height'] >= 48, 'nút Rà lượt này đủ to ở màn hẹp')
+        pg.screenshot(path=os.path.join(shots, 'upload_04_hep.png'), full_page=True)
+        pg.set_viewport_size({'width': 1440, 'height': 900})
+        pg.wait_for_timeout(400)
+        # 5. chuyển sang NAP_001
+        pg.click('#nap-go')
+        pg.wait_for_function("document.title === 'Rà soát M28 · NAP_001'", timeout=60000)
+        pg.wait_for_selector('#info .face-name', timeout=60000)
+        pg.wait_for_function("() => { const i = document.querySelector('#big img'); return i && i.complete && i.naturalWidth > 0; }", timeout=30000)
+        check('NAP_001' in pg.inner_text('#progress') and ui.progress()[1] >= 5, f'#progress ghi NAP_001: {pg.inner_text("#progress")[:60]!r}')
+        ls = listeners(port)
+        check(ls and all(f'127.0.0.1:{port}' in l for l in ls) and not any(f'*:{port}' in l or '0.0.0.0' in l for l in ls), 'sau khi chuyển: server vẫn chỉ bind 127.0.0.1')
+
+        def get(path, host=None):
+            req = urllib.request.Request(f'http://127.0.0.1:{port}{path}', headers={'Host': host} if host else {})
+            try:
+                return urllib.request.urlopen(req, timeout=5).status
+            except urllib.error.HTTPError as e:
+                return e.code
+        check(get('/', f'evil.example:{port}') == 400, 'sau khi chuyển: Host lạ vẫn bị 400')
+        check(get('/gradio_api/file=' + os.path.abspath(os.path.join(n1, 'inbox', 'mat.jpg'))) == 403, 'inbox/ không phát được qua /file= (403)')
+        check(get('/gradio_api/file=' + os.path.abspath(os.path.join(run, 'flags', 'flags.json'))) == 403, 'lượt cũ ngoài thư mục cho phép vẫn 403')
+        pg.screenshot(path=os.path.join(shots, 'upload_05_sau_chuyen.png'))
+        pg.keyboard.press('n')
+        ui.wait_done(1)
+        rows = read_csv_rows(os.path.join(n1, 'review', 'triage_P2.csv'))
+        check(len(rows) == 2 and rows[1][1] == 'nhan', f'NAP_001/review/triage_P2.csv có đúng 1 dòng nhan: {rows}')
+        check(open(f5_csv, encoding='utf-8', newline='').read() == before, 'triage của F5UP y nguyên sau khi chuyển và rà lượt mới')
+        txt = open(out_log, encoding='utf-8').read()
+        check('Chuyển sang lượt NAP_001' in txt and 'F5UP còn 3 mặt chưa rà' in txt and 'review_app.py runs\\F5UP P2' in txt,
+              'cmd in lượt cũ còn 3 mặt và lệnh mở lại')
+        # 4. Huỷ và Thử lại (từ trang NAP_001)
+        _goto_tab(pg)
+        note = pg.inner_text('#nap-oldnote')
+        check('NAP_001' in note and 'chưa rà' in note and 'triage_P2.csv' in note, f'ghi chú lượt đang rà dở: {note[:120]!r}')
+        check('NAP_002' in (pg.locator('#nap-name textarea, #nap-name input').first.get_attribute('placeholder') or ''), 'ô tên lượt gợi ý NAP_002')
+        _drop(pg, inp['six'][:3], 3, 0)
+        pg.click('#nap-start')
+        pg.wait_for_function("!document.querySelector('#nap-cancel').disabled", timeout=30000)
+        pg.click('#nap-cancel')
+        pg.wait_for_function("(document.querySelector('#nap-summary')?.innerText || '').includes('Đã huỷ')", timeout=30000)
+        n2 = os.path.join(runs, 'NAP_002')
+        check(os.path.isdir(os.path.join(n2, 'inbox')) and os.path.getsize(os.path.join(n2, 'nap_log.txt')) > 0, 'NAP_002: sau Huỷ còn inbox và log')
+        check(pg.locator('#nap-retry').is_enabled() and pg.locator('#nap-cancel').is_disabled() and pg.locator('#nap-go').is_disabled(),
+              'sau Huỷ: Thử lại bật, Huỷ và Rà lượt này khoá')
+        pg.click('#nap-retry')
+        pg.wait_for_selector('#nap-summary .nap-sum', timeout=300000)
+        check(len(json.load(open(os.path.join(n2, 'flags', 'flags.json'), encoding='utf-8'))) >= 2, 'Thử lại: NAP_002 chạy xong, có flags.json')
+        pg.screenshot(path=os.path.join(shots, 'upload_07_huy_thu_lai.png'), full_page=True)
+        check(ui.external() == [], 'không có request ra ngoài 127.0.0.1')
+        check(not ui.errors or all('Failed to load resource' in e or 'ERR_' in e or 'WebSocket' in e for e in ui.errors), f'không lỗi JS: {ui.errors[:3]}')
+    finally:
+        ui.close()
+        p.terminate()
+        try:
+            p.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    # 6. thiếu model
+    W2 = os.path.join(os.path.dirname(W), 'work_nomodel')
+    shutil.rmtree(W2, ignore_errors=True)
+    os.makedirs(W2)
+    shutil.copytree(os.path.join(W, 'config'), os.path.join(W2, 'config'))
+    p = start([sys.executable, os.path.join(CODE, 'tool', 'review_app.py'), '--nap', 'P2'], W2, port_nomodel, None, os.path.join(shots, 'app_f2.log'))
+    wait_port(port_nomodel, p)
+    ui = Ui(pw, port_nomodel)
+    pg = ui.page
+    try:
+        _open_nap(pg, port_nomodel)
+        pg.wait_for_selector('#nap-drop', timeout=30000)                   # chế độ --nap: tab Nạp ảnh mở sẵn
+        env = pg.inner_text('#nap-env')
+        check('Thiếu face_landmarker.task' in env and 'curl' in env, f'khung đỏ báo thiếu model kèm lệnh curl: {env[:120]!r}')
+        pg.set_input_files('#nap-drop input[type=file]', inp['six'][:1])
+        pg.wait_for_function("(document.querySelector('#nap-count')?.innerText || '').includes('1 ảnh hợp lệ')", timeout=30000)
+        check(pg.locator('#nap-start').is_disabled(), 'thiếu model: nút Bắt đầu vẫn khoá dù có ảnh')
+        pg.get_by_role('tab', name='Rà soát').click()
+        check('Chưa có lượt nào' in pg.inner_text('#tab-ra'), 'tab Rà soát ghi "Chưa có lượt nào"')
+        pg.get_by_role('tab', name='Nạp ảnh').click()
+        pg.screenshot(path=os.path.join(shots, 'upload_06_thieu_model.png'))
+    finally:
+        ui.close()
+        p.terminate()
+    check([d for d in os.listdir(os.path.join(W2, 'runs')) if d.startswith('NAP_')] == [], 'thiếu model: không có thư mục NAP_xxx')
+    # 7. --nap có model: từ trang trống nạp ảnh rồi chuyển sang rà
+    W3 = os.path.join(os.path.dirname(W), 'work_nap')
+    shutil.rmtree(W3, ignore_errors=True)
+    os.makedirs(W3)
+    shutil.copytree(os.path.join(W, 'config'), os.path.join(W3, 'config'))
+    shutil.copyfile(os.path.join(W, 'face_landmarker.task'), os.path.join(W3, 'face_landmarker.task'))
+    p = start([sys.executable, os.path.join(CODE, 'tool', 'review_app.py'), '--nap', 'P2'], W3, port_nap, None, os.path.join(shots, 'app_f3.log'))
+    wait_port(port_nap, p)
+    ui = Ui(pw, port_nap)
+    pg = ui.page
+    try:
+        _open_nap(pg, port_nap)
+        pg.wait_for_selector('#nap-drop', timeout=30000)
+        check(pg.title() == 'Rà soát M28 · Nạp ảnh' and 'Đủ model và cấu hình' in pg.inner_text('#nap-env'), 'chế độ --nap: tiêu đề và môi trường đủ')
+        _drop(pg, inp['six'][:4], 4, 0)
+        pg.fill('#nap-name textarea, #nap-name input', 'KHACH_A')
+        pg.click('#nap-start')
+        pg.wait_for_selector('#nap-summary .nap-sum', timeout=300000)
+        pg.click('#nap-go')
+        pg.wait_for_function("document.title === 'Rà soát M28 · KHACH_A'", timeout=60000)
+        pg.wait_for_selector('#info .face-name', timeout=60000)
+        check(os.path.isdir(os.path.join(W3, 'runs', 'KHACH_A', 'inbox')) and ui.progress()[1] >= 3, f'từ trang trống sang lượt KHACH_A: {ui.progress()}')
+        check(not os.path.exists(os.path.join(W3, 'runs', 'KHACH_A', 'review', 'triage_P2.csv')), 'chưa bấm gì thì chưa có triage')
+        pg.screenshot(path=os.path.join(shots, 'upload_08_nap_sang_ra.png'))
+    finally:
+        ui.close()
+        p.terminate()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--work', required=True, help='thư mục chạy có config/, runs/F5, runs/ALL616')
     ap.add_argument('--shots', required=True, help='thư mục lưu ảnh chụp (ngoài repo: có mặt người)')
-    ap.add_argument('--phases', default='ABCDE')
+    ap.add_argument('--phases', default='ABCDEF')
+    ap.add_argument('--wflw', help='thư mục WFLW_images (mặc định <work>/../wflw/WFLW_images), cho pha F')
     a = ap.parse_args()
     W, shots = os.path.abspath(a.work), os.path.abspath(a.shots)
     os.makedirs(shots, exist_ok=True)
@@ -582,6 +843,8 @@ def main():
                 phase_d(pw, W, shots, 7875)
             if 'E' in a.phases:
                 phase_e(pw, W, shots, 7876)
+            if 'F' in a.phases:
+                phase_f(pw, W, shots, (7877, 7878, 7879), a.wflw or os.path.join(os.path.dirname(W), 'wflw', 'WFLW_images'))
     except (AssertionError, RuntimeError) as e:
         log(f'\nHỎNG: {e}')
         return 1

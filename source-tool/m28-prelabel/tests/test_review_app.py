@@ -952,3 +952,292 @@ def test_cli_errors_exit_2_with_one_line(five, tmp_path):
                        capture_output=True, text=True, encoding='utf-8', timeout=60, env=dict(os.environ, COLAB_GPU='1'))
     assert r.returncode == 2 and 'Colab' in r.stderr and 'Traceback' not in r.stderr
     assert not os.path.exists(os.path.join(five, '_tmp'))              # lỗi thì chưa mở server, chưa tạo gì
+
+
+# ======================= tab Nạp ảnh (tool/nap_anh.py) =======================
+import nap_anh as na  # noqa: E402
+
+
+def _img(path, fmt='JPEG', size=(64, 64), color=(120, 130, 140)):
+    from PIL import Image
+    os.makedirs(os.path.dirname(str(path)), exist_ok=True)
+    Image.new('RGB', size, color).save(str(path), format=fmt)
+    return str(path)
+
+
+def test_clean_stem():
+    assert na.clean_stem('Ảnh mặt (1).JPG') == 'Anh_mat_1'
+    assert na.clean_stem('Đặng Đình đẹp.png') == 'Dang_Dinh_dep'
+    assert na.clean_stem('../../x.png') == 'x'
+    assert na.clean_stem('C:\\a\\b.JPG') == 'b'
+    assert na.clean_stem('') == 'anh' and na.clean_stem('(((.png') == 'anh'
+    assert na.clean_stem('CON.jpg') == 'CON_anh' and na.clean_stem('com1.png') == 'com1_anh'
+    long = na.clean_stem('a' * 200 + '.jpg')
+    assert long == 'a' * 60
+    assert na.clean_stem('a   b__c--d.jpg') == 'a_b_c--d'
+
+
+def test_unique_stems_case_insensitive():
+    assert na.unique_stems(['a', 'A', 'a_2']) == ['a', 'A_2', 'a_2_2']
+    assert na.unique_stems(['x', 'x', 'x']) == ['x', 'x_2', 'x_3']
+    out = na.unique_stems(['b' * 60, 'B' * 60])
+    assert len(out[1]) <= 60 and out[0].lower() != out[1].lower()
+
+
+def test_check_image_accepts_and_rejects(tmp_path):
+    need_pil()
+    ok, why = na.check_image(_img(tmp_path / 'a.jpg'))
+    assert why is None and ok['ext'] == '.jpg' and (ok['w'], ok['h']) == (64, 64)
+    ok, why = na.check_image(_img(tmp_path / 'b.PNG', 'PNG'))
+    assert why is None and ok['ext'] == '.png'
+    ok, why = na.check_image(_img(tmp_path / 'lie.png', 'JPEG'))          # đuôi .png nhưng ruột JPEG
+    assert why is None and ok['ext'] == '.jpg'
+    (tmp_path / 'text.jpg').write_text('xin chào, không phải ảnh', encoding='utf-8')
+    assert na.check_image(str(tmp_path / 'text.jpg'))[1]
+    assert 'GIF' in na.check_image(_img(tmp_path / 'g.jpg', 'GIF'))[1]
+    assert na.check_image(_img(tmp_path / 'c.bmp', 'BMP'))[1].startswith('đuôi')
+    assert 'lớn hơn' in na.check_image(str(tmp_path / 'a.jpg'), max_bytes=10)[1]
+    assert 'quá lớn' in na.check_image(str(tmp_path / 'a.jpg'), max_pixels=100)[1]
+    assert 'quá nhỏ' in na.check_image(_img(tmp_path / 's.png', 'PNG', (20, 90)))[1]
+    assert na.check_image(str(tmp_path / 'khongco.jpg'))[1]
+    (tmp_path / 'empty.jpg').write_bytes(b'')
+    assert 'rỗng' in na.check_image(str(tmp_path / 'empty.jpg'))[1]
+
+
+def test_plan_upload(tmp_path):
+    need_pil()
+    a = _img(tmp_path / 'd1' / 'mat.jpg', color=(1, 2, 3))
+    b = _img(tmp_path / 'd2' / 'mat.jpg', color=(9, 9, 9))
+    dup = str(tmp_path / 'trung.jpg')
+    open(dup, 'wb').write(open(a, 'rb').read())
+    fake = str(tmp_path / 'gia.jpg')
+    open(fake, 'w').write('x' * 50)
+    plan = na.plan_upload([a, b, dup, fake])
+    assert [na.new_name(i) for i in plan['ok']] == ['mat.jpg', 'mat_2.jpg']
+    assert all(set(i) >= {'orig', 'stem', 'ext', 'bytes', 'w', 'h', 'sha256', 'src'} for i in plan['ok'])
+    rej = dict(plan['rejected'])
+    assert 'trùng nội dung với mat.jpg' in rej['trung.jpg'] and 'gia.jpg' in rej
+    many = [_img(tmp_path / 'm' / f'i{k}.png', 'PNG', color=(k, k, k)) for k in range(9)]
+    plan = na.plan_upload(many, max_files=5)
+    assert len(plan['ok']) == 5 and len(plan['rejected']) == 4 and 'vượt 5 ảnh mỗi lần' in plan['rejected'][0][1]
+    assert na.plan_upload([]) == dict(ok=[], rejected=[]) and na.plan_upload(None)['ok'] == []
+
+
+def test_run_names(tmp_path):
+    runs = str(tmp_path / 'runs')
+    assert na.next_run_name(runs) == 'NAP_001'                           # chưa có thư mục runs
+    for d in ('NAP_001', 'nap_007', 'NAP_x', 'F5', '_nap'):
+        os.makedirs(os.path.join(runs, d))
+    assert na.next_run_name(runs) == 'NAP_008'
+    assert na.check_run_name(' KHACH_A ', runs) == 'KHACH_A'
+    for bad in ('nap_001', 'NAP_007', 'f5', 'a b', 'ả', '_nap', '', 'x' * 33, 'CON', 'lpt3', '../x', '-a'):
+        with pytest.raises(na.RunError):
+            na.check_run_name(bad, runs)
+    assert ra.RunError is na.RunError
+
+
+def test_stage_upload(tmp_path):
+    need_pil()
+    runs = str(tmp_path / 'runs')
+    os.makedirs(os.path.join(runs, 'F5'))
+    src = _img(tmp_path / 'up' / 'Ảnh mặt.JPG')
+    plan = na.plan_upload([src])
+    rd = na.stage_upload(runs, 'NAP_001', plan, cleanup_root=str(tmp_path / 'up'))
+    assert rd == os.path.join(runs, 'NAP_001') and os.listdir(os.path.join(rd, 'inbox')) == ['Anh_mat.jpg']
+    assert na._sha256(os.path.join(rd, 'inbox', 'Anh_mat.jpg')) == plan['ok'][0]['sha256']             # chép nguyên byte
+    rows = list(csv.reader(open(os.path.join(rd, 'nap_ten_goc.csv'), encoding='utf-8-sig')))
+    assert rows[0] == ['ten_goc', 'ten_moi', 'bytes', 'sha256'] and rows[1][:2] == ['Ảnh mặt.JPG', 'Anh_mat.jpg']
+    assert not os.path.exists(src)                                         # bản tạm đã xoá
+    assert sorted(os.listdir(runs)) == ['F5', 'NAP_001']
+    plan2 = na.plan_upload([_img(tmp_path / 'u2' / 'b.png', 'PNG')])
+    for name in ('NAP_001', 'nap_001'):                                    # lượt đã có (kể cả khác hoa thường)
+        with pytest.raises(na.RunError):
+            na.stage_upload(runs, name, plan2)
+    assert os.listdir(os.path.join(rd, 'inbox')) == ['Anh_mat.jpg']        # lượt cũ không bị ghi thêm
+    with pytest.raises(na.RunError):
+        na.stage_upload(runs, 'NAP_002', dict(ok=[], rejected=[]))
+    assert not os.path.exists(os.path.join(runs, 'NAP_002'))
+    plan2['ok'][0]['sha256'] = '0' * 64                                    # file đổi giữa lúc kiểm và lúc chép
+    with pytest.raises(na.RunError):
+        na.stage_upload(runs, 'NAP_003', plan2)
+    assert not os.path.exists(os.path.join(runs, 'NAP_003'))               # lượt dở tự dọn
+    plan2['ok'][0]['sha256'] = na._sha256(plan2['ok'][0]['src'])
+    plan2['ok'][0]['stem'] = '../../thoat'                                 # tên đích thoát khỏi lượt: từ chối
+    with pytest.raises(na.RunError):
+        na.stage_upload(runs, 'NAP_004', plan2)
+    assert not os.path.exists(os.path.join(tmp_path, 'thoat.png')) and not os.path.exists(os.path.join(runs, 'NAP_004'))
+
+
+def test_prepare_cmd_and_child_env():
+    cmd = na.prepare_cmd('NAP_001', tool_dir='T', python='py')
+    assert cmd == ['py', '-u', os.path.join('T', 'm28.py'), 'prepare', '--run', 'NAP_001', '--images',
+                   os.path.join('runs', 'NAP_001', 'inbox'), '--box', 'auto']
+    assert all(isinstance(c, str) for c in cmd)
+    base = {'PATH': 'x'}
+    env = na.child_env(base)
+    assert env['PYTHONUTF8'] == '1' and env['PYTHONIOENCODING'] == 'utf-8' and env['PYTHONUNBUFFERED'] == '1' and env['PATH'] == 'x'
+    assert base == {'PATH': 'x'}                                           # không sửa bản gốc
+
+
+def test_preflight(tmp_path):
+    root, tool = tmp_path / 'p', tmp_path / 'tool'
+    tool.mkdir()
+    (root / 'config').mkdir(parents=True)
+    errs = na.preflight(str(root), str(tool))
+    assert any('m28_config.json' in e for e in errs) and any('map_mp50.json' in e for e in errs)
+    assert any('face_landmarker.task' in e and 'curl' in e for e in errs)
+    for f in ('m28_config.json', 'map_mp50.json'):
+        (root / 'config' / f).write_text('{}')
+    (tool / 'face_landmarker.task').write_bytes(b'x')                       # model ở tool/ cũng được
+    errs = na.preflight(str(root), str(tool))
+    assert not any('face_landmarker' in e or 'config' in e for e in errs)
+    (root / 'face_landmarker.task').write_bytes(b'x')
+    (tool / 'face_landmarker.task').unlink()
+    assert not any('face_landmarker' in e for e in na.preflight(str(root), str(tool)))
+    os.remove(root / 'config' / 'map_mp50.json')
+    assert any('map_mp50.json' in e for e in na.preflight(str(root), str(tool)))
+
+
+def test_parse_progress():
+    lines = ['WARNING: noise', 'crop: 5 mặt, 1 không dùng được', 'bỏ qua mediapipe', 'map50: 5 mặt']
+    p = na.parse_progress(lines, 6, None)
+    assert p['done'] == 3 and p['current'] == 'flags' and p['label'] == 'Bước 4/6 · flags' and abs(p['frac'] - 0.5) < 1e-9
+    assert na.parse_progress([], 10, None)['label'] == 'Đang nạp MediaPipe…'
+    p = na.parse_progress([], 10, 4)
+    assert p['label'] == 'Bước 1/6 · crop (4/10 ảnh)' and 0 < p['frac'] < 1 / 6
+    full = ['crop: 1 mặt', 'mediapipe: 1', 'map50: 1', 'flags: tb', 'autoqc: 0/1', 'overlays: 1 ảnh chồng']
+    assert na.parse_progress(full)['label'] == 'Xong 6/6 bước' and na.parse_progress(full)['frac'] == 1
+    assert na.parse_progress(['bỏ qua crop'] * 2)['done'] == 1
+
+
+def test_prepare_list_matches_m28():
+    code = "import sys; sys.path.insert(0, %r); import m28, nap_anh; print(m28.PREPARE == nap_anh.PREPARE)" % TOOL
+    r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, encoding='utf-8')
+    assert r.stdout.strip() == 'True', r.stderr
+    from m28core import steps as st
+    assert na.MODEL_URL == st.MODEL_URL and na.NO_FACE_VI == {'khong_thay_mat': 'MediaPipe không thấy mặt', 'khong_doc_duoc_anh': 'không đọc được ảnh'}
+
+
+def test_read_prepare_result(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd = make_run(tmp_path, {'a': 0, 'b': 3}, no_face=[('x', 'khong_thay_mat', 'crop'), ('y', 'khong_thay_mat', 'mediapipe'),
+                                                    ('z', 'khong_doc_duoc_anh', 'crop')], crops=['y', 'a', 'b'])
+    os.makedirs(os.path.join(rd, 'inbox'))
+    for n in ('a', 'b', 'x', 'y', 'z'):
+        open(os.path.join(rd, 'inbox', n + '.jpg'), 'wb').write(b'x')
+    with open(os.path.join(rd, 'nap_ten_goc.csv'), 'w', encoding='utf-8-sig', newline='') as f:
+        f.write('ten_goc,ten_moi,bytes,sha256\nẢnh x.JPG,x.jpg,1,0\n')
+    with open(os.path.join(rd, 'log.txt'), 'w', encoding='utf-8') as f:
+        f.write('t\tcrop\txong\t1s\nt\tmediapipe\tbo_qua\t0s\nt\tmap50\tloi\t0s\n')
+    res = na.read_prepare_result(rd)
+    assert res['n_inbox'] == 5 and res['n_faces'] == 2 and res['n_queue'] == 3          # a, b + y (không nháp, có ảnh cắt)
+    assert [r['name'] for r in res['no_draft']] == ['y'] and sorted(r['name'] for r in res['no_crop']) == ['x', 'z']
+    assert next(r for r in res['no_crop'] if r['name'] == 'x')['orig'] == 'Ảnh x.JPG'
+    assert next(r for r in res['no_crop'] if r['name'] == 'z')['reason'] == 'không đọc được ảnh'
+    assert res['steps']['crop'] == 'xong' and res['steps']['map50'] == 'loi' and res['steps']['flags'] is None
+    h = na.summary_html(res, 'P2')
+    assert 'Mặt dùng được' in h and 'Ảnh x.JPG' in h and 'mặt lớn nhất' in h and 'm28.py push --run ' + res['run'] + ' --task demo-' in h
+    assert '<script' not in na.summary_html(dict(res, no_crop=[dict(name='q', orig='<script>x</script>', reason='r', step='crop')]), 'P2')
+
+
+def _job_code(body):
+    return [sys.executable, '-c', body]
+
+
+def _make_job(tmp_path, body):
+    runs = tmp_path / 'runs'
+    (runs / 'NAP_001' / 'inbox').mkdir(parents=True, exist_ok=True)
+    job = na.PrepareJob(popen=lambda cmd, **kw: subprocess.Popen(_job_code(body), **kw))
+    return job, str(runs)
+
+
+def _wait(job, timeout=15):
+    t = time.time()
+    while job.running and time.time() - t < timeout:
+        time.sleep(0.05)
+
+
+def test_prepare_job_success_failure_cancel(tmp_path):
+    job, runs = _make_job(tmp_path, "print('crop: 2 mặt, 0 không dùng được'); print('bỏ qua mediapipe')")
+    job.start('NAP_001', runs, str(tmp_path))
+    _wait(job)
+    snap = job.snapshot()
+    assert snap['state'] == 'xong' and snap['returncode'] == 0 and snap['lines'][0].startswith('crop: 2 mặt')
+    log = open(os.path.join(runs, 'NAP_001', 'nap_log.txt'), encoding='utf-8').read()
+    assert 'bỏ qua mediapipe' in log and log.startswith('===')
+    job, runs = _make_job(tmp_path, "import sys; print('lỗi giả'); sys.exit(1)")
+    job.start('NAP_001', runs, str(tmp_path))
+    _wait(job)
+    assert job.snapshot()['state'] == 'loi' and job.snapshot()['returncode'] == 1
+    job, runs = _make_job(tmp_path, "import time; print('bắt đầu', flush=True); time.sleep(60)")
+    job.start('NAP_001', runs, str(tmp_path))
+    with pytest.raises(na.RunError):                                       # job đang chạy: start lần hai bị từ chối
+        job.start('NAP_001', runs, str(tmp_path))
+    t = time.time()
+    assert job.cancel() is True
+    assert time.time() - t < 10 and job.snapshot()['state'] == 'da_huy'
+    assert job.cancel() is False
+    job._popen = lambda cmd, **kw: subprocess.Popen(_job_code("print('crop: 1 mặt')"), **kw)
+    job.start('NAP_001', runs, str(tmp_path))                              # Thử lại sau khi huỷ
+    _wait(job)
+    assert job.snapshot()['state'] == 'xong'
+    with pytest.raises(na.RunError):
+        job.start('NAP_999', runs, str(tmp_path))                          # lượt không có inbox
+
+
+def test_job_receives_utf8_env_and_cmd(tmp_path):
+    seen = {}
+
+    def fake(cmd, **kw):
+        seen.update(cmd=cmd, **kw)
+        return subprocess.Popen(_job_code("import os; print(os.environ['PYTHONUTF8'], os.environ['PYTHONIOENCODING'])"), **kw)
+    runs = tmp_path / 'runs'
+    (runs / 'R' / 'inbox').mkdir(parents=True)
+    job = na.PrepareJob(popen=fake)
+    job.start('R', str(runs), str(tmp_path))
+    _wait(job)
+    assert seen['cwd'] == str(tmp_path) and seen['stdin'] == subprocess.DEVNULL and seen['stderr'] == subprocess.STDOUT
+    assert 'shell' not in seen and seen['cmd'][-2:] == ['--box', 'auto'] and job.snapshot()['lines'] == ['1 utf-8']
+
+
+def test_runs_layout(tmp_path):
+    runs, root, err = na.runs_layout(str(tmp_path / 'runs' / 'F5'))
+    assert err is None and root == str(tmp_path) and runs == str(tmp_path / 'runs')
+    assert na.runs_layout(str(tmp_path / 'x' / 'F5'))[2]
+
+
+def test_page_js_only_in_review_tab():
+    js = ra.PAGE_JS
+    assert "document.getElementById('main')" in js and 'offsetParent === null' in js
+    assert js.index("getElementById('main')") < js.index('e.repeat')          # điều kiện tab nằm đầu handler
+    assert 'fetch' not in js
+
+
+def test_nap_modules_static(tmp_path):
+    src = open(os.path.join(TOOL, 'nap_anh.py'), encoding='utf-8').read()
+    lines = src.splitlines()
+    assert 'shell=True' not in src and 'share=True' not in src
+    assert not any(l.startswith(('import gradio', 'from gradio', 'import torch', 'from torch', 'import mediapipe', 'import cv2', 'from PIL', 'import PIL'))
+                   for l in lines)
+    code = ("import sys\nsys.path.insert(0, %r)\nimport nap_anh\nfor m in ('gradio', 'torch', 'mediapipe', 'cv2', 'PIL'):\n"
+            "    assert m not in sys.modules, m\nprint('ok')\n") % TOOL
+    r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, encoding='utf-8')
+    assert r.returncode == 0 and 'ok' in r.stdout, r.stderr
+    app = open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()
+    assert 'shell=True' not in app and 'max_file_size="25mb"' in app and 'concurrency_id="nap"' in app
+    assert 'concurrency_id="m28"' in app and '"nap_tick"' in app and '"nap_huy"' in app
+    assert 'allowed_paths=[os.path.abspath(os.path.join(run_dir, "inbox"' not in app and '"inbox"' not in app.split('allowed = ')[1].split('\n')[0]
+
+
+def test_parse_argv():
+    assert ra.parse_argv(['--nap', 'P2']) == ('nap', None, 'P2')
+    assert ra.parse_argv(['runs/F5', 'P2']) == ('run', 'runs/F5', 'P2')
+    assert ra.parse_argv(['--nap']) is None and ra.parse_argv([]) is None and ra.parse_argv(['a', 'b', 'c']) is None
+    assert '--nap' in ra.VI_USAGE
+
+
+def test_cli_nap_without_name_exits_2(tmp_path):
+    r = run_app(tmp_path, '--nap')
+    assert r.returncode == 2 and 'Cách dùng' in r.stderr and 'Traceback' not in r.stderr
+    r = run_app(tmp_path, '--nap', '../x')
+    assert r.returncode == 2 and 'không hợp lệ' in r.stderr and not os.path.exists(os.path.join(tmp_path, 'runs'))
