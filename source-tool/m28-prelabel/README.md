@@ -24,7 +24,7 @@ Mọi đường dẫn trong kế hoạch tính từ thư mục này:
 ```
 m28-prelabel/
 ├── tool/          m28.py, m28core/ (steps, push, collect, cvat_io, loai_tru, dang_chay, phan_loai…), review_app.py, day_cvat.py,
-│                  dot_anh.py, dot_ui.py, nap_anh.py, make_label.py (giao cho khách: không torch, không ảnh)
+│                  dot_anh.py, dot_ui.py, nap_anh.py, ca_kho.py, make_label.py (giao cho khách: không torch, không ảnh)
 ├── config/        m28_config.json (50 điểm), pipeline.json (không có bí mật), face50_label.json (sinh bằng make_label.py)
 ├── snippets/      đoạn code + prompt mẫu trích từ kế hoạch, CHƯA chạy thử
 ├── data/          ảnh cắt, manifest, gt*.json        ← KHÔNG commit (repo công khai)
@@ -162,6 +162,24 @@ Dưới nút **Xong** có khung **Đẩy lên CVAT**: bấm là đẩy lượt �
   con) và bước tiếp theo; traceback không hiện trên trang (vẫn nằm trong `runs\<lượt>\push_log.txt`).
 - Vì chạy qua `m28.py push` nên `runs\<lượt>\push\done.txt` được ghi: sau đó `m28.py all`/`push` gõ ở cmd in "bỏ qua push". Xoá task rồi (xem dưới) thì `done.txt` bị gỡ và đẩy lại được.
 
+### Ca khó và họp team
+Ba phần cùng nằm trong trang rà soát (chỉ 127.0.0.1), mã trong `tool/ca_kho.py`:
+- **Đánh dấu (tab Rà soát):** phím **K** hoặc nút **Ca khó (K)** mở panel cho mặt đang xem: chọn loại, điểm liên quan (không bắt buộc), ghi chú (tối đa 500 ký tự), **Lưu**.
+  Ghi vào `runs/<lượt>/ca_kho.csv` (UTF-8 có BOM; cột `luot,anh,nguoi,loai,diem,ghi_chu,tao_luc,sua_luc,quyet_dinh_ra`; khoá `(nguoi, anh)`: bấm K lần nữa là sửa).
+  Không đụng `triage_<người>.csv`, `done.txt`, hàng đợi hay Hoàn tác. Gõ n/g/k trong ô ghi chú không kích hoạt phím tắt. Có **Bỏ đánh dấu** (bấm hai lần).
+- **Tab Ca khó (thành viên):** xem/sửa/xoá ca của mình ở mọi lượt, rồi **Xuất gói họp** ra `outputs/ca_kho/ca_kho_<người>_<ddmm>.zip` (tải về qua trang).
+  Gói chỉ có `manifest.json`, `ca_kho.csv`, `anh/<lượt>__<tên>.jpg` (ảnh chồng, cạnh dài ≤ 480 px, JPEG q72, không EXIF). Ảnh chỉ kèm cho lượt **WFLW**
+  (không có `inbox/` và mọi mặt có trong `data/manifest.csv`); lượt không rõ nguồn (có thể là ảnh khách hàng) mặc định chỉ xuất ca, không kèm ảnh. Tối đa 500 ca và 20 MB mỗi gói.
+- **Tab Họp team (người tổ chức, ví dụ P5):** `python tool\review_app.py --nap P5`. Tạo phiên (`outputs/ca_kho/hop_<ddmm>/`, lưu `hop.json` nên mở lại làm tiếp được),
+  kéo thả nhiều gói, xem bảng kết quả từng gói (nhập được / lỗi kèm lý do / đã nhập rồi). Gói không bao giờ được giải nén ra đĩa: chỉ đọc mục `manifest.json`, `ca_kho.csv`, `anh/*.jpg`,
+  giới hạn byte thật khi giải nén (chống zip bomb), ảnh mã hoá lại. Họp trên lưới ảnh (nhóm theo loại / người / trạng thái, lọc, tìm chữ), đặt trạng thái Mở / Đang bàn / Đã chốt,
+  quyết định, người phụ trách, loại backlog, mục guideline; **Trình chiếu** (← → đổi ca, Esc thoát). Cùng một mặt WFLW (cùng tên ảnh) do nhiều người đánh dấu thì ghi chú hiện cạnh nhau.
+  **Xuất biên bản**: `bien_ban_<ddmm>.md` (điền sẵn mục P-NNN, QĐ-NNN và dòng bảng Danh sách đúng mẫu `problem-backlog.md`, `so-quyet-dinh.md`; số tiếp theo đọc từ hai file đó) và `tong_hop_<ddmm>.csv`.
+  **Code không bao giờ ghi vào hai file đó**: người tổ chức tự chép các khối vào rồi commit.
+- Mã loại: SWAP, MIRROR, COLLAPSE, MISPLACED, OCC_FLAG (lỗi đặt điểm, như xem chéo 16/10), RULE, GL_CHUA_NOI, GL_MO_HO, GL_MAU_THUAN, CONG_CU, KHAC.
+  Lỗi đặt điểm mặc định không vào backlog (người tổ chức đổi được).
+- Gói chứa ảnh mặt người: chỉ gửi trong đội, không đăng công khai, không đưa vào chat AI, không commit (`outputs/` và `*.zip` đã bị `.gitignore` chặn).
+
 ## Tab Các đợt (quản lý đợt, xoá mềm ảnh)
 Tab thứ ba của trang. Mỗi **đợt** là một thư mục lượt `runs\<lượt>` (tên do bạn đặt khi nạp, ví dụ `Khoi`, `Nam`, `Cuong`, hoặc `NAP_001`); thư mục bắt đầu bằng `_` (`_nap`, `_trash`) không phải đợt.
 - **Thẻ đợt** (mới nhất lên đầu): tên, ngày nạp, **ghi chú** (ô `Ghi chú` ở tab Nạp ảnh, tối đa 500 ký tự, ghi vào `runs\<lượt>\dot.json` cùng người nạp và số ảnh; lượt cũ không có `dot.json` thì lấy ngày từ `log.txt`/thư mục),
@@ -253,9 +271,10 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 
 ## Đầu vào / đầu ra
 - Vào: thư mục ảnh (hoặc danh sách ảnh WFLW + hộp mặt), `config/m28_config.json`.
-- Ra: `runs/<run>/…` (ảnh chồng, cờ, `triage_<Pk>.csv`), task CVAT `demo-…`, file xuất `raw/<task>_<Pk>_<ngày>.xml`.
+- Ra: `runs/<run>/…` (ảnh chồng, cờ, `triage_<Pk>.csv`, `ca_kho.csv`), `outputs/ca_kho/` (gói họp, phiên họp, biên bản), task CVAT `demo-…`, file xuất `raw/<task>_<Pk>_<ngày>.xml`.
 
 ## Đã thử trên
+- **Ca khó và họp team** (6/10/2026, Linux cloud, Python 3.11, Gradio 6.29.1, Chromium headless): `tests/test_ca_kho.py` (88 test, gồm zip độc hại, biên bản so khớp mẫu) và `tests/e2e_ca_kho.py` (đánh dấu, tab Ca khó, xuất/tải gói, nhập gói, lưới, trình chiếu, mở lại phiên, biên bản). Chưa thử: Windows/cmd, Python 3.14, kéo thả bằng chuột thật, toàn màn hình thật, Excel mở CSV.
 - Test dữ liệu giả (`tests/`) trên Linux, Python 3.11, bằng landmarker/mapping/push/collect giả.
 - **Ảnh WFLW thật, MediaPipe thật** (5/10/2026, Linux cloud, Python 3.11, mediapipe 1.0.1, `face_landmarker.task`
   float16; cần `libegl1`, `libgles2` trên Linux): bước `crop` + `mediapipe` (ảnh gốc + ảnh lật).
