@@ -15,7 +15,8 @@ cũ được gán theo cách cũ.
 |---|---|---|---|---|
 | [QĐ-001](#qđ-001) | Tập chính là in-cabin (YawDD + DrivFace), bỏ WFLW, dự án phi thương mại | 06/10/2026 | Chủ repo | Hiệu lực |
 | [QĐ-002](#qđ-002) | Ánh xạ 478→50 bằng chọn đỉnh MediaPipe trực tiếp | 06/10/2026 | QĐ-001 | Bị thay một phần bởi QĐ-003 (định nghĩa 50 điểm, config v2); chọn đỉnh trực tiếp vẫn hiệu lực |
-| [QĐ-003](#qđ-003) | Định nghĩa 50 điểm DMS (7 nhóm, không viền hàm), trái/phải theo ảnh, config v3 | 07/10/2026 | QĐ-002 | Hiệu lực |
+| [QĐ-003](#qđ-003) | Định nghĩa 50 điểm DMS (7 nhóm, không viền hàm), trái/phải theo ảnh, config v3 | 07/10/2026 | QĐ-002 | Bị thay một phần bởi QĐ-004 (cách dựng label CVAT: bảy label theo nhóm, màu theo nhóm); phần còn lại hiệu lực |
+| [QĐ-004](#qđ-004) | Tách label `face50` thành bảy label skeleton theo nhóm, mỗi nhóm một màu (bảng màu hình minh hoạ DMS) | 07/10/2026 | QĐ-003 | Hiệu lực |
 
 **Trạng thái:** Hiệu lực · Bị thay bởi QĐ-xxx · Huỷ (ghi lý do)
 
@@ -95,6 +96,31 @@ cũ được gán theo cách cũ.
   - [ ] Dựng lại project/label CVAT bằng `config/face50_label.json` mới, file sao lưu task, QC theo tên mới (@P4)
   - [ ] Viết lại guideline gán tay theo DMS và quy ước bên theo ảnh; cột báo cáo `nme_per_face.csv` (@P5)
   - [ ] Cập nhật bản Claude Docs và `CLAUDE.md` (chủ repo)
+- **Trạng thái:** Bị thay một phần bởi QĐ-004 (cách dựng label CVAT: bảy label theo nhóm, màu theo nhóm); phần còn lại hiệu lực
+
+---
+
+## QĐ-004
+
+**Tách label `face50` thành bảy label skeleton theo nhóm, mỗi nhóm một màu (bảng màu hình minh hoạ DMS)**
+
+- **Ngày:** 07/10/2026
+- **Người tham gia:** chủ repo (chốt), P4, P5 (chờ duyệt)
+- **Xuất phát từ:** QĐ-003
+- **Bối cảnh:** QĐ-003 dựng MỘT label skeleton `face50` đủ 50 sublabel, tô sublabel theo bên của ảnh (L xanh dương, R đỏ, M xanh lá). Chủ repo gửi hình minh hoạ DMS tô theo nhóm, rồi chỉ ra trong CVAT ("Draw new skeleton") rằng mình muốn **mỗi nhóm một label riêng**, mỗi label một màu như hình, chứ không phải một label `face50` duy nhất.
+- **Các phương án đã cân nhắc:**
+  1. *Một skeleton `face50`, tô sublabel theo bên của ảnh (QĐ-003).* Bên trái/phải thấy ngay, nhưng bảy nhóm lẫn màu và người vẽ phải đặt 50 điểm một lượt. Loại.
+  2. *Một skeleton `face50`, chỉ đổi màu sublabel theo nhóm.* Giữ nguyên mọi chỗ "đúng một skeleton mỗi ảnh", nhưng CVAT vẫn chỉ có một label nên chấm màu của label và danh sách "Draw new skeleton" không theo nhóm; không đúng điều chủ repo yêu cầu. Loại (làm tạm trong buổi đầu của QĐ-004 rồi bỏ).
+  3. *Bảy label skeleton, mỗi nhóm một, tên label = tên nhóm, màu của label và của sublabel = màu nhóm.* **Chọn.** Đúng yêu cầu; cặp trái/phải của mắt và lông mày khác màu nên bên của ảnh vẫn nhìn ra; mỗi nhóm có khuôn svg riêng, co giãn kín khung nên dễ đặt hơn khuôn cả mặt.
+- **Quyết định:** bảy label `longmaytrai` #e74c3c, `longmayphai` #3498db, `songmui` #2ecc71, `mattrai` #e67e22, `matphai` #9b59b6, `moingoai` #1abc9c, `moitrong` #f1c40f (bảng `GROUP_COLOR` trong `tool/make_label.py`), 5 + 5 + 4 + 8 + 8 + 12 + 8 = 50 sublabel và 47 cạnh, mỗi sublabel vẫn kèm `low_conf`.
+  Tên sublabel giữ nguyên `<nhóm>_<k>` (50 tên khác nhau), thứ tự theo config; nhóm của một điểm suy ra từ tên (`cvat_io.group_of_name`). `config/face50_label.json` giữ tên file và được sinh lại. Khuôn svg của mỗi label là `tmpl` của chính nhóm, co giãn vào khung 0–100.
+  Mỗi mặt trong XML nháp và XML xuất có **bảy** `<skeleton>` (mỗi nhóm một, đúng điểm của nhóm). `cvat_io.merged_face` gom bảy skeleton lại thành một mặt 50 điểm; `push`, `collect`, `eval50`, `cvat_smoke` và QC đều đòi đúng một skeleton cho mỗi nhóm. Project CVAT còn label `face50` cũ bị `push` từ chối với thông báo nói rõ. Hình minh hoạ có khung "head (ước lượng minh hoạ)": đó chỉ là hình vẽ, **không** thêm khung đầu vào label hay config.
+  Ảnh chồng (`overlays`, trang rà soát) cũng tô chấm theo màu nhóm để giống CVAT; vì màu đỏ/xanh cũ không còn dành cho low_conf, điểm `low_conf` là chấm to hơn có vòng trắng (`tool/m28core/mau_nhom.py`, một nguồn màu cho label, ảnh chồng và chú giải).
+- **Cái giá:** người gán tay vẽ 7 skeleton mỗi mặt thay vì 1 (thêm thao tác chọn label), nên thời gian gán tay có thể đổi so với kế hoạch gốc. Hai điều kiện thí nghiệm bấm giờ dùng chung một cách dựng nên so sánh vẫn công bằng, nhưng P5 cần biết trước buổi ghép cặp 14–15/10 và có thể đo lại thời gian một mặt gán tay.
+- **Việc phải làm theo:**
+  - [ ] Dựng lại project/label CVAT bằng `config/face50_label.json` mới: CVAT lưu label và màu lúc tạo, project cũ giữ label `face50`; task dựng từ label cũ và file sao lưu của chúng phải làm lại (@P4 và mỗi người có CVAT riêng)
+  - [ ] Chạy mục kiểm tra nhanh CVAT (`chay.bat`, mục 4) trên CVAT thật: lần đầu thử bảy label, nhập XML bảy skeleton và xuất lại (@P4)
+  - [ ] Cập nhật guideline gán tay: mỗi mặt chọn lần lượt bảy label, mỗi lần đặt đủ điểm của nhóm (@P5)
 - **Trạng thái:** Hiệu lực
 
 ## Mẫu để copy

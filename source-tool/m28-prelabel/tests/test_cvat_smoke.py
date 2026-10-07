@@ -195,7 +195,7 @@ def test_existing_project_with_missing_sublabels_is_not_touched(cvat):
     n0 = seed_project(cvat, project_missing_sublabels=3)
     code, rep, st = go(cvat)
     assert code == 1 and st[5]['ket_qua'] == 'HỎNG' and 'sublabel' in st[5]['ghi_chu'] and 'KHÔNG sửa' in st[5]['ghi_chu']
-    assert len(cvat.load()['projects']) == 1 and len(cvat.load()['projects'][0]['labels'][0]['sublabels']) == 47
+    assert len(cvat.load()['projects']) == 1 and sum(len(lb['sublabels']) for lb in cvat.load()['projects'][0]['labels']) == 29
     assert ncalls(cvat, 'Project.remove', n0) == 0 and ncalls(cvat, 'projects.create', n0) == 0 and ncalls(cvat, 'tasks.create_from_data') == 0
     assert st[12]['ket_qua'] == 'BỎ QUA' or 'giữ nguyên' in st[12]['ghi_chu']
 

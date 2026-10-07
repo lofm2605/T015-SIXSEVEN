@@ -112,19 +112,22 @@ def analyze(xml_bytes, point_names, tay_nhap=None):
     tay_nhap (tên file các mặt Gán tay có nháp, từ push.json bản 2): thêm n_low_on_nhan / n_low_on_tay (low_conf bật ở mặt Gán tay có nháp)."""
     ann = io_.parse_annotations(xml_bytes)
     need = set(point_names)
+    groups = io_.groups_from_names(point_names)
     n_face = n_full = miss = low_on = low_tay = 0
     gan = set(tay_nhap or ())
     for name, im in ann.items():
-        for sk in im["skeletons"]:
-            n_face += 1
-            have = {n for n, p in sk["points"].items() if p.get("x") is not None}
-            if have == need:
-                n_full += 1
-            miss += len(need - have)
-            k = sum(1 for p in sk["points"].values() if p.get("low_conf") == "true")
-            low_on += k
-            if name in gan:
-                low_tay += k
+        sks = [s for s in im["skeletons"] if s["label"] in groups]        # mỗi mặt có bảy skeleton (mỗi nhóm một, QĐ-004): gộp điểm của cả bảy
+        if not sks:
+            continue
+        n_face += 1
+        have = {n for sk in sks for n, p in sk["points"].items() if p.get("x") is not None and n in need}
+        if have == need:
+            n_full += 1
+        miss += len(need - have)
+        k = sum(1 for sk in sks for p in sk["points"].values() if p.get("low_conf") == "true")
+        low_on += k
+        if name in gan:
+            low_tay += k
     res = dict(n_images=len(ann), n_face=n_face, n_full=n_full, n_missing=miss, n_low_on=low_on)
     if tay_nhap is not None:
         res.update(n_low_on_nhan=low_on - low_tay, n_low_on_tay=low_tay)

@@ -53,7 +53,7 @@ import cai_dat  # noqa: E402  (cài đặt dùng chung cả tiến trình: CVAT,
 import cai_dat_ui  # noqa: E402  (tab Cài đặt; không import gradio ở đầu module)
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
-from m28core import dang_chay, loai_tru  # noqa: E402  (khoá lượt; danh sách mặt xoá mềm excluded.txt)
+from m28core import dang_chay, loai_tru, mau_nhom  # noqa: E402  (khoá lượt; danh sách mặt xoá mềm excluded.txt)
 from m28core.steps import DECISIONS, _stem  # noqa: E402  (dùng chung quy ước tên/quyết định với push)
 from nap_anh import NO_FACE_VI, RunError  # noqa: E402,F401  (RunError dùng chung với nap_anh)
 
@@ -84,7 +84,7 @@ THUMB = 176          # cạnh ảnh nhỏ gồm cả viền (px)
 BORDER = 6           # bề dày viền trạng thái vẽ thẳng vào ảnh nhỏ
 STATUS_COLOR = {"": "#9ca3af", "nhan": "#16a34a", "gan_tay": "#d97706", "bo": "#dc2626"}
 STATUS_LETTER = {"": "", "nhan": "N", "gan_tay": "G", "bo": "B"}
-RED, GREEN = (255, 0, 0), (0, 200, 0)     # như steps.overlays (BGR 0,0,255 và 0,200,0), ở đây là RGB
+# màu và kiểu chấm của ảnh chồng nằm ở m28core/mau_nhom.py (cùng nguồn với steps.overlays và label CVAT)
 NOTEBOOK_VARS = ("COLAB_RELEASE_TAG", "COLAB_GPU", "KAGGLE_KERNEL_RUN_TYPE", "SPACE_ID")
 VI_USAGE = ("Cách dùng: python tool\\review_app.py <thư mục lượt chạy> <người rà>, ví dụ python tool\\review_app.py runs\\R1610 P5; "
             "chưa có lượt nào thì python tool\\review_app.py --nap <người rà> (chỉ tab Nạp ảnh), ví dụ python tool\\review_app.py --nap P5")
@@ -544,11 +544,12 @@ def _font(size, bold=False):
     return _FONTS[key]
 
 
-def _text_at(draw, xy, text, fill, font, anchor):
+def _text_at(draw, xy, text, fill, font, anchor, stroke=None):
+    kw = dict(stroke_width=1, stroke_fill=stroke) if stroke else {}        # stroke: viền chữ cho đọc được trên mọi nền
     try:
-        draw.text(xy, text, fill=fill, font=font, anchor=anchor)
+        draw.text(xy, text, fill=fill, font=font, anchor=anchor, **kw)
     except ValueError:                                    # phông bitmap cũ không hỗ trợ anchor
-        draw.text(xy, text, fill=fill, font=font)
+        draw.text(xy, text, fill=fill, font=font, **kw)
 
 
 def _save(img, path, fmt, **kw):
@@ -583,21 +584,44 @@ def _mp50(run_dir):
     return _MP50[p][1]
 
 
-def _redraw_overlay(face, run_dir, pts):
-    """Vẽ lại ảnh chồng như steps.overlays: chấm bán kính 3 (đỏ = low_conf, xanh = ổn) và số thứ tự i+1."""
+def _style_mtime():
+    """Giờ sửa của mau_nhom.py: ảnh chồng cũ hơn mốc này là ảnh vẽ kiểu cũ (một màu xanh/đỏ), trang vẽ lại tạm theo màu nhóm."""
+    try:
+        return os.path.getmtime(mau_nhom.__file__)
+    except OSError:
+        return 0.0
+
+
+def _pil_dot(d, x, y, rgb, low):
+    """Chấm cùng kiểu với steps.overlays: ổn = chấm bán kính R_OK viền tối; low_conf = chấm to có vòng trắng dày và viền tối."""
+    cx, cy = int(round(x)), int(round(y))
+    if low:
+        r = mau_nhom.R_LOW
+        ring = r + mau_nhom.RING_LOW
+        d.ellipse([cx - ring - 1, cy - ring - 1, cx + ring + 1, cy + ring + 1], fill=mau_nhom.DARK)
+        d.ellipse([cx - ring, cy - ring, cx + ring, cy + ring], fill=mau_nhom.WHITE)
+    else:
+        r = mau_nhom.R_OK
+        d.ellipse([cx - r - 1, cy - r - 1, cx + r + 1, cy + r + 1], fill=mau_nhom.DARK)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=rgb)
+
+
+def _redraw_overlay(face, run_dir, pts, names=None):
+    """Vẽ lại ảnh chồng như steps.overlays: chấm màu nhóm (tên điểm `names` thuộc nhóm nào; không có thì đỏ = low_conf, xanh = ổn như bản cũ), low_conf to hơn có vòng trắng,
+    kèm số thứ tự i+1. Ảnh đã vẽ cũ hơn mau_nhom.py thì vẽ lại (bản vẽ kiểu cũ còn nằm trong _tmp)."""
     from PIL import Image, ImageDraw
     out = _tmp(run_dir, "overlays", face.name + ".png")
-    src_m = max(os.path.getmtime(face.crop), os.path.getmtime(os.path.join(run_dir, "map50", "mp50.json")))
+    src_m = max(os.path.getmtime(face.crop), os.path.getmtime(os.path.join(run_dir, "map50", "mp50.json")), _style_mtime())
     if os.path.exists(out) and os.path.getmtime(out) >= src_m:
         return out
     img = Image.open(face.crop).convert("RGB")
     d = ImageDraw.Draw(img)
     font = _font(10)
     for i, (x, y) in enumerate(pts):
-        col = RED if face.flags[i] else GREEN
-        cx, cy = int(round(x)), int(round(y))
-        d.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=col)
-        _text_at(d, (int(x) + 4, int(y) - 3), str(i + 1), col, font, "ls")
+        low = bool(face.flags[i])
+        col = mau_nhom.dot_rgb(mau_nhom.group_of(names[i]) if names and i < len(names) else None, low)
+        _pil_dot(d, x, y, col, low)
+        _text_at(d, (int(x) + (8 if low else 4), int(y) - 3), str(i + 1), col, font, "ls", stroke=mau_nhom.DARK)
     _save(img, out, "PNG")
     return out
 
@@ -639,6 +663,22 @@ def _placeholder(run_dir):
     return out
 
 
+def _recolored(face, run_dir):
+    """Ảnh chồng của lượt chuẩn bị TRƯỚC khi có màu theo nhóm (file cũ hơn mau_nhom.py, một màu xanh/đỏ): vẽ lại tạm vào _tmp theo màu nhóm để giống CVAT,
+    không đụng file gốc, không cảnh báo. Chỉ khi tên điểm trong mp50.json đều thuộc nhóm đã biết (lượt tên cũ pNN giữ nguyên ảnh). Không vẽ được thì None."""
+    try:
+        if not (face.has_draft and face.crop and os.path.isfile(face.crop) and _img_ok(face.crop)):
+            return None
+        if os.path.getmtime(face.overlay) >= _style_mtime():
+            return None
+        orig = (_mp50(run_dir) or {}).get(face.name, {}).get("orig")
+        if not orig or len(orig) != len(face.flags) or not mau_nhom.all_grouped(orig.keys()):
+            return None
+        return _redraw_overlay(face, run_dir, list(orig.values()), list(orig.keys()))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def overlay_for(face, run_dir):
     """(đường dẫn ảnh lớn, cảnh báo|None).
     Có overlays/<tên>.png đọc được thì dùng; thiếu hoặc hỏng mà có ảnh cắt và mp50.json thì vẽ lại vào runs/<run>/_tmp/overlays/
@@ -646,7 +686,7 @@ def overlay_for(face, run_dir):
     bad = False
     if face.overlay and os.path.isfile(face.overlay):
         if _img_ok(face.overlay):
-            return face.overlay, None
+            return _recolored(face, run_dir) or face.overlay, None
         bad = True
     crop_ok = bool(face.crop and os.path.isfile(face.crop) and _img_ok(face.crop))
     if not face.has_draft:
@@ -659,7 +699,7 @@ def overlay_for(face, run_dir):
         if orig and len(list(orig.values())) == len(face.flags):
             try:
                 what = "hỏng" if bad else "thiếu"
-                return (_redraw_overlay(face, run_dir, list(orig.values())),
+                return (_redraw_overlay(face, run_dir, list(orig.values()), list(orig.keys())),
                         f"Ảnh chồng overlays/{face.file} {what}: trang vẽ lại tạm từ ảnh cắt và mp50.json "
                         f"(chạy lại prepare --force overlays để sửa hẳn)." if bad else
                         f"Thiếu overlays/{face.file}: ảnh chồng này do trang vẽ lại tạm từ ảnh cắt và mp50.json.")
@@ -1016,8 +1056,14 @@ KEYS_HTML = ('<div class="m28-keys"><b>Chỉ mở một tab. Chọn lý do (nế
              '<kbd>N</kbd> Nhận · <kbd>G</kbd> Gán tay · <kbd>B</kbd> Bỏ ảnh · '
              '<kbd>Z</kbd> Hoàn tác · <kbd>K</kbd> Ca khó · <kbd>←</kbd> <kbd>→</kbd> Trước/Sau · <kbd>0</kbd>–<kbd>8</kbd> chọn lý do '
              '(0 = không)</div>')
-LEGEND_HTML = ('<div class="m28-legend"><span><i class="dot red"></i>chấm đỏ = low_conf (nhìn kỹ)</span>'
-               '<span><i class="dot green"></i>chấm xanh = ổn</span></div>')
+def _legend_html():
+    """Chú giải ảnh chồng: màu chấm = nhóm (đúng màu label trên CVAT, lấy từ mau_nhom.GROUP_COLOR); chấm to có vòng trắng = low_conf."""
+    chips = "".join('<span><i class="dot" style="background:%s"></i>%s</span>' % (mau_nhom.GROUP_COLOR[g], mau_nhom.GROUP_VI[g]) for g in mau_nhom.GROUP_COLOR)
+    return ('<div class="m28-legend">' + chips + '<span><i class="dot ring"></i><b>chấm to có vòng trắng = low_conf (nhìn kỹ)</b></span>'
+            '<span class="m28-sub">trái/phải theo ảnh</span></div>')
+
+
+LEGEND_HTML = _legend_html()
 
 CSS = """
 /* Màu lấy từ biến của theme Gradio nên chế độ tối không hỏng; màu trạng thái dùng nền trong suốt. */
@@ -1103,7 +1149,7 @@ CSS = """
 #big img { width: 100% !important; height: 100% !important; object-fit: contain !important; }
 .m28-legend { display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 13px; color: var(--body-text-color-subdued); }
 .m28-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
-.m28-legend .red { background: #ef0000; } .m28-legend .green { background: #00c800; }
+.m28-legend .ring { width: 12px; height: 12px; margin-right: 4px; background: #9ca3af; border: 3px solid #fff; box-shadow: 0 0 0 1px #141414; vertical-align: -3px; }
 
 #decide { gap: 10px; flex-wrap: nowrap; }
 #decide button { min-height: 56px; font-size: 18px; font-weight: 800; min-width: 0 !important; color: #fff; }
@@ -1188,8 +1234,8 @@ kbd { display: inline-block; min-width: 20px; padding: 0 5px; text-align: center
   background: color-mix(in srgb, var(--block-background-fill) 90%, transparent) !important; color: var(--body-text-color) !important; }
 #nap-btns { gap: 10px; flex-wrap: wrap; }
 #nap-btns button { min-height: 48px; font-size: 16px; font-weight: 800; min-width: 140px !important; }
-#nap-start:not(:disabled) { background: #16a34a !important; border-color: #15803d !important; color: #fff !important; }
-#nap-start:disabled, #nap-retry:disabled, #nap-cancel:disabled, #nap-go:disabled { opacity: .45; cursor: not-allowed; }
+#nap-start:not(:disabled), #nap-start-open:not(:disabled) { background: #1677ff !important; border-color: #0f5fd1 !important; color: #fff !important; }
+#nap-start:disabled, #nap-start-open:disabled, #nap-retry:disabled, #nap-cancel:disabled, #nap-go:disabled { opacity: .45; cursor: not-allowed; }
 #nap-retry { background: var(--background-fill-secondary) !important; color: var(--body-text-color) !important;
   border: 1px solid var(--border-color-primary) !important; }
 #nap-go { min-height: 56px; font-size: 18px; font-weight: 800; }
@@ -1497,6 +1543,7 @@ class AppCtx:
     push_pending: object = None        # dot_anh.Pending: yêu cầu xác nhận đẩy (mã ngẫu nhiên)
     dot_pending: object = None         # dot_anh.Pending: yêu cầu xác nhận xoá ở tab Các đợt
     switch_to: object = None           # (run_dir, Store) khi bấm "Rà lượt này"
+    auto_open: object = None           # tên lượt vừa bấm "Nạp & Mở": chuẩn bị xong thì tự làm như bấm "Rà lượt này" (một lần)
     closing: bool = False              # đã xác nhận "Đóng trang rà soát" (một lần duy nhất cho mọi tab): mọi handler ghi từ chối
     close_lock: object = dataclasses.field(default_factory=threading.Lock, repr=False)
     demo: object = None
@@ -1564,9 +1611,12 @@ def _nap_tab(gr, demo, store, ctx):
     note_tb = gr.Textbox(label=f"Ghi chú về đợt này (không bắt buộc, tối đa {nap_anh.NOTE_MAX} ký tự)", max_length=nap_anh.NOTE_MAX, lines=2,
                          max_lines=4, elem_id="nap-ghichu", placeholder="Ví dụ: ảnh buổi sáng, camera cửa vào")
     with gr.Row(elem_id="nap-btns"):
-        b_start = gr.Button("Bắt đầu chuẩn bị", variant="primary", elem_id="nap-start", interactive=False)
+        b_start_open = gr.Button("Nạp & Mở", variant="primary", elem_id="nap-start-open", interactive=False)
+        b_start = gr.Button("Nạp & Tiếp tục", variant="primary", elem_id="nap-start", interactive=False)
         b_cancel = gr.Button("Huỷ", variant="stop", elem_id="nap-cancel", interactive=False)
         b_retry = gr.Button("Thử lại", elem_id="nap-retry", interactive=False)
+    gr.HTML('<div class="nap-note"><b>Nạp &amp; Mở</b>: chuẩn bị xong thì tự mở trang rà soát lượt này. <b>Nạp &amp; Tiếp tục</b>: chuẩn bị xong vẫn ở lại tab này '
+            '(để nạp thêm đợt khác, rồi bấm <b>Rà lượt này</b> khi cần).</div>', elem_id="nap-btn-note", apply_default_css=False)
     msg = gr.HTML(elem_id="nap-msg", apply_default_css=False)
     prog = gr.HTML(elem_id="nap-prog", apply_default_css=False)
     log_tb = gr.Textbox(label="Log prepare", lines=10, max_lines=14, interactive=False, autoscroll=True, elem_id="nap-log")
@@ -1578,7 +1628,7 @@ def _nap_tab(gr, demo, store, ctx):
     plan_state = gr.State(None)
 
     opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1)
-    job_outs = [prog, log_tb, summary, b_start, b_cancel, b_retry, b_go, old_note, timer]
+    job_outs = [prog, log_tb, summary, b_start_open, b_start, b_cancel, b_retry, b_go, old_note, timer]
 
     def note_old():
         """Ghi chú về lượt đang rà dở (nằm cạnh nút Rà lượt này)."""
@@ -1606,8 +1656,8 @@ def _nap_tab(gr, demo, store, ctx):
             extra = nap_anh.failure_html(snap)
         running = st == "dang_chay"
         usable = not ctx.layout_error and not env["errs"]
-        return (nap_anh.progress_html(snap, prog_v) if prog_v else "", "\n".join(snap["lines"]), extra,
-                gr.update(interactive=usable and n_ok > 0 and not running),
+        can_start = gr.update(interactive=usable and n_ok > 0 and not running)
+        return (nap_anh.progress_html(snap, prog_v) if prog_v else "", "\n".join(snap["lines"]), extra, can_start, can_start,
                 gr.update(interactive=running and not snap.get("cancelling")),
                 gr.update(interactive=usable and st in ("loi", "da_huy") and not running),
                 gr.update(interactive=go_ok and not running), note_old(), gr.Timer(active=running))
@@ -1639,10 +1689,11 @@ def _nap_tab(gr, demo, store, ctx):
         plan = plan_st["plan"] if plan_st else None
         items = nap_anh.gallery_items(plan, thumb_dir)
         usable = not ctx.layout_error and not env["errs"]
-        return (plan_st, gr.update(value=items, visible=bool(items)), nap_anh.rejected_html(plan), nap_anh.count_html(plan),
-                gr.update(interactive=usable and bool(plan and plan["ok"]) and not job.running))
+        can_start = gr.update(interactive=usable and bool(plan and plan["ok"]) and not job.running)
+        return (plan_st, gr.update(value=items, visible=bool(items)), nap_anh.rejected_html(plan), nap_anh.count_html(plan), can_start, can_start)
 
-    def on_start(files, name, note, plan_st):
+    def start(files, name, note, plan_st, open_after):
+        """Chung cho Nạp & Tiếp tục (open_after=False) và Nạp & Mở (True: chuẩn bị xong thì tự mở trang rà soát, xem on_auto_open)."""
         def refuse(text):
             gr.Warning(text, title="Chưa bắt đầu được")
             return ((gr.update(), plan_st, gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), box(text, "warn"))
@@ -1663,10 +1714,18 @@ def _nap_tab(gr, demo, store, ctx):
             job.start(run, ctx.runs_root, ctx.project_root)
         except RunError as e:
             return refuse(str(e))
-        text = f"Đã nạp {len(plan_st['plan']['ok'])} ảnh vào runs\\{run}\\inbox, đang chạy prepare."
+        ctx.auto_open = run if open_after else None
+        text = (f"Đã nạp {len(plan_st['plan']['ok'])} ảnh vào runs\\{run}\\inbox, đang chạy prepare"
+                + (": xong thì trang tự mở rà soát lượt này." if open_after else "."))
         return ((gr.update(value=None), None, gr.update(value=[], visible=False), "", nap_anh.count_html(None),
                  gr.update(value="", placeholder=nap_anh.next_run_name(ctx.runs_root)), gr.update(value=""), box(text, "ok"))
                 + job_update(job.snapshot(), 0))
+
+    def on_start(files, name, note, plan_st):
+        return start(files, name, note, plan_st, False)
+
+    def on_start_open(files, name, note, plan_st):
+        return start(files, name, note, plan_st, True)
 
     def on_retry(plan_st):
         def refuse(text):
@@ -1692,6 +1751,7 @@ def _nap_tab(gr, demo, store, ctx):
 
     def on_cancel(plan_st):
         job.cancel()
+        ctx.auto_open = None
         return (box("Đã huỷ prepare." if job.state == "da_huy" else "", "warn"),) + job_update(job.snapshot(), n_ok_of(plan_st))
 
     def on_go(plan_st):
@@ -1711,7 +1771,7 @@ def _nap_tab(gr, demo, store, ctx):
         if snap["state"] == "dang_chay":
             return refuse(f"Đang chuẩn bị lượt {snap['run']}: chờ xong hoặc bấm Huỷ.")
         if snap["state"] != "xong":
-            return refuse("Chưa chuẩn bị xong lượt nào: bấm Bắt đầu chuẩn bị (hoặc Thử lại) và chờ xong.")
+            return refuse("Chưa chuẩn bị xong lượt nào: bấm Nạp & Mở hoặc Nạp & Tiếp tục (hoặc Thử lại) và chờ xong.")
         res = nap_anh.read_prepare_result(snap["run_dir"], _read_no_face)
         if not res["n_queue"]:
             return refuse("Lượt này không có mặt nào để rà.")
@@ -1724,15 +1784,26 @@ def _nap_tab(gr, demo, store, ctx):
         threading.Timer(0.8, lambda: demo.close(verbose=False)).start()
         return box(f"Đang chuyển sang lượt {snap['run']}: trang mất kết nối 1–3 giây rồi tự tải lại.", "ok"), "Rà soát M28 · " + snap["run"]
 
+    def on_auto_open(plan_st):
+        """Chạy mỗi nhịp của đồng hồ: lượt vừa bấm Nạp & Mở chuẩn bị xong thì làm đúng như bấm Rà lượt này (on_go: mọi kiểm tra vẫn nguyên). Một lần duy nhất;
+        lỗi, huỷ hoặc không có mặt nào để rà thì thôi, bấm Rà lượt này tay khi cần."""
+        act = nap_anh.auto_open_action(ctx.auto_open, job.snapshot())
+        if act in ("none", "wait"):
+            return gr.skip(), ""
+        ctx.auto_open = None
+        return on_go(plan_st) if act == "go" else (gr.skip(), "")
+
     start_outs = [drop, plan_state, gal, rej, count, name_tb, note_tb, msg] + job_outs
     nap = dict(opts, concurrency_id="nap")
     nap_load = (on_load, [plan_state], [env_html, name_tb] + job_outs, dict(opts, concurrency_id="nap"))
     demo.load(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])
-    drop.change(on_files, [drop, plan_state], [plan_state, gal, rej, count, b_start], **nap)
+    drop.change(on_files, [drop, plan_state], [plan_state, gal, rej, count, b_start_open, b_start], **nap)
     b_start.click(on_start, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
+    b_start_open.click(on_start_open, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
     b_retry.click(on_retry, [plan_state], [msg] + job_outs, **nap)
     b_cancel.click(on_cancel, [plan_state], [msg] + job_outs, **dict(opts, concurrency_id="nap_huy"))
     timer.tick(on_tick, [plan_state], job_outs, **dict(opts, concurrency_id="nap_tick"))
+    timer.tick(on_auto_open, [plan_state], [msg, target], **dict(opts, concurrency_id="nap_tick")).then(None, [target], None, js=NAP_SWITCH_JS)
     b_go.click(on_go, [plan_state], [msg, target], **nap).then(None, [target], None, js=NAP_SWITCH_JS)
     return nap_load                         # build_ui gọi lại khi chọn tab Nạp ảnh: model/cấu hình vừa cài ở tab Cài đặt có hiệu lực ngay
 

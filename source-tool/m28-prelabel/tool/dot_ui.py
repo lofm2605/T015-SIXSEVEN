@@ -37,6 +37,11 @@ CSS = """
 .push-why { margin-top: 0; }
 .push-cause { margin-top: 6px; overflow-wrap: anywhere; }
 .push-link { overflow-wrap: anywhere; }
+.push-open { margin: 8px 0 2px; }
+.push-open-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 22px; border-radius: 8px; font-size: 16px;
+  font-weight: 700; text-decoration: none !important; color: #fff !important; background: #1677ff; border: 1px solid #0f5fd1; cursor: pointer; }
+.push-open-btn:hover { background: #0f5fd1; }
+.push-open-btn:focus-visible { outline: 3px solid #1677ff; outline-offset: 2px; }
 #push-log textarea { font-family: var(--font-mono); font-size: 12px; line-height: 1.35; }
 .push-done .m28-info { margin: 6px 0; }
 /* ---------- hộp xác nhận (modal) ---------- */

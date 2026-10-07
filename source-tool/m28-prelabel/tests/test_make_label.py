@@ -1,4 +1,5 @@
-"""Thử tool/make_label.py: label skeleton face50 sinh từ config/m28_config.json version 3 (50 điểm DMS: đúng 50 điểm, cạnh theo nhóm, màu theo bên của ảnh, không có id).
+"""Thử tool/make_label.py: BẢY label skeleton (mỗi nhóm của 50 điểm DMS một label, QĐ-004) sinh từ config/m28_config.json version 3
+(đúng 50 điểm tên mới, cạnh theo nhóm, màu theo nhóm, không có id, khuôn svg riêng từng nhóm).
 
 Định dạng bám mã nguồn CVAT v2.77.0 nhưng CHƯA thử trên server CVAT thật (xem README, mục Rủi ro).
 """
@@ -15,6 +16,11 @@ sys.path.insert(0, os.path.join(HERE, '..', 'tool'))
 import make_label  # noqa: E402
 
 CONFIG = os.path.join(HERE, '..', 'config', 'm28_config.json')
+GROUPS = ['longmaytrai', 'longmayphai', 'songmui', 'mattrai', 'matphai', 'moingoai', 'moitrong']
+COUNTS = [5, 5, 4, 8, 8, 12, 8]
+# bảng màu của hình minh hoạ DMS (chủ repo, 7/10/2026): mã đọc từ ký hiệu chú giải của hình
+FIGURE = {'matphai': '#9b59b6', 'longmaytrai': '#e74c3c', 'songmui': '#2ecc71', 'longmayphai': '#3498db',
+          'moitrong': '#f1c40f', 'mattrai': '#e67e22', 'moingoai': '#1abc9c'}
 
 
 @pytest.fixture(scope='module')
@@ -24,10 +30,10 @@ def cfg():
 
 
 @pytest.fixture(scope='module')
-def label(cfg):
-    labels = make_label.build_labels(cfg)
-    assert len(labels) == 1
-    return labels[0]
+def labels(cfg):
+    out = make_label.build_labels(cfg)
+    assert len(out) == 7
+    return out
 
 
 def walk(o):
@@ -40,35 +46,40 @@ def walk(o):
             yield from walk(v)
 
 
-def test_one_skeleton_label_with_50_sublabels_in_config_order(cfg, label):
-    assert label['name'] == 'face50' and label['type'] == 'skeleton' and label['attributes'] == []
-    assert [s['name'] for s in label['sublabels']] == [p['name'] for p in cfg['points']]
-    assert len(label['sublabels']) == 50
-    assert all(s['type'] == 'points' for s in label['sublabels'])
+def test_seven_skeleton_labels_one_per_group_with_50_sublabels_in_config_order(cfg, labels):
+    assert [lb['name'] for lb in labels] == GROUPS                                              # tên label = tên nhóm, thứ tự nhóm của config
+    assert all(lb['type'] == 'skeleton' and lb['attributes'] == [] for lb in labels)
+    assert [len(lb['sublabels']) for lb in labels] == COUNTS and sum(COUNTS) == 50
+    assert [s['name'] for lb in labels for s in lb['sublabels']] == [p['name'] for p in cfg['points']]   # 50 tên theo thứ tự config, mỗi tên đúng một lần
+    assert all(s['type'] == 'points' for lb in labels for s in lb['sublabels'])
+    for lb in labels:                                                                           # mỗi skeleton chỉ có điểm của nhóm mình
+        assert {make_label.groups_of(cfg['points'])[lb['name']][i]['name'] for i in range(len(lb['sublabels']))} == {s['name'] for s in lb['sublabels']}
+        assert all(s['name'].rsplit('_', 1)[0] == lb['name'] for s in lb['sublabels'])
+    assert 'face50' not in [lb['name'] for lb in labels]                                        # không còn label một-skeleton cũ
 
 
-def test_each_sublabel_has_one_low_conf_checkbox(label):
-    for s in label['sublabels']:
-        assert len(s['attributes']) == 1
-        a = s['attributes'][0]
-        assert (a['name'], a['input_type'], a['mutable'], a['default_value'], a['values']) == ('low_conf', 'checkbox', True, 'false', ['false'])
+def test_each_sublabel_has_one_low_conf_checkbox(labels):
+    for lb in labels:
+        for s in lb['sublabels']:
+            assert len(s['attributes']) == 1
+            a = s['attributes'][0]
+            assert (a['name'], a['input_type'], a['mutable'], a['default_value'], a['values']) == ('low_conf', 'checkbox', True, 'false', ['false'])
 
 
-def test_no_id_keys_anywhere_and_no_label_id_in_svg(label):
-    assert not [d for d in walk(label) if 'id' in d]
-    assert 'data-label-id' not in label['svg']
+def test_no_id_keys_anywhere_and_no_label_id_in_svg(labels):
+    assert not [d for lb in labels for d in walk(lb) if 'id' in d]
+    assert all('data-label-id' not in lb['svg'] for lb in labels)
 
 
-def test_colors_follow_side_of_the_image(cfg, label):
-    for p, s in zip(cfg['points'], label['sublabels']):
-        assert s['color'] == make_label.SIDE_COLOR[p['side']]
-    assert len({s['color'] for s in label['sublabels']}) == 3
-    col = {s['name']: s['color'] for s in label['sublabels']}
-    # quy ước theo ảnh: nhóm *trai (nửa trái ảnh, side L) một màu, *phai (nửa phải ảnh, side R) màu khác, sống mũi (M) màu thứ ba
-    assert {col[f'mattrai_{k}'] for k in range(1, 9)} == {col['longmaytrai_1']} == {make_label.SIDE_COLOR['L']}
-    assert {col[f'matphai_{k}'] for k in range(1, 9)} == {col['longmayphai_1']} == {make_label.SIDE_COLOR['R']}
-    assert {col[f'songmui_{k}'] for k in range(1, 5)} == {col['moingoai_4']} == {col['moitrong_3']} == {make_label.SIDE_COLOR['M']}
-    assert col['moingoai_1'] == make_label.SIDE_COLOR['L'] and col['moingoai_7'] == make_label.SIDE_COLOR['R']
+def test_colors_follow_group_as_in_the_reference_figure(cfg, labels):
+    assert make_label.GROUP_COLOR == FIGURE                                                      # đúng bảng màu của hình, không màu nào khác
+    for lb in labels:
+        assert lb['color'] == FIGURE[lb['name']]                                                 # màu của chính label skeleton (chấm màu trong "Draw new skeleton")
+        assert {s['color'] for s in lb['sublabels']} == {FIGURE[lb['name']]}                     # mọi sublabel cùng màu nhóm
+    assert len({lb['color'] for lb in labels}) == 7                                              # bảy nhóm bảy màu khác nhau
+    # trái/phải của bức ảnh vẫn nhìn ra được vì hai nhóm của cặp khác màu: mắt cam / tím, lông mày đỏ / xanh dương
+    assert FIGURE['mattrai'] != FIGURE['matphai'] and FIGURE['longmaytrai'] != FIGURE['longmayphai']
+    assert [lb['color'] for lb in labels if lb['name'] == 'moingoai'] == ['#1abc9c']
 
 
 def svg_items(svg):
@@ -77,59 +88,62 @@ def svg_items(svg):
     return circles, lines
 
 
-def test_svg_nodes_use_label_name_in_config_order(cfg, label):
-    circles, _ = svg_items(label['svg'])
-    assert len(circles) == 50
-    for i, (p, c) in enumerate(zip(cfg['points'], circles), 1):
-        assert c['data-label-name'] == p['name']
-        assert c['data-type'] == 'element node' and c['data-element-id'] == str(i) and c['data-node-id'] == str(i)
-        assert 0 <= float(c['cx']) <= 100 and 0 <= float(c['cy']) <= 100
+def test_svg_nodes_use_label_name_in_group_order_numbered_within_the_skeleton(cfg, labels):
+    for lb in labels:
+        circles, _ = svg_items(lb['svg'])
+        assert len(circles) == len(lb['sublabels'])
+        for i, (s, c) in enumerate(zip(lb['sublabels'], circles), 1):
+            assert c['data-label-name'] == s['name']
+            assert c['data-type'] == 'element node' and c['data-element-id'] == str(i) and c['data-node-id'] == str(i)   # đếm từ 1 TRONG skeleton
+            assert 0 <= float(c['cx']) <= 100 and 0 <= float(c['cy']) <= 100
 
 
-def test_svg_only_uses_attributes_cvat_core_allows(label):
+def test_svg_template_is_the_group_shape_scaled_to_the_frame(cfg, labels):
+    """Khuôn mỗi label là tmpl của chính nhóm co giãn vào khung 0-100: hình đo được khác nhau giữa các nhóm và lấp đầy khung (không còn nằm lọt thỏm như khi cả mặt chung một khuôn)."""
+    for lb in labels:
+        circles, _ = svg_items(lb['svg'])
+        xs, ys = [float(c['cx']) for c in circles], [float(c['cy']) for c in circles]
+        assert max(max(xs) - min(xs), max(ys) - min(ys)) == pytest.approx(100 - 2 * make_label.MARGIN, abs=0.05), lb['name']
+    mattrai = {p['name']: p['tmpl'] for p in cfg['points'] if p['group'] == 'mattrai'}
+    circles, _ = svg_items([lb for lb in labels if lb['name'] == 'mattrai'][0]['svg'])
+    assert float(circles[0]['cx']) < float(circles[4]['cx']) and mattrai['mattrai_1'][0] < mattrai['mattrai_5'][0]       # khoé ngoài (trái ảnh) ở bên trái của khuôn
+
+
+def test_svg_only_uses_attributes_cvat_core_allows(labels):
     allowed = {'cx', 'cy', 'r', 'x1', 'y1', 'x2', 'y2', 'data-type', 'data-element-id', 'data-label-name', 'data-node-id',
                'data-node-from', 'data-node-to'}
-    circles, lines = svg_items(label['svg'])
-    for d in circles + lines:
-        assert set(d) <= allowed, set(d) - allowed
+    for lb in labels:
+        circles, lines = svg_items(lb['svg'])
+        for d in circles + lines:
+            assert set(d) <= allowed, set(d) - allowed
 
 
-def test_edge_count_matches_lines_and_closed(cfg, label):
-    _, lines = svg_items(label['svg'])
-    groups = {}
-    for p in cfg['points']:
-        if p.get('line'):
-            groups[p['line']] = groups.get(p['line'], 0) + 1
-    want = sum(n - 1 for n in groups.values()) + sum(1 for k in groups if cfg['lines'][k]['closed'])
-    assert len(lines) == want == 47                                  # mày 4 + 4, sống mũi 3, mắt 8 + 8, môi ngoài 12, môi trong 8 (vòng kín)
-    assert {g: n for g, n in groups.items()} == {'longmaytrai': 5, 'longmayphai': 5, 'songmui': 4, 'mattrai': 8, 'matphai': 8, 'moingoai': 12, 'moitrong': 8}
-    for e in lines:
-        assert 1 <= int(e['data-node-from']) <= 50 and 1 <= int(e['data-node-to']) <= 50
-        assert e['data-type'] == 'edge'
-    ids = {(int(e['data-node-from']), int(e['data-node-to'])) for e in lines}
-    assert len(ids) == len(lines)                                    # không cạnh trùng
+def test_edge_count_matches_lines_and_closed(cfg, labels):
+    total = 0
+    for lb, n in zip(labels, COUNTS):
+        _, lines = svg_items(lb['svg'])
+        closed = cfg['lines'][lb['name']]['closed']
+        want = n - 1 + (1 if closed and n > 2 else 0)
+        assert len(lines) == want, lb['name']
+        for e in lines:
+            assert 1 <= int(e['data-node-from']) <= n and 1 <= int(e['data-node-to']) <= n and e['data-type'] == 'edge'
+        ids = {(int(e['data-node-from']), int(e['data-node-to'])) for e in lines}
+        assert len(ids) == len(lines)                                                            # không cạnh trùng
+        assert all((k, k + 1) in ids for k in range(1, n))                                       # nối điểm liền nhau theo thứ tự
+        assert ((n, 1) in ids) == (closed and n > 2)                                             # mắt và môi đóng kín; mày và sống mũi hở
+        total += len(lines)
+    assert total == 47                                                                           # mày 4 + 4, sống mũi 3, mắt 8 + 8, môi ngoài 12, môi trong 8
+    assert len(make_label.edge_names(cfg['points'], cfg['lines'])) == 47
 
 
-def test_edges_connect_only_same_line_neighbours(cfg, label):
-    _, lines = svg_items(label['svg'])
-    pts = cfg['points']
-    for e in lines:
-        a, b = int(e['data-node-from']), int(e['data-node-to'])
-        assert pts[a - 1]['line'] == pts[b - 1]['line'] and pts[a - 1]['line']
-    first = {g: 1 + [p['name'] for p in pts].index(f'{g}_1') for g in make_label_groups(cfg)}          # số nút của điểm đầu mỗi nhóm
-    size = {g: sum(1 for p in pts if p['line'] == g) for g in first}
-    ids = {(int(e['data-node-from']), int(e['data-node-to'])) for e in lines}
-    for g, closed in (('mattrai', True), ('matphai', True), ('moingoai', True), ('moitrong', True), ('longmaytrai', False), ('longmayphai', False), ('songmui', False)):
-        a, b = first[g], first[g] + size[g] - 1
-        assert ((b, a) in ids) == closed, g                          # nhóm đóng: điểm cuối nối về điểm đầu (mắt, môi); mày và sống mũi hở
-        assert all((k, k + 1) in ids for k in range(a, b)), g        # mọi nhóm: nối điểm liền nhau theo thứ tự
-    for e in lines:                                                  # nhóm không nối với nhau (kể cả hai mắt, hai mày, môi ngoài với môi trong)
-        a, b = int(e['data-node-from']), int(e['data-node-to'])
-        assert pts[a - 1]['group'] == pts[b - 1]['group']
-
-
-def make_label_groups(cfg):
-    return list(dict.fromkeys(p['line'] for p in cfg['points']))
+def test_edges_connect_only_neighbours_inside_one_skeleton(cfg, labels):
+    names = {p['name']: p for p in cfg['points']}
+    edges = make_label.edge_names(cfg['points'], cfg['lines'])
+    for e in edges:
+        a, b = sorted(e)
+        assert names[a]['group'] == names[b]['group'] and names[a]['line'] == names[b]['line']   # nhóm không nối với nhau (hai mắt, hai mày, môi ngoài với môi trong)
+    assert frozenset(('mattrai_8', 'mattrai_1')) in edges and frozenset(('moitrong_8', 'moitrong_1')) in edges   # vòng kín
+    assert frozenset(('longmaytrai_5', 'longmaytrai_1')) not in edges and frozenset(('songmui_4', 'songmui_1')) not in edges   # đường hở
 
 
 def test_two_runs_give_identical_bytes(tmp_path):
@@ -143,7 +157,8 @@ def test_two_runs_give_identical_bytes(tmp_path):
 def test_committed_label_file_matches_config(cfg):
     path = os.path.join(HERE, '..', 'config', 'face50_label.json')
     if os.path.exists(path):
-        assert json.load(open(path, encoding='utf-8')) == make_label.build_labels(cfg)
+        got = json.load(open(path, encoding='utf-8'))
+        assert got == make_label.build_labels(cfg) and [lb['name'] for lb in got] == GROUPS
 
 
 def test_old_v2_config_is_rejected_with_a_clear_message(cfg):
@@ -170,6 +185,10 @@ def test_bad_configs_are_rejected(cfg):
     side['points'][0]['side'] = 'X'
     with pytest.raises(SystemExit, match='side'):
         make_label.build_labels(side)
+    nogroup = copy.deepcopy(cfg)
+    del nogroup['points'][3]['group']
+    with pytest.raises(SystemExit, match='group.*màu'):                                          # không có nhóm thì không có label và màu
+        make_label.build_labels(nogroup)
     notmpl = copy.deepcopy(cfg)
     del notmpl['points'][7]['tmpl']
     with pytest.raises(SystemExit, match='tmpl'):

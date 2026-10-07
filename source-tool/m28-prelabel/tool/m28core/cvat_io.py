@@ -237,28 +237,63 @@ def read_zip_annotations(zip_path):
         raise SystemExit(f"{zip_path} không phải file zip hợp lệ (tải về dở?).")
 
 
-def _skeleton_ok(im, need, n_points, want_flag=None):
-    """Ảnh có đúng một skeleton face50, đủ tên điểm; mọi low_conf thuộc ('true','false') (want_flag=None) hoặc đúng bằng want_flag."""
-    sk = [s for s in im["skeletons"] if s["label"] == "face50"]
-    if not (len(sk) == 1 and set(sk[0]["points"]) == need and len(sk[0]["points"]) == n_points):
+def group_of_name(point_name):
+    """Nhóm của một điểm = tên điểm bỏ `_<k>` cuối: tên điểm luôn là `<nhóm>_<k>` (make_config kiểm), và tên nhóm cũng là tên label skeleton trên CVAT (QĐ-004)."""
+    return str(point_name).rsplit("_", 1)[0]
+
+
+def groups_from_names(point_names):
+    """{nhóm: [tên điểm của nhóm theo thứ tự]} từ danh sách tên điểm, nhóm theo thứ tự xuất hiện."""
+    out = {}
+    for n in point_names:
+        out.setdefault(group_of_name(n), []).append(n)
+    return out
+
+
+def merged_face(im, groups):
+    """Gộp các skeleton của ảnh thành MỘT dict điểm nếu ảnh có ĐÚNG MỘT skeleton cho mỗi nhóm trong `groups` ({nhóm: [tên điểm]}) và mỗi skeleton có đúng
+    tên điểm của nhóm; trả (points, vấn đề). Không đủ nhóm, thừa skeleton cùng nhóm, hay tên điểm không khớp thì points = None và vấn đề nói rõ nhóm nào."""
+    by = {}
+    for s in im["skeletons"]:
+        by.setdefault(s["label"], []).append(s)
+    pts, bad = {}, []
+    for g, names in groups.items():
+        sk = by.get(g, [])
+        if len(sk) != 1:
+            bad.append(f"nhóm {g}: {len(sk)} skeleton (cần đúng 1)")
+        elif set(sk[0]["points"]) != set(names) or len(sk[0]["points"]) != len(names):
+            bad.append(f"nhóm {g}: {len(sk[0]['points'])}/{len(names)} điểm đúng tên")
+        else:
+            pts.update(sk[0]["points"])
+    extra = sorted(set(by) - set(groups))
+    if extra:
+        bad.append(f"có skeleton lạ {extra[:3]} (label không thuộc 7 nhóm)")
+    return (None if bad else pts), bad
+
+
+def _skeleton_ok(im, groups, want_flag=None):
+    """Ảnh có đúng một skeleton cho mỗi nhóm (label = tên nhóm), mỗi skeleton đủ tên điểm của nhóm; mọi low_conf thuộc ('true','false') (want_flag=None)
+    hoặc đúng bằng want_flag."""
+    pts, _bad = merged_face(im, groups)
+    if pts is None:
         return False
-    pts = sk[0]["points"].values()
-    return all(p["low_conf"] in ("true", "false") for p in pts) if want_flag is None else all(p["low_conf"] == want_flag for p in pts)
+    vals = pts.values()
+    return all(p["low_conf"] in ("true", "false") for p in vals) if want_flag is None else all(p["low_conf"] == want_flag for p in vals)
 
 
 def check_faces(ann, want_nhan, want_tay, point_names, want_tay_nhap=()):
     """So kết quả xuất với kế hoạch.
-    Nhận: đúng một skeleton face50 đủ điểm, low_conf là true/false. Gán tay có nháp (want_tay_nhap, một phần của want_tay): đúng một
-    skeleton face50 đủ điểm, MỌI low_conf == "true". Gán tay ảnh trống (want_tay trừ want_tay_nhap): 0 shape.
+    Nhận: mỗi nhóm đúng một skeleton (label = tên nhóm) đủ điểm của nhóm, low_conf là true/false. Gán tay có nháp (want_tay_nhap, một phần của want_tay): như vậy,
+    MỌI low_conf == "true". Gán tay ảnh trống (want_tay trừ want_tay_nhap): 0 shape. Nhóm suy từ tên điểm (`<nhóm>_<k>`).
     Trả dict(ok, n_nhan, n_day_du, thieu, thieu_anh, gan_tay_co_nhan (chỉ xét ảnh trống), n_tay_nhap, n_tay_nhap_day_du, tay_nhap_thieu)."""
-    need = set(point_names)
+    need = groups_from_names(point_names)
     nt = set(want_tay_nhap)
     thieu, full, thieu_anh = [], 0, []
     for name in want_nhan:
         im = ann.get(name)
         if im is None:
             thieu_anh.append(name)
-        elif _skeleton_ok(im, need, len(point_names)):
+        elif _skeleton_ok(im, need):
             full += 1
         else:
             thieu.append(name)
@@ -269,7 +304,7 @@ def check_faces(ann, want_nhan, want_tay, point_names, want_tay_nhap=()):
         im = ann.get(name)
         if im is None:
             thieu_anh.append(name)
-        elif _skeleton_ok(im, need, len(point_names), "true"):
+        elif _skeleton_ok(im, need, "true"):
             tay_nhap_full += 1
         else:
             tay_nhap_thieu.append(name)

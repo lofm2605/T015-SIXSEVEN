@@ -51,7 +51,7 @@ import make_label  # noqa: E402
 
 TASK = "demo-smoke"
 REVIEWER = "SMOKE"
-LABEL = "face50"
+# label trên CVAT: MỘT skeleton cho mỗi nhóm (tên label = tên nhóm, QĐ-004); label face50 một skeleton là bản CŨ
 SMOKE_DIR = "_smoke"
 MARKER = "dang_mo.json"
 WANT_SERVER = "2.77."
@@ -121,11 +121,10 @@ def compare_ann(ann, expect, names, local=False):
             got_size = None
         if got_size != e["size"]:
             bad.append(f"{name}: kích thước {got_size} khác ảnh đã sinh {e['size']}")
-        sks = im["skeletons"]
-        if len(sks) != 1 or sks[0]["label"] != LABEL:
-            bad.append(f"{name}: có {len(sks)} skeleton (cần đúng 1 {LABEL})")
+        pts, why = cvat_io.merged_face(im, cvat_io.groups_from_names(names))
+        if pts is None:
+            bad.append(f"{name}: {len(im['skeletons'])} skeleton, " + "; ".join(why[:2]))
             continue
-        pts = sks[0]["points"]
         if list(pts) != names:
             bad.append(f"{name}: tên/thứ tự điểm khác ({len(pts)} điểm, thiếu {len(set(names) - set(pts))})")
         wrong_low = 0
@@ -311,17 +310,15 @@ class Smoke:
             return HONG, "config\\face50_label.json khác bản sinh từ config\\m28_config.json: chạy python tool\\make_label.py rồi chạy lại."
         if [p["name"] for p in self.cfg["points"]] != self.names:
             return HONG, "tên/thứ tự 50 điểm trong face50_label.json khác m28_config.json: chạy python tool\\make_label.py."
-        lb = self.labels[0]
-        low = [s for s in lb["sublabels"] if any(a["name"] == "low_conf" and a["input_type"] == "checkbox" for a in s["attributes"])]
-        self.want_edges = {frozenset((self.names[a - 1], self.names[b - 1]))
-                           for a, b in make_label.edges_of(self.cfg["points"], self.cfg.get("lines") or {})}
+        low = [s for lb in self.labels for s in lb["sublabels"] if any(a["name"] == "low_conf" and a["input_type"] == "checkbox" for a in s["attributes"])]
+        self.want_edges = make_label.edge_names(self.cfg["points"], self.cfg.get("lines") or {})
         n_edge = len(self.want_edges)
-        n_svg = lb["svg"].count('data-type="edge"')
-        if len(low) != 50 or n_svg != n_edge:
-            return HONG, f"label có {len(low)}/50 sublabel kèm low_conf, {n_svg} cạnh (cần {n_edge})."
+        n_svg = sum(lb["svg"].count('data-type="edge"') for lb in self.labels)
+        if len(self.labels) != 7 or len(low) != 50 or n_svg != n_edge:
+            return HONG, f"{len(self.labels)} label (cần 7), {len(low)}/50 sublabel kèm low_conf, {n_svg} cạnh (cần {n_edge})."
         if not str(self.pipe["cvat_version"]).startswith(WANT_SERVER):
             return HONG, f"cvat_version trong config\\pipeline.json là {self.pipe['cvat_version']}, không phải {WANT_SERVER}x."
-        return DAT, f"label {LABEL}: 50 điểm kèm low_conf, {n_edge} cạnh khớp m28_config.json; cvat_version {self.pipe['cvat_version']}."
+        return DAT, f"{len(self.labels)} label skeleton theo nhóm: 50 điểm kèm low_conf, {n_edge} cạnh khớp m28_config.json; cvat_version {self.pipe['cvat_version']}."
 
     # --- bước 2 ---
     def s2(self):
@@ -442,28 +439,35 @@ class Smoke:
         self.project_created = not existed
         project = client.projects.retrieve(self.project_id)           # đọc lại từ server
         labels = list(project.get_labels())
-        top = [lb for lb in labels if push._lget(lb, "name") == LABEL and _text(push._lget(lb, "type")) == "skeleton"]
-        if len(top) != 1:
-            return HONG, f"project {name} có {len(top)} label {LABEL} kiểu skeleton (cần đúng 1)" + ("" if self.project_created else "; project có sẵn, KHÔNG sửa.")
-        lb = top[0]
-        subs = push._lget(lb, "sublabels") or [s for s in labels if push._lget(s, "has_parent") and push._lget(s, "parent_id") == push._lget(lb, "id")]
-        got = [push._lget(s, "name") for s in subs]
+        top = [lb for lb in labels if _text(push._lget(lb, "type")) == "skeleton"]
+        want = {lb["name"]: [s["name"] for s in lb["sublabels"]] for lb in self.labels}
+        keep = "" if self.project_created else " (project có sẵn: KHÔNG sửa, KHÔNG xoá)."
+        got_labels = [push._lget(lb, "name") for lb in top]
+        if sorted(got_labels) != sorted(want):
+            return HONG, f"project {name} có label skeleton {got_labels} (cần đúng {list(want)}, mỗi nhóm một)" + keep, None
         bad = []
-        if len(got) != 50:
-            bad.append(f"có {len(got)} sublabel (cần 50)")
-        elif got != self.names:
-            bad.append("tên đủ nhưng THỨ TỰ sublabel khác config (collect đọc theo tên nên dữ liệu không hỏng, nhưng CVAT hiển thị khác: báo P4)"
-                       if sorted(got) == sorted(self.names) else f"tên sublabel khác config ({len(set(self.names) - set(got))} tên thiếu)")
-        no_low = [push._lget(s, "name") for s in subs if not any(
-            push._lget(a, "name") == "low_conf" and _text(push._lget(a, "input_type")) == "checkbox" for a in (push._lget(s, "attributes") or []))]
-        if no_low:
-            bad.append(f"{len(no_low)} sublabel không có thuộc tính low_conf kiểu checkbox (ví dụ {no_low[:2]})")
-        bad += check_svg(push._lget(lb, "svg"), {push._lget(s, "id"): push._lget(s, "name") for s in subs if push._lget(s, "id") is not None},
-                         self.names, self.want_edges)
+        if got_labels != list(want):
+            bad.append("thứ tự LABEL khác config (CVAT liệt kê label theo thứ tự này trong 'Draw new skeleton'; collect đọc theo tên nên dữ liệu không hỏng: báo P4)")
+        for lb in top:
+            g = push._lget(lb, "name")
+            subs = push._lget(lb, "sublabels") or [s for s in labels if push._lget(s, "has_parent") and push._lget(s, "parent_id") == push._lget(lb, "id")]
+            got = [push._lget(s, "name") for s in subs]
+            if len(got) != len(want[g]):
+                bad.append(f"{g}: có {len(got)} sublabel (cần {len(want[g])})")
+            elif got != want[g]:
+                bad.append(f"{g}: tên đủ nhưng THỨ TỰ sublabel khác config (collect đọc theo tên nên dữ liệu không hỏng, nhưng CVAT hiển thị khác: báo P4)"
+                           if sorted(got) == sorted(want[g]) else f"{g}: tên sublabel khác config ({len(set(want[g]) - set(got))} tên thiếu)")
+            no_low = [push._lget(s, "name") for s in subs if not any(
+                push._lget(a, "name") == "low_conf" and _text(push._lget(a, "input_type")) == "checkbox" for a in (push._lget(s, "attributes") or []))]
+            if no_low:
+                bad.append(f"{g}: {len(no_low)} sublabel không có thuộc tính low_conf kiểu checkbox (ví dụ {no_low[:2]})")
+            gedges = {e for e in self.want_edges if e <= set(want[g])}
+            bad += [f"{g}: {b}" for b in check_svg(push._lget(lb, "svg"), {push._lget(s, "id"): push._lget(s, "name") for s in subs if push._lget(s, "id") is not None},
+                                                 want[g], gedges)]
         if bad:
-            return HONG, f"label {LABEL} trên server sai: " + "; ".join(bad) + ("" if self.project_created else " (project có sẵn: KHÔNG sửa, KHÔNG xoá)."), None
+            return HONG, "label trên server sai: " + "; ".join(bad[:5]) + keep, None
         return DAT, (f"project {name} id {self.project_id} " + ("TẠO MỚI lần này" if self.project_created else "có sẵn")
-                     + f"; server nhận label {LABEL}: 50 sublabel đúng tên và thứ tự, low_conf checkbox, {len(self.want_edges)} cạnh đúng cặp.")
+                     + f"; server nhận {len(top)} label skeleton ({', '.join(got_labels)}): 50 sublabel đúng tên và thứ tự, low_conf checkbox, {len(self.want_edges)} cạnh đúng cặp.")
 
     # --- bước 6 ---
     def s6(self):

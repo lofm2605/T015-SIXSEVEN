@@ -104,7 +104,7 @@ Cần `face_landmarker.task` (mục 3, cùng thư mục chạy lệnh) và `conf
 python tool\review_app.py --nap P1
 ```
 Trình duyệt mở http://127.0.0.1:7860. Ở tab **Nạp ảnh**: kéo thả ảnh .jpg/.jpeg/.png (tối đa 25 MB mỗi ảnh, 200 ảnh mỗi lần) vào ô lớn, kiểm danh sách ảnh bị loại,
-bấm **Bắt đầu chuẩn bị**, chờ thanh tiến độ xong (có nút Huỷ, Thử lại), rồi bấm **Rà lượt này**: trang tự chuyển sang rà, không gõ lệnh nào.
+bấm **Nạp & Mở** (chờ thanh tiến độ xong, trang tự chuyển sang rà) hoặc **Nạp & Tiếp tục** (ở lại tab này; xong thì bấm **Rà lượt này** khi cần). Có nút Huỷ, Thử lại, không gõ lệnh nào.
 Ảnh nằm ở `runs\NAP_001\inbox` (tên đã làm sạch; tên gốc ở `runs\NAP_001\nap_ten_goc.csv`, log ở `runs\NAP_001\nap_log.txt`). Đang rà dở lượt khác thì vẫn nạp được:
 lượt cũ không bị đụng, mở lại bằng lệnh cmd in ra (ví dụ `python tool\review_app.py runs\F5 P1`). Ảnh mặt người thật chỉ xử lý trên máy bạn, không đưa vào chat AI.
 
@@ -122,14 +122,14 @@ Biên bản ở `outputs\ca_kho\hop_1610\bien_ban_1610.md`: **tự** chép các 
 Sau họp xoá các gói zip đã nhận nếu không cần nữa.
 
 ## 7. Nhập vào CVAT (khi đã có CVAT trên máy)
-**Lưu ý: `push`, `collect`, xoá task và label `face50` mới chỉ thử bằng CVAT giả, CHƯA thử trên CVAT thật.** Lần đầu chạy trên task thử `demo-…` và báo P4 nếu có lỗi.
+**Lưu ý: `push`, `collect`, xoá task và bảy label skeleton theo nhóm mới chỉ thử bằng CVAT giả, CHƯA thử trên CVAT thật.** Lần đầu chạy trên task thử `demo-…` và báo P4 nếu có lỗi.
 
 Cài CVAT theo `de-tai-m28\huong-dan-chung.md` (mục cài CVAT), rồi cài SDK cùng bản với server và sinh file label:
 ```bat
 python -m pip install cvat-sdk==2.77.0
 python tool\make_label.py
 ```
-**Project CVAT dựng bằng label cũ (50 điểm `pNN_vùng_bên`, trước QĐ-003) không dùng được:** `push` dừng và báo "label face50 CŨ". P4 dựng lại project (hoặc project mới tên khác, đặt trong `config\pipeline.json`) bằng `configace50_label.json` mới (một skeleton `face50`, 50 sublabel tên mới, 47 cạnh).
+**Project CVAT dựng bằng label cũ không dùng được** (label `face50` kiểu một skeleton: bản 50 điểm `pNN_vùng_bên` trước QĐ-003, hoặc bản đầu của DMS trước QĐ-004): `push` dừng và báo "label face50 CŨ", chưa tạo task nào. P4 dựng lại project (xoá project `m28` cũ rỗng trong CVAT rồi `push` tạo lại, hoặc project mới tên khác, đặt trong `config\pipeline.json`) bằng `config\face50_label.json` mới (bảy label skeleton, mỗi nhóm một: `longmaytrai`, `longmayphai`, `songmui`, `mattrai`, `matphai`, `moingoai`, `moitrong`; tổng 50 sublabel tên mới, 47 cạnh, màu theo nhóm). Khi gán tay trong CVAT, mỗi mặt vẽ bảy skeleton (mỗi nhóm một) thay vì một.
 **Cách chính (từ trang rà soát):** mở trang → tab **Cài đặt** → dán link `http://localhost:8080` và token CVAT vào ô → **Lưu** → **Thử kết nối CVAT** (phải thấy "Kết nối được", bản 2.77.0, tên tài khoản).
 Mặc định token chỉ nằm trong bộ nhớ của trang này. Bật **Nhớ trên máy này** thì token lưu ở `%APPDATA%\m28\cvat.json` (ngoài repo; Windows không có quyền 0600 thật, file dựa vào quyền hồ sơ của bạn). Ngày 24/10 bấm **Quên token** và thu hồi token trong CVAT.
 Không dán token vào chat hay file trong repo.

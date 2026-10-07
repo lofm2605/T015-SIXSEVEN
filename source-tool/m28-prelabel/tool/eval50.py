@@ -3,7 +3,7 @@
     python tool\\eval50.py --gt raw\\<đáp án>.xml --pred runs\\<run>\\xml\\prelabel.xml [--condition manual|assisted] [--out outputs\\nme_per_face.csv] [--append]
     python tool\\eval50.py --gt raw\\<đáp án>.xml --run <run>                      (dự đoán lấy từ runs\\<run>: map50\\mp50.json + crop\\meta.json + crop\\box.txt)
 
-Đầu vào: file "CVAT for images 1.1" (annotations.xml, file .xml trong raw\\, hoặc zip xuất từ CVAT). Mỗi ảnh một skeleton face50; nhiều hơn thì báo và bỏ ảnh
+Đầu vào: file "CVAT for images 1.1" (annotations.xml, file .xml trong raw\\, hoặc zip xuất từ CVAT). Mỗi ảnh bảy skeleton (mỗi nhóm một, label = tên nhóm); nhóm có nhiều hơn một skeleton thì báo và bỏ ảnh
 đó. Ghép dự đoán và đáp án THEO TÊN ẢNH (bỏ đuôi) và TÊN ĐIỂM, không theo id hay thứ tự. Dự đoán có hai nguồn:
   (a) một file XML khác cùng hệ toạ độ và tên ảnh (cách khuyến nghị: runs\\<run>\\xml\\prelabel.xml của `push`, đúng file đã tải lên CVAT);
   (b) --run <run>: đọc dự đoán từ runs rồi đổi sang hệ toạ độ và tên ảnh tải lên CVAT bằng ĐÚNG logic steps._file_name/_face_pts của push.
@@ -136,7 +136,8 @@ def stem(name):
 
 def read_labels(path, cfg, warn=print):
     """{tên ảnh không đuôi: {tên điểm: [x, y]}} từ annotations.xml / file .xml / zip xuất của CVAT. Điểm outside="1" hoặc thiếu toạ độ bị bỏ.
-    Ảnh có nhiều hơn một skeleton face50 bị báo và bỏ; ảnh không có skeleton face50 thì không có trong kết quả."""
+    Mỗi mặt có BẢY skeleton, mỗi nhóm một (label = tên nhóm, QĐ-004); điểm của các skeleton được gộp lại theo tên điểm. Ảnh có nhiều hơn một skeleton cùng nhóm bị báo
+    và bỏ; ảnh không có skeleton nào của bảy nhóm thì không có trong kết quả (có skeleton lạ, ví dụ label face50 CŨ của bản một-skeleton, thì báo một lần)."""
     from m28core import cvat_io
     if str(path).lower().endswith(".zip"):
         data = cvat_io.read_zip_annotations(path)
@@ -144,23 +145,27 @@ def read_labels(path, cfg, warn=print):
         with open(path, "rb") as f:
             data = f.read()
     ann = cvat_io.parse_annotations(data)
-    names = {p["name"] for p in cfg["points"]}
+    groups = {}
+    for p in cfg["points"]:
+        groups.setdefault(p.get("group") or cvat_io.group_of_name(p["name"]), set()).add(p["name"])
     out, stale_warned = {}, False
     for name, im in ann.items():
-        sk = [s for s in im["skeletons"] if s["label"] == "face50"]
+        sk = [s for s in im["skeletons"] if s["label"] in groups]
         if not sk:
+            if im["skeletons"] and not stale_warned:
+                stale_warned = True
+                warn(f"Cảnh báo: nhãn có skeleton label {im['skeletons'][0]['label']!r}, không thuộc bảy nhóm của config ({', '.join(groups)}): nhãn dùng label face50 CŨ "
+                     "(một skeleton: định nghĩa 50 điểm version 2 hoặc bản đầu của version 3, trước QĐ-004) hoặc config không đúng version. Nhãn cũ không đo được bằng config hiện tại.")
             continue
-        if len(sk) > 1:
-            warn(f"Cảnh báo: ảnh {name} có {len(sk)} skeleton face50 (mong một): bỏ ảnh này.")
+        dup = [g for g in groups if sum(1 for s in sk if s["label"] == g) > 1]
+        if dup:
+            warn(f"Cảnh báo: ảnh {name} có nhiều hơn một skeleton nhóm {dup[0]} (mong đúng một mỗi nhóm): bỏ ảnh này.")
             continue
         pts = {}
-        for n, p in sk[0]["points"].items():
-            if n in names and p["x"] is not None and str(p.get("outside")) != "1":
-                pts[n] = [p["x"], p["y"]]
-        if sk[0]["points"] and not any(n in names for n in sk[0]["points"]) and not stale_warned:
-            stale_warned = True
-            warn(f"Cảnh báo: tên điểm trong nhãn (ví dụ {next(iter(sk[0]['points']))!r}) không có trong config: nhãn dùng định nghĩa 50 điểm CŨ (version 2, "
-                 "pNN_vùng_bên, trước QĐ-003) hoặc config không đúng version. Nhãn cũ không đo được bằng config version 3.")
+        for s in sk:
+            for n, p in s["points"].items():
+                if n in groups[s["label"]] and p["x"] is not None and str(p.get("outside")) != "1":
+                    pts[n] = [p["x"], p["y"]]
         key = stem(name)
         if key in out:
             warn(f"Cảnh báo: tên ảnh {key} xuất hiện hai lần trong {path}: giữ ảnh đầu.")

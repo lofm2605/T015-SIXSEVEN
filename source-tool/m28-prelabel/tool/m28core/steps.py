@@ -22,7 +22,7 @@ from xml.sax.saxutils import quoteattr
 
 import numpy as np
 
-from m28core import loai_tru, phan_loai  # noqa: E402
+from m28core import loai_tru, mau_nhom, phan_loai  # noqa: E402
 from m28core.cat_mat import SIDE_SCALE, square_crop  # noqa: F401
 
 OUT = 512
@@ -417,7 +417,23 @@ def autoqc(args, out):
     return True
 
 
+def _draw_dot(cv2, img, x, y, rgb, low_conf):
+    """Chấm màu nhóm (mau_nhom: cùng kiểu với trang rà soát). Ổn: chấm bán kính R_OK, viền tối mảnh. low_conf: chấm to hơn, vòng trắng dày và viền tối."""
+    c = (int(round(x)), int(round(y)))
+    bgr = (rgb[2], rgb[1], rgb[0])
+    if low_conf:
+        r = mau_nhom.R_LOW
+        cv2.circle(img, c, r + mau_nhom.RING_LOW + 1, mau_nhom.DARK[::-1], -1, cv2.LINE_AA)
+        cv2.circle(img, c, r + mau_nhom.RING_LOW, mau_nhom.WHITE[::-1], -1, cv2.LINE_AA)
+    else:
+        r = mau_nhom.R_OK
+        cv2.circle(img, c, r + 1, mau_nhom.DARK[::-1], -1, cv2.LINE_AA)
+    cv2.circle(img, c, r, bgr, -1, cv2.LINE_AA)
+    return bgr
+
+
 def overlays(args, out):
+    """Ảnh chồng: chấm màu NHÓM của điểm (đúng màu label trên CVAT, QĐ-004) kèm số thứ tự; điểm low_conf vẽ to hơn, có vòng trắng (xem mau_nhom.py)."""
     import cv2
     cfg = _jload(args.config)
     names = [p["name"] for p in cfg["points"]]
@@ -428,9 +444,11 @@ def overlays(args, out):
         img = cv2.imread(os.path.join(rd, "crop", "images", name + ".png"))
         for i, n in enumerate(names):
             x, y = p["orig"][n]
-            col = (0, 0, 255) if fl[name][i] else (0, 200, 0)       # đỏ: low_conf
-            cv2.circle(img, (int(round(x)), int(round(y))), 3, col, -1)
-            cv2.putText(img, str(i + 1), (int(x) + 4, int(y) - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.35, col, 1)
+            low = bool(fl[name][i])
+            col = _draw_dot(cv2, img, x, y, mau_nhom.dot_rgb(mau_nhom.group_of(n), low), low)
+            pos = (int(x) + (8 if low else 4), int(y) - 3)
+            cv2.putText(img, str(i + 1), pos, cv2.FONT_HERSHEY_SIMPLEX, 0.35, mau_nhom.DARK[::-1], 2, cv2.LINE_AA)    # viền tối cho số đọc được trên mọi nền
+            cv2.putText(img, str(i + 1), pos, cv2.FONT_HERSHEY_SIMPLEX, 0.35, col, 1, cv2.LINE_AA)
         cv2.imwrite(os.path.join(out, name + ".png"), img)
     print(f"overlays: {len(mp50)} ảnh chồng")
     return True
@@ -522,12 +540,19 @@ def review(args, out):
 
 # ---------- push / collect ----------
 def image_xml(frame_id, name, point_names, pts, low, width, height):
-    out = [f'<image id="{frame_id}" name={quoteattr(name)} width="{width}" height="{height}">',
-           '  <skeleton label="face50">']
-    for n, (x, y), f in zip(point_names, pts, low):
-        out.append(f'    <points label="{n}" occluded="0" outside="0" points="{x:.2f},{y:.2f}">'
-                   f'<attribute name="low_conf">{"true" if f else "false"}</attribute></points>')
-    out += ['  </skeleton>', '</image>']
+    """<image> của một mặt: MỘT <skeleton> cho mỗi nhóm (label = tên nhóm, QĐ-004) theo thứ tự nhóm xuất hiện, mỗi skeleton chỉ có điểm của nhóm.
+    Nhóm của điểm suy từ tên `<nhóm>_<k>` (cvat_io.group_of_name)."""
+    from m28core import cvat_io
+    out = [f'<image id="{frame_id}" name={quoteattr(name)} width="{width}" height="{height}">']
+    rows = list(zip(point_names, pts, low))
+    for group in dict.fromkeys(cvat_io.group_of_name(n) for n in point_names):
+        out.append(f'  <skeleton label="{group}">')
+        for n, (x, y), f in rows:
+            if cvat_io.group_of_name(n) == group:
+                out.append(f'    <points label="{n}" occluded="0" outside="0" points="{x:.2f},{y:.2f}">'
+                           f'<attribute name="low_conf">{"true" if f else "false"}</attribute></points>')
+        out.append('  </skeleton>')
+    out.append('</image>')
     return "\n".join(out)
 
 

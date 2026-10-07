@@ -58,7 +58,12 @@ def cvat(tmp_path, monkeypatch):
 
 
 def point_names():
-    return [s['name'] for s in json.load(open('config/face50_label.json', encoding='utf-8'))[0]['sublabels']]
+    return [s['name'] for lb in json.load(open('config/face50_label.json', encoding='utf-8')) for s in lb['sublabels']]
+
+
+def seed_labels():
+    """Label y như project dựng từ face50_label.json mới: bảy label skeleton, mỗi nhóm một."""
+    return json.load(open('config/face50_label.json', encoding='utf-8'))
 
 
 def make_run(run='Khoi', n_nhan=19, n_tay=3, reverse=False):
@@ -123,7 +128,7 @@ def test_unsafe_names_rejected_before_any_cvat_call(cvat):
 def test_never_touches_foreign_tasks(cvat):
     w = make_run()
     st = state(cvat)
-    st['projects'].append(dict(id=1, name='m28', labels=[dict(name='face50', type='skeleton', sublabels=[dict(name=n) for n in point_names()])]))
+    st['projects'].append(dict(id=1, name='m28', labels=seed_labels()))
     st['next_project'] = 2
     st['tasks'].append(dict(id=77, name='m28-gold', project_id=1, frames=['g.png'], jobs=[], annotations=None, files=[],
                             created='2026-10-01T00:00:00+00:00'))
@@ -352,13 +357,15 @@ def test_two_projects_same_name_stop(cvat):
 def test_project_missing_sublabels_stops(cvat, monkeypatch):
     monkeypatch.setenv('M28_FAKE_CVAT_CONTROL', json.dumps({'project_missing_sublabels': 3}))
     w = make_run(n_nhan=2, n_tay=0)
-    with pytest.raises(SystemExit, match='47 sublabel'):
-        do_push(w)                                                  # project vừa tạo thiếu 3 điểm: dừng, chưa tạo task
+    with pytest.raises(SystemExit) as e:
+        do_push(w)                                                  # project vừa tạo: mỗi label mất 3 sublabel cuối: dừng, chưa tạo task
+    msg = str(e.value)
+    assert 'không khớp config' in msg and 'label longmaytrai có 2/5 sublabel, thiếu 3 tên' in msg and 'label songmui có 1/4' in msg
     assert calls(cvat, 'tasks.create_from_data') == []
 
 
 def test_project_with_old_v2_label_stops_and_tells_p4_to_rebuild(cvat):
-    """Project dựng từ face50_label.json CŨ (50 điểm pNN_vùng_bên, trước QĐ-003): dừng với lời nhắc dựng lại project bằng label DMS mới, chưa tạo task nào."""
+    """Project dựng từ face50_label.json CŨ (một skeleton face50, 50 điểm pNN_vùng_bên, trước QĐ-003): dừng với lời nhắc dựng lại project bằng label mới, chưa tạo task nào."""
     w = make_run()
     old = [f'p{i:02d}_{r}_{s}' for i, (r, s) in enumerate([('jaw', 'R')] * 17 + [('brow', 'R')] * 10 + [('nose', 'M')] * 5 + [('eye', 'R')] * 8 + [('lip', 'L')] * 10, 1)]
     state(cvat)['projects'].append(dict(id=1, name='m28', labels=[dict(name='face50', type='skeleton', sublabels=[dict(name=n, type='points') for n in old])]))
@@ -366,21 +373,57 @@ def test_project_with_old_v2_label_stops_and_tells_p4_to_rebuild(cvat):
     with pytest.raises(SystemExit) as e:
         do_push(w)
     msg = str(e.value)
-    assert 'label face50 CŨ' in msg and 'p01_jaw_R' in msg and 'QĐ-003' in msg and 'longmaytrai_1' in msg and 'P4' in msg and 'face50_label.json' in msg
+    assert 'label face50 CŨ' in msg and 'p01_jaw_R' in msg and 'version 2' in msg and 'QĐ-004' in msg and 'longmaytrai' in msg and 'P4' in msg and 'face50_label.json' in msg
     assert calls(cvat, 'tasks.create_from_data') == [] and not os.path.exists(os.path.join(w['rd'], 'push.json'))
-    # project có label face50 thiếu tên nhưng KHÔNG phải tên v2: vẫn dùng thông báo cũ (thiếu N tên)
-    state(cvat)['projects'][0]['labels'][0]['sublabels'] = [dict(name=f'x{i}', type='points') for i in range(50)]
-    with pytest.raises(SystemExit, match='thiếu 50 tên'):
+
+
+def test_project_with_first_dms_single_skeleton_face50_is_also_old(cvat):
+    """Bản đầu của DMS (QĐ-003): MỘT skeleton face50 mang 50 tên mới. Không còn dùng được vì mỗi nhóm phải là một label (QĐ-004): báo rõ, chưa tạo task."""
+    w = make_run()
+    state(cvat)['projects'].append(dict(id=1, name='m28', labels=[dict(name='face50', type='skeleton', sublabels=[dict(name=n, type='points') for n in point_names()])]))
+    state(cvat)['next_project'] = 2
+    with pytest.raises(SystemExit) as e:
         do_push(w)
+    msg = str(e.value)
+    assert 'label face50 CŨ' in msg and 'một skeleton đủ 50 điểm của bản đầu DMS' in msg and 'longmaytrai_1' in msg and 'QĐ-004' in msg
+    assert calls(cvat, 'tasks.create_from_data') == []
 
 
-def test_project_without_face50_stops(cvat):
+def test_project_with_wrong_or_partial_group_labels_names_the_group(cvat):
+    w = make_run()
+    labels = seed_labels()
+    del labels[3]                                                                      # thiếu label mattrai
+    labels[0]['sublabels'] = labels[0]['sublabels'][:-1]                              # longmaytrai thiếu một điểm
+    labels.append(dict(name='la', type='skeleton', sublabels=[dict(name='x_1')]))     # thêm label lạ
+    state(cvat)['projects'].append(dict(id=1, name='m28', labels=labels))
+    state(cvat)['next_project'] = 2
+    with pytest.raises(SystemExit) as e:
+        do_push(w)
+    msg = str(e.value)
+    assert 'thiếu label mattrai' in msg and 'label longmaytrai có 4/5 sublabel' in msg and "label skeleton lạ ['la']" in msg
+    assert calls(cvat, 'tasks.create_from_data') == []
+
+
+def test_project_without_group_labels_stops(cvat):
     w = make_run()
     state(cvat)['projects'].append(dict(id=1, name='m28', labels=[dict(name='car', type='rectangle')]))
     state(cvat)['next_project'] = 2
-    with pytest.raises(SystemExit, match='chưa có label face50'):
+    with pytest.raises(SystemExit, match='chưa có label skeleton nào của 7 nhóm'):
         do_push(w)
     assert calls(cvat, 'tasks.create_from_data') == []
+
+
+def test_label_file_with_old_single_skeleton_is_refused_before_connecting(cvat):
+    w = make_run()
+    names = point_names()
+    json.dump([dict(name='face50', type='skeleton', sublabels=[dict(name=n) for n in names])], open('config/face50_label.json', 'w'))
+    with pytest.raises(SystemExit, match='còn label face50 kiểu một skeleton'):
+        do_push(w)
+    assert calls(cvat) == []                                                          # chưa kết nối CVAT
+    json.dump([dict(name='sai_ten', type='skeleton', sublabels=[dict(name=n) for n in names])], open('config/face50_label.json', 'w'))
+    with pytest.raises(SystemExit, match='tên label = tên nhóm'):
+        do_push(w)
+    assert calls(cvat) == []
 
 
 def test_same_name_task_in_project_stops(cvat):
@@ -733,7 +776,8 @@ def test_m28_push_cli_and_skip_second_time(cvat, tmp_path, capsys, monkeypatch):
     tm.write_config(tmp_path, t_flip=None)
     json.dump({'idx': tm.IDX}, open('config/map_mp50.json', 'w'))
     names = tm.NAMES
-    json.dump([dict(name='face50', type='skeleton', sublabels=[dict(name=n) for n in names])], open('config/face50_label.json', 'w'))
+    json.dump([dict(name=g, type='skeleton', sublabels=[dict(name=n) for n in ns]) for g, ns in cvat_io.groups_from_names(names).items()],
+              open('config/face50_label.json', 'w'))
     imgs = tmp_path / 'imgs'
     tm.write_images(imgs)
     base = ['--run', 'A', '--images', str(imgs), '--box', 'auto', '--review', 'auto']

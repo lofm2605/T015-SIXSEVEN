@@ -1,15 +1,16 @@
-"""Sinh config/face50_label.json: danh sách label (MỘT skeleton face50, 50 điểm DMS) để tạo project m28 trên CVAT.
+"""Sinh config/face50_label.json: BẢY label skeleton (mỗi nhóm của 50 điểm DMS một label) để tạo project m28 trên CVAT.
 
     python tool\\make_label.py [--config config\\m28_config.json] [--out config\\face50_label.json]
 
-Nguồn duy nhất là config/m28_config.json (points[].name/side/line/tmpl, lines{tên: {closed}}). Chạy hai lần ra cùng byte.
+Nguồn duy nhất là config/m28_config.json (points[].name/group/side/line/tmpl, lines{tên: {closed}}). Chạy hai lần ra cùng byte. Tên file giữ `face50_label.json` (50 điểm của mặt).
 
-Phương án CVAT của config version 3 (QĐ-003): GIỮ MỘT skeleton `face50` đủ 50 sublabel mang tên mới (`longmaytrai_1` ... `moitrong_8`), không tách 7 skeleton theo nhóm.
-Lý do: push, collect, cvat_io, eval50, cvat_smoke và QC đều giả định MỖI ẢNH đúng một skeleton `face50` đủ 50 điểm và `low_conf` từng điểm; tách 7 skeleton phải đổi mọi chỗ đó,
-thêm 7 shape mỗi ảnh và cách ghép nhãn theo nhóm mà không được gì thêm (nhóm vẫn đọc được từ tên điểm, `group` trong config và cạnh nối). Nhóm thể hiện bằng CẠNH của khuôn
-(`line` = tên nhóm, nhóm không nối với nhau, mắt và môi nối kín). MÀU sublabel theo BÊN của bức ảnh (SIDE_COLOR: L = nửa trái ảnh xanh dương, R = nửa phải ảnh đỏ, M = trên trục
-xanh lá) chứ không theo nhóm: nỗi đau cần giải là gán nhầm trái/phải theo người, nên bên phải nhìn thấy ngay trên ảnh; nhóm đã có tên và cạnh phân biệt.
-Config thiếu `side_convention: "image"` (config version 2, side theo người trong ảnh) bị từ chối: label sinh từ nó sẽ gán màu ngược bên.
+Phương án CVAT (QĐ-004, thay "một skeleton face50" của QĐ-003): mỗi nhóm là MỘT label skeleton tên đúng tên nhóm (`longmaytrai`, `longmayphai`, `songmui`, `mattrai`, `matphai`,
+`moingoai`, `moitrong`), nên mục "Draw new skeleton" của CVAT liệt kê bảy label riêng, mỗi label một màu (GROUP_COLOR, đúng bảng màu hình minh hoạ DMS của chủ repo).
+Tên sublabel giữ nguyên `<nhóm>_<k>` (50 tên duy nhất, nên collect, eval50, QC vẫn ghép theo tên điểm). Mỗi mặt có bảy skeleton, mỗi nhóm đúng một; mỗi skeleton chỉ có điểm của nhóm
+mình, khuôn svg tính riêng cho nhóm (tmpl của nhóm co giãn vào khung 0-100), cạnh nối theo `line` = tên nhóm (mắt và môi nối kín). `low_conf` vẫn là thuộc tính của từng điểm.
+Cái giá: người gán vẽ bảy skeleton mỗi mặt thay vì một (thời gian gán tay thay đổi, P5 cần biết); push, collect, cvat_io, eval50, cvat_smoke đã đổi theo. Màu chỉ có hiệu lực khi label
+được TẠO (CVAT lưu màu trong label), nên project dựng từ label cũ (một skeleton face50, bản v2 hoặc bản đầu của v3) phải dựng lại.
+Config thiếu `side_convention: "image"` (config version 2, side theo người trong ảnh) bị từ chối: label sinh từ nó sẽ gán nhóm/bên ngược.
 Định dạng bám mã nguồn CVAT v2.77.0 (đã đọc, xem README mục Rủi ro), CHƯA thử trên server CVAT thật:
   * Label: type "skeleton", svg, sublabels (type "points"); không có khoá "id" ở đâu cả (server tự cấp).
   * svg: khung vẽ viewBox 0 0 100 100 (cvat-ui skeleton-configurator). Mỗi điểm một <circle> có data-type="element node",
@@ -17,7 +18,7 @@ Config thiếu `side_convention: "image"` (config version 2, side theo người 
     khi tạo project, server tự đổi data-label-name="<tên>" thành data-label-id="<id mới>" (serializers.py, create_labels),
     nên project tạo trên máy khác vẫn nối đúng nút với điểm. Cạnh: <line> data-type="edge" data-node-from/data-node-to.
   * Chỉ dùng các thuộc tính mà cvat-core cho phép khi đọc svg (cx, cy, r, x1, y1, x2, y2, data-*), vì phần còn lại bị lọc.
-  * Toạ độ khuôn = hình trung bình `tmpl` (ảnh cắt 512x512) co giãn đều vào khung 0-100, chừa lề.
+  * Toạ độ khuôn = hình trung bình `tmpl` của NHÓM (ảnh cắt 512x512) co giãn đều vào khung 0-100, chừa lề; mỗi label có data-node-id, data-element-id đếm từ 1 trong nhóm.
   * Mỗi điểm có một thuộc tính checkbox low_conf (mutable, mặc định false) để đánh dấu điểm đáng ngờ.
 """
 import argparse
@@ -25,9 +26,16 @@ import json
 import os
 import sys
 
-LABEL_NAME = "face50"
+TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+if TOOL_DIR not in sys.path:
+    sys.path.insert(0, TOOL_DIR)
+# Màu từng nhóm, lấy từ hình minh hoạ DMS của chủ repo (bảng màu Flat UI): mắt phải-ảnh tím, lông mày trái-ảnh đỏ, sống mũi xanh lá, lông mày phải-ảnh xanh dương,
+# môi trong vàng, mắt trái-ảnh cam, môi ngoài xanh ngọc. Mỗi nhóm đúng một màu, bảy màu khác nhau. Bảng nằm ở m28core/mau_nhom.py để ảnh chồng (overlays) và trang rà soát
+# dùng đúng màu này: màu trên trang giống màu trong CVAT.
+from m28core.mau_nhom import GROUP_COLOR  # noqa: E402
+
 N_POINTS = 50
-SIDE_COLOR = {"R": "#e03131", "L": "#1971c2", "M": "#2f9e44"}     # nửa PHẢI của bức ảnh (nhóm *phai) / nửa TRÁI của bức ảnh (nhóm *trai) / trên trục (quy ước theo ảnh, QĐ-003)
+SIDES = ("R", "L", "M")                                           # R = nửa PHẢI ảnh (*phai), L = nửa TRÁI ảnh (*trai), M = trên trục (quy ước theo ảnh, QĐ-003)
 CANVAS = 100.0                                                    # viewBox 0 0 100 100 của cvat-ui
 MARGIN = 6.0
 NODE_R = 0.75                                                     # bán kính nút như cvat-ui vẽ (r: 0.75)
@@ -52,8 +60,10 @@ def check_config(cfg):
         if name in seen:
             raise SystemExit(f"Tên điểm trùng trong config: {name}. CVAT nối nút với điểm theo tên nên mỗi tên chỉ một lần.")
         seen.add(name)
-        if p.get("side") not in SIDE_COLOR:
+        if p.get("side") not in SIDES:
             raise SystemExit(f"Điểm {name}: side {p.get('side')!r} không hợp lệ (chỉ R, L hoặc M).")
+        if p.get("group") not in GROUP_COLOR:
+            raise SystemExit(f"Điểm {name}: group {p.get('group')!r} không hợp lệ (chỉ {', '.join(GROUP_COLOR)}); không có màu để tô sublabel.")
         t = p.get("tmpl")
         if not (isinstance(t, (list, tuple)) and len(t) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in t)):
             raise SystemExit(f"Điểm {name}: thiếu 'tmpl' [x, y] (hình trung bình 512x512), không dựng được khuôn skeleton.")
@@ -72,8 +82,25 @@ def _canvas_coords(points):
     return [(ox + k * (p["tmpl"][0] - x0), oy + k * (p["tmpl"][1] - y0)) for p in points]
 
 
+def groups_of(points):
+    """{nhóm: [điểm của nhóm theo thứ tự config]}, nhóm theo thứ tự xuất hiện trong config."""
+    out = {}
+    for p in points:
+        out.setdefault(p["group"], []).append(p)
+    return out
+
+
+def edge_names(points, lines):
+    """Tập cạnh theo TÊN điểm (frozenset hai tên) của cả 50 điểm: mỗi nhóm nối theo `line` của nó (xem edges_of)."""
+    out = set()
+    for pts in groups_of(points).values():
+        names = [p["name"] for p in pts]
+        out |= {frozenset((names[a - 1], names[b - 1])) for a, b in edges_of(pts, lines)}
+    return out
+
+
 def edges_of(points, lines):
-    """Danh sách cạnh (số nút từ, số nút đến), nút đánh số 1..50 theo thứ tự config. Chỉ nối hai điểm liền nhau trong
+    """Danh sách cạnh (số nút từ, số nút đến), nút đánh số 1..n theo thứ tự trong `points` (một nhóm: 1..n của label đó). Chỉ nối hai điểm liền nhau trong
     cùng `line`; line closed thì nối thêm điểm cuối về điểm đầu; điểm không có line thì không có cạnh."""
     groups = {}
     for i, p in enumerate(points, 1):
@@ -105,17 +132,20 @@ def build_svg(points, lines):
 
 
 def build_labels(cfg):
-    """Danh sách label dùng làm `labels` khi tạo project: đúng một label face50 kiểu skeleton."""
+    """Danh sách label dùng làm `labels` khi tạo project: MỘT label skeleton cho mỗi nhóm (tên label = tên nhóm, thứ tự nhóm của config), màu của nhóm."""
     check_config(cfg)
-    points, lines = cfg["points"], cfg.get("lines") or {}
-    sub = [dict(name=p["name"], type="points", color=SIDE_COLOR[p["side"]],
-                attributes=[dict(name=LOW_CONF, mutable=True, input_type="checkbox", default_value="false", values=["false"])])
-           for p in points]
-    return [dict(name=LABEL_NAME, type="skeleton", attributes=[], sublabels=sub, svg=build_svg(points, lines))]
+    lines = cfg.get("lines") or {}
+    out = []
+    for group, pts in groups_of(cfg["points"]).items():
+        sub = [dict(name=p["name"], type="points", color=GROUP_COLOR[group],
+                    attributes=[dict(name=LOW_CONF, mutable=True, input_type="checkbox", default_value="false", values=["false"])])
+               for p in pts]
+        out.append(dict(name=group, type="skeleton", color=GROUP_COLOR[group], attributes=[], sublabels=sub, svg=build_svg(pts, lines)))
+    return out
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Sinh config/face50_label.json từ config/m28_config.json")
+    ap = argparse.ArgumentParser(description="Sinh config/face50_label.json (bảy label skeleton, mỗi nhóm một) từ config/m28_config.json")
     ap.add_argument("--config", default=os.path.join("config", "m28_config.json"))
     ap.add_argument("--out", default=os.path.join("config", "face50_label.json"))
     args = ap.parse_args(argv)
@@ -128,9 +158,9 @@ def main(argv=None):
     with open(args.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(labels, f, ensure_ascii=False, indent=1)
         f.write("\n")
-    n_edge = len(edges_of(cfg["points"], cfg.get("lines") or {}))
-    print(f"Đã ghi {args.out}: label {LABEL_NAME}, {N_POINTS} điểm, {n_edge} cạnh. Chưa thử trên server CVAT thật: "
-          "mở project m28 trong CVAT, kiểm đủ 50 điểm và cạnh nối (xem README mục Rủi ro).")
+    n_edge = len(edge_names(cfg["points"], cfg.get("lines") or {}))
+    print(f"Đã ghi {args.out}: {len(labels)} label skeleton ({', '.join(lb['name'] for lb in labels)}), {N_POINTS} điểm, {n_edge} cạnh. Chưa thử trên server CVAT thật: "
+          "tạo project m28 từ file này rồi mở CVAT, kiểm đủ bảy label, 50 điểm và cạnh nối (xem README mục Rủi ro).")
     return 0
 
 

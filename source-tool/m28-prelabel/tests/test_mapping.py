@@ -200,7 +200,8 @@ def test_committed_tmpl_is_a_face_shaped_template(committed):
 
 def test_committed_label_matches_config(committed):
     assert make_label.build_labels(committed['cfg']) == committed['label']
-    sub = committed['label'][0]['sublabels']
+    assert [lb['name'] for lb in committed['label']] == GROUPS                                   # bảy label skeleton, mỗi nhóm một
+    sub = [s for lb in committed['label'] for s in lb['sublabels']]
     assert [s['name'] for s in sub] == [p['name'] for p in committed['cfg']['points']]
 
 

@@ -36,7 +36,7 @@ STATE_VI = {S_DANG_TAO: "đang tạo task (chưa có id)", S_DA_TAO: "đã tạo
             S_XONG: "xong", S_DELETED: "task đã xoá trên CVAT"}
 PHASES = ["kiểm tra", "kết nối", "project", "tải ảnh", "nhập nhãn", "xuất kiểm"]      # [k/6] theo thứ tự này
 MAX_NAME = 128
-LABEL = "face50"
+OLD_LABEL = "face50"                  # label CŨ kiểu MỘT skeleton đủ 50 điểm (v2 và bản đầu của DMS, trước QĐ-004): project còn nó phải dựng lại
 
 
 def _say(k, text):
@@ -101,18 +101,22 @@ def check_task_name(task_name, prefix):
 
 
 def load_label_names(label_json):
-    """(danh sách label để tạo project, tên 50 điểm theo thứ tự) từ config/face50_label.json."""
+    """(danh sách label để tạo project, tên 50 điểm theo thứ tự các label) từ config/face50_label.json: BẢY label skeleton, mỗi nhóm một (QĐ-004)."""
     if not os.path.isfile(label_json):
         raise SystemExit(f"Thiếu {label_json}: chạy python tool\\make_label.py để sinh từ config\\m28_config.json.")
     try:
         with open(label_json, encoding="utf-8") as f:
             labels = json.load(f)
-        lb = next(x for x in labels if x.get("name") == LABEL)
-        names = [s["name"] for s in lb["sublabels"]]
-    except (OSError, ValueError, StopIteration, KeyError, TypeError, AttributeError) as e:
+        names = [s["name"] for lb in labels for s in lb["sublabels"]]
+        label_names = [lb["name"] for lb in labels]
+        kinds = {lb.get("type") for lb in labels}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         raise SystemExit(f"{label_json} sai định dạng ({type(e).__name__}): chạy lại python tool\\make_label.py.")
-    if len(names) != 50 or len(set(names)) != 50:
-        raise SystemExit(f"{label_json} phải có label {LABEL} với đúng 50 sublabel khác tên: chạy lại python tool\\make_label.py.")
+    if OLD_LABEL in label_names:
+        raise SystemExit(f"{label_json} còn label {OLD_LABEL} kiểu một skeleton (bản cũ, trước QĐ-004): chạy lại python tool\\make_label.py.")
+    if len(names) != 50 or len(set(names)) != 50 or kinds != {"skeleton"} or len(set(label_names)) != len(label_names) \
+            or any(io_.group_of_name(s["name"]) != lb["name"] for lb in labels for s in lb["sublabels"]):
+        raise SystemExit(f"{label_json} phải có các label skeleton theo nhóm (tên label = tên nhóm) với đúng 50 sublabel khác tên: chạy lại python tool\\make_label.py.")
     return labels, names
 
 
@@ -208,17 +212,16 @@ def _lget(o, key, default=None):
         return getattr(o, key, default)
 
 
-def project_label_names(project):
-    """Tên sublabel của label face50 trong project (đọc từ project.get_labels()); None nếu không có label face50."""
+def project_labels(project):
+    """{tên label skeleton: [tên sublabel theo thứ tự]} của project (đọc từ project.get_labels()); label không phải skeleton bị bỏ qua."""
     labels = list(project.get_labels())
+    out = {}
     for lb in labels:
-        if _lget(lb, "name") == LABEL and str(_lget(lb, "type") or "").lower().endswith("skeleton"):
-            subs = _lget(lb, "sublabels")
-            if subs:
-                return [_lget(s, "name") for s in subs]
-            flat = [_lget(s, "name") for s in labels if _lget(s, "has_parent")]
-            return flat
-    return None
+        if not str(_lget(lb, "type") or "").lower().endswith("skeleton"):
+            continue
+        subs = _lget(lb, "sublabels") or [s for s in labels if _lget(s, "has_parent") and _lget(s, "parent_id") == _lget(lb, "id")]
+        out[_lget(lb, "name")] = [_lget(s, "name") for s in subs]
+    return out
 
 
 def find_project(client, name):
@@ -228,29 +231,43 @@ def find_project(client, name):
     return found[0] if found else None
 
 
-def check_project_labels(project, point_names):
-    got = project_label_names(project)
-    if got is None:
-        raise SystemExit(f"Project {project.name} đã có nhưng chưa có label {LABEL} (skeleton): xoá project rỗng đó để tool tạo lại "
-                         "từ config\\face50_label.json, hoặc import label này vào project. Chưa tạo task nào.")
-    miss = [n for n in point_names if n not in set(got)]
-    old = [n for n in got if re.match(r"p\d\d_(jaw|brow|nose|eye|lip)_[RLM]$", n or "")]
-    if old and miss:
-        raise SystemExit(f"Project {project.name} dùng label {LABEL} CŨ ({len(old)} sublabel tên kiểu {old[0]}: định nghĩa 50 điểm version 2, trước QĐ-003), "
-                         f"không khớp 50 điểm DMS của config version 3 (ví dụ {miss[0]}). Nhờ P4 dựng lại project bằng config\\face50_label.json mới "
+def check_project_labels(project, point_names, labels=None):
+    """Project phải có đúng các label skeleton theo nhóm (tên label = tên nhóm) với đúng sublabel của nhóm. `labels` = nội dung face50_label.json (nếu không có thì suy
+    nhóm từ tên điểm). Sai thì SystemExit nói rõ nhóm nào, kể cả khi project còn label face50 CŨ kiểu một skeleton (v2 hoặc bản đầu của DMS)."""
+    want = {lb["name"]: [s["name"] for s in lb["sublabels"]] for lb in labels} if labels else io_.groups_from_names(point_names)
+    got = project_labels(project)
+    if OLD_LABEL in got:
+        old = got[OLD_LABEL]
+        kind = "50 điểm pNN_vùng_bên của version 2" if any(re.match(r"p\d\d_(jaw|brow|nose|eye|lip)_[RLM]$", n or "") for n in old) else "một skeleton đủ 50 điểm của bản đầu DMS"
+        raise SystemExit(f"Project {project.name} dùng label {OLD_LABEL} CŨ ({len(old)} sublabel, {kind}: sublabel {old[0] if old else '?'}; trước QĐ-003/QĐ-004), không khớp "
+                         f"{len(want)} label skeleton theo nhóm của config version 3 (ví dụ {next(iter(want))}). Nhờ P4 dựng lại project bằng config\\face50_label.json mới "
                          "(xoá project cũ rỗng hoặc tạo project mới tên khác rồi đặt tên trong config\\pipeline.json); chưa tạo task nào.")
-    if miss or len(got) != len(point_names):
-        raise SystemExit(f"Label {LABEL} trong project {project.name} có {len(got)} sublabel, thiếu {len(miss)} tên so với config "
-                         f"(ví dụ {miss[:3]}). Sửa label cho đủ 50 điểm đúng tên hoặc tạo project mới; chưa tạo task nào.")
+    if not any(g in got for g in want):
+        raise SystemExit(f"Project {project.name} đã có nhưng chưa có label skeleton nào của {len(want)} nhóm ({', '.join(want)}): xoá project rỗng đó để tool tạo lại "
+                         "từ config\\face50_label.json, hoặc import các label này vào project. Chưa tạo task nào.")
+    bad = []
+    for g, names in want.items():
+        if g not in got:
+            bad.append(f"thiếu label {g}")
+            continue
+        miss = [n for n in names if n not in set(got[g])]
+        if miss or len(got[g]) != len(names):
+            bad.append(f"label {g} có {len(got[g])}/{len(names)} sublabel, thiếu {len(miss)} tên (ví dụ {miss[:2]})")
+    extra = sorted(set(got) - set(want))
+    if extra:
+        bad.append(f"có label skeleton lạ {extra[:3]}")
+    if bad:
+        raise SystemExit(f"Label trong project {project.name} không khớp config ({len(bad)} chỗ: " + "; ".join(bad[:4]) + "). Sửa label cho đủ "
+                         f"{len(want)} nhóm, 50 điểm đúng tên hoặc tạo project mới; chưa tạo task nào.")
 
 
 def get_project_id(client, name, labels, point_names):
-    """Tìm project theo tên; chưa có thì tạo từ label_json. Có rồi thì kiểm label face50 đủ 50 sublabel đúng tên."""
+    """Tìm project theo tên; chưa có thì tạo từ label_json. Có rồi thì kiểm đủ bảy label skeleton theo nhóm, 50 sublabel đúng tên."""
     proj = find_project(client, name)
     if proj is None:
         proj = client.projects.create({"name": name, "labels": labels})
-        print(f"  đã tạo project {name} (id {proj.id}) từ label {LABEL}", flush=True)
-    check_project_labels(proj, point_names)
+        print(f"  đã tạo project {name} (id {proj.id}) từ {len(labels)} label skeleton theo nhóm", flush=True)
+    check_project_labels(proj, point_names, labels)
     return proj.id
 
 
@@ -419,7 +436,7 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
         _say(4, f"bỏ qua tạo task (đã có id {task.id})")
     else:
         project_id = get_project_id(client, project, labels, point_names)
-        _say(3, f"project {project} (id {project_id}), label {LABEL} đủ {len(point_names)} điểm")
+        _say(3, f"project {project} (id {project_id}), {len(io_.groups_from_names(point_names))} label skeleton theo nhóm đủ {len(point_names)} điểm")
         same = [t for t in client.tasks.list() if t.name == task_name and t.project_id == project_id]
         if same:
             raise SystemExit(f"Trong project {project} đã có task tên {task_name} (id {same[0].id}): dừng để không có hai task cùng tên. "

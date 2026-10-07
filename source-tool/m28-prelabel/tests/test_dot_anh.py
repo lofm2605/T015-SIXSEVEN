@@ -900,11 +900,37 @@ def test_gradio_ui_builds_with_all_element_ids(world):
     ids = {getattr(b, 'elem_id', None) for b in demo.blocks.values()}
     for want in ('btn-push', 'push-panel', 'push-msg', 'push-prog', 'push-log', 'push-cancel', 'push-confirm', 'push-confirm-ok',
                  'push-confirm-cancel', 'push-result', 'tab-dot', 'dot-root', 'dot-act', 'dot-act-go', 'dot-modal', 'dot-modal-ok', 'dot-modal-cancel',
-                 'dot-modal-typed', 'dot-modal-check', 'nap-ghichu', 'btn-nhan', 'btn-xong', 'tab-ra', 'tab-nap', 'shown'):
+                 'dot-modal-typed', 'dot-modal-check', 'nap-ghichu', 'nap-start-open', 'nap-start', 'nap-btn-note', 'nap-go', 'btn-nhan', 'btn-xong', 'tab-ra', 'tab-nap', 'shown'):
         assert want in ids, want
     os.makedirs('runs/_nap', exist_ok=True)
     demo2, _ = ra.build_ui(None, ra.AppCtx(reviewer='P2', run_dir=os.path.join('runs', '_nap'), nap_only=True))   # --nap: có tab Các đợt
     assert 'tab-dot' in {getattr(b, 'elem_id', None) for b in demo2.blocks.values()}
+
+
+def test_nap_tab_auto_open_handler_only_acts_on_the_run_that_asked_for_it(tmp_path, monkeypatch):
+    """Nạp & Mở: on_auto_open không làm gì khi không có yêu cầu hoặc lượt còn chạy; lượt lỗi hoặc job đã sang lượt khác thì bỏ yêu cầu."""
+    pytest.importorskip('gradio')
+    monkeypatch.chdir(tmp_path)
+    os.makedirs('runs/_nap')
+    ctx = ra.AppCtx(reviewer='P2', run_dir=os.path.join('runs', '_nap'), nap_only=True)
+    demo, _ = ra.build_ui(None, ctx)
+    fns = [f.fn for f in demo.fns.values() if getattr(f.fn, '__name__', '') == 'on_auto_open']
+    assert len(fns) == 1
+    on_auto_open = fns[0]
+    snap = {'state': 'dang_chay', 'run': 'NAP_001'}
+    ctx.job.snapshot = lambda: dict(snap)                                                        # job giả: không chạy prepare thật
+    assert ctx.auto_open is None and on_auto_open(None)[1] == ''
+    ctx.auto_open = 'NAP_001'
+    assert on_auto_open(None)[1] == '' and ctx.auto_open == 'NAP_001'                           # còn chạy: chờ, giữ yêu cầu
+    snap.update(state='loi')
+    assert on_auto_open(None)[1] == '' and ctx.auto_open is None                                # lỗi: bỏ yêu cầu, không chuyển trang
+    ctx.auto_open = 'NAP_001'
+    snap.update(state='xong', run='NAP_002')
+    assert on_auto_open(None)[1] == '' and ctx.auto_open is None                                # job đã sang lượt khác: bỏ
+    ctx.auto_open = 'NAP_002'
+    ctx.closing = True
+    msg, target = on_auto_open(None)                                                             # xong và đúng lượt: đi qua on_go (trang đang đóng thì on_go từ chối)
+    assert ctx.auto_open is None and target == ''
 
 
 def test_guard_accepts_page_pid_from_env_when_parent_is_launcher(tmp_path, monkeypatch):

@@ -193,7 +193,7 @@ def tflip_info_html(info):
             ("iod_points", "<code>" + _e(", ".join(map(str, info["iod_points"]))) + "</code> (hai điểm đo khoảng cách hai mắt)")]
     return ("<table class=\"cd-kv\">" + "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in rows) + "</table>"
             '<div class="cd-note">Điểm số của một điểm = độ lệch giữa kết quả ảnh gốc và ảnh lật ÷ khoảng cách hai mắt; lớn hơn t_flip thì điểm bị cờ '
-            "low_conf (chấm đỏ). Theo BAO-CAO-CO-LOW-CONF.md, <b>0,0672</b> ứng với cờ khoảng 15% số điểm trên T-dev (~7,5 điểm mỗi mặt), "
+            "low_conf (chấm to có vòng trắng). Theo BAO-CAO-CO-LOW-CONF.md, <b>0,0672</b> ứng với cờ khoảng 15% số điểm trên T-dev (~7,5 điểm mỗi mặt), "
             "đề xuất cho họp 12/10. Ghi vào <code>config\\m28_config.json</code>, giữ nguyên mọi trường khác.</div>")
 
 

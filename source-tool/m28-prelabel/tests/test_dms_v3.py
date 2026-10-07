@@ -23,6 +23,7 @@ CFG = json.load(open(os.path.join(CONFIG_DIR, 'm28_config.json'), encoding='utf-
 MAP = json.load(open(os.path.join(CONFIG_DIR, 'map_mp50.json'), encoding='utf-8'))
 PERM = np.array(json.load(open(os.path.join(CONFIG_DIR, 'mp_mirror478.json'), encoding='utf-8'))['perm'])
 NAMES = [p['name'] for p in CFG['points']]
+GROUP_LABELS = ['longmaytrai', 'longmayphai', 'songmui', 'mattrai', 'matphai', 'moingoai', 'moitrong']
 
 
 def make_run(tmp_path, n=3, t_flip=None):
@@ -62,8 +63,10 @@ def test_map50_flags_xml_cvat_io_and_eval50_all_work_with_the_new_names(tmp_path
     steps.build_xml('crop', list(names), meta, mp50, fl, CFG, str(xml))
     ann = cvat_io.parse_annotations(xml.read_bytes())
     assert sorted(ann) == [f'{n}.png' for n in names]
-    for im in ann.values():
-        assert len(im['skeletons']) == 1 and im['skeletons'][0]['label'] == 'face50' and list(im['skeletons'][0]['points']) == NAMES
+    for im in ann.values():                                                                              # BẢY skeleton mỗi mặt, mỗi nhóm một, label = tên nhóm (QĐ-004)
+        assert [sk['label'] for sk in im['skeletons']] == GROUP_LABELS
+        assert [n for sk in im['skeletons'] for n in sk['points']] == NAMES
+        assert all(n.rsplit('_', 1)[0] == sk['label'] for sk in im['skeletons'] for n in sk['points'])
     res = cvat_io.check_faces(ann, [f'{n}.png' for n in names], [], NAMES, [])
     assert res['n_day_du'] == 3 and res['n_nhan'] == 3                                                    # kiểm sau khi nhập của push chạy với tên mới
     # eval50: nháp so với chính nó = 0, và đọc đúng nhãn có tên mới
@@ -144,3 +147,43 @@ def test_stale_run_detection_and_m28_recomputes_only_the_name_dependent_steps(tm
     seen.clear()
     m28.main(['prepare', '--run', 'R', '--config', args.config, '--map', args.map])
     assert all(f == () for _, f in seen)
+
+
+def test_overlays_step_paints_group_colors_with_a_ring_on_low_conf_points(tmp_path, monkeypatch):
+    """steps.overlays (cv2) vẽ chấm màu NHÓM như label trên CVAT (QĐ-004); điểm low_conf to hơn, có vòng trắng."""
+    cv2 = pytest.importorskip('cv2')
+    from m28core import mau_nhom
+    monkeypatch.chdir(tmp_path)
+    args, rd, names, meta = make_run(tmp_path, n=1)
+    pts = [(30 + 45 * (i % 10), 40 + 80 * (i // 10)) for i in range(50)]
+    (rd / 'map50').mkdir()
+    (rd / 'map50' / 'mp50.json').write_text(json.dumps({'F_001': dict(orig={n: list(p) for n, p in zip(NAMES, pts)}, flip=None)}), encoding='utf-8')
+    (rd / 'flags').mkdir()
+    flags = [i in (0, 12, 33) for i in range(50)]
+    (rd / 'flags' / 'flags.json').write_text(json.dumps({'F_001': flags}), encoding='utf-8')
+    (rd / 'crop' / 'images').mkdir()
+    cv2.imwrite(str(rd / 'crop' / 'images' / 'F_001.png'), np.full((512, 512, 3), 128, np.uint8))
+    out = tmp_path / 'o'
+    out.mkdir()
+    assert steps.overlays(args, str(out))
+    img = cv2.imread(str(out / 'F_001.png'))
+
+    def at(i, dx=0):
+        b, g, r = (int(v) for v in img[pts[i][1], pts[i][0] + dx])
+        return (r, g, b)
+    for i, n in enumerate(NAMES):
+        assert at(i) == mau_nhom.hex_rgb(mau_nhom.GROUP_COLOR[mau_nhom.group_of(n)]), n          # giữa chấm = màu nhóm, cả điểm ổn lẫn low_conf
+    for i in (0, 12, 33):
+        assert min(at(i, mau_nhom.R_LOW + 1)) >= 200, i                                            # vòng trắng quanh điểm low_conf (cạnh khử răng cưa nên có sai số nhỏ)
+    assert at(1, -(mau_nhom.R_OK + 3)) == (128, 128, 128)                                                    # chấm ổn: ngoài viền (bên trái, xa số thứ tự) là nền, không có vòng trắng
+    assert max(abs(c - d) for c, d in zip(at(1, -(mau_nhom.R_OK + 1)), mau_nhom.DARK)) <= 60                # một viền tối mảnh (hoà với màu chấm ở mép nên cho sai số)
+
+
+def test_group_colors_have_a_single_source_shared_by_label_and_overlays():
+    import make_label
+    from m28core import mau_nhom
+    assert make_label.GROUP_COLOR is mau_nhom.GROUP_COLOR and set(mau_nhom.GROUP_VI) == set(mau_nhom.GROUP_COLOR) == set(GROUP_LABELS)
+    assert [mau_nhom.group_of(n) for n in NAMES][:6] == ['longmaytrai'] * 5 + ['longmayphai'] and mau_nhom.group_of('p01_jaw_R') is None
+    assert mau_nhom.all_grouped(NAMES) and not mau_nhom.all_grouped(['p01_jaw_R', 'p02_jaw_R']) and not mau_nhom.all_grouped([])
+    assert mau_nhom.dot_rgb(None, True) == mau_nhom.FALLBACK_LOW and mau_nhom.dot_rgb(None, False) == mau_nhom.FALLBACK_OK        # tên cũ: đỏ / xanh như bản cũ
+

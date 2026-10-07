@@ -411,6 +411,20 @@ def count_files(path, exts=EXTS):
         return 0
 
 
+def auto_open_action(run, snap):
+    """Việc của nút Nạp & Mở ở mỗi nhịp đồng hồ: `run` = lượt đang chờ tự mở (None = không chờ), `snap` = job.snapshot().
+    'none' không chờ gì; 'wait' lượt đó còn đang chuẩn bị; 'go' lượt đó chuẩn bị xong → làm như bấm Rà lượt này (một lần);
+    'drop' lượt đó lỗi, bị huỷ hoặc job đã sang lượt khác → bỏ yêu cầu (bấm Rà lượt này tay khi cần)."""
+    if not run:
+        return "none"
+    if snap.get("run") != run:
+        return "drop"
+    st = snap.get("state")
+    if st == "dang_chay":
+        return "wait"
+    return "go" if st == "xong" else "drop"
+
+
 def job_progress(run_dir, lines):
     """parse_progress cho một lượt trên đĩa (đếm ảnh inbox và ảnh cắt)."""
     n_inbox = count_files(os.path.join(run_dir, "inbox"))

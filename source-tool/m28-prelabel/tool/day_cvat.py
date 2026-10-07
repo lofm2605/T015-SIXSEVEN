@@ -273,6 +273,7 @@ def result_html(ps, run):
     chk = ps.get("check") or {}
     url = str(ps.get("task_url") or "")
     link = (f'<a class="push-link" href="{_e(url)}" target="_blank" rel="noopener">{_e(url)}</a>' if url.startswith(("http://", "https://")) else "")
+    open_btn = dot_anh.open_task_button(url)                 # nút to ngay dưới tiêu đề: mở trang task trên CVAT ở tab mới
     kiem = (f'Kiểm sau khi nhập: <b>{chk.get("n_day_du", "?")}/{chk.get("n_nhan", "?")}</b> mặt Nhận có đủ 50 điểm kèm low_conf'
             + (" (đạt)" if chk.get("ok") else " (KHÔNG đạt)")) if chk else ""
     if "n_tay_nhap" in chk:                       # push.json lượt mới; lượt cũ không có khoá này nên không hiện dòng
@@ -283,6 +284,7 @@ def result_html(ps, run):
     gan = (f'<tr><th>Mặt Gán tay</th><td><b>{sa.get("gan_tay", "?")}</b> ({sa["gan_tay_co_nhap"]} có nháp · {sa.get("gan_tay_trong", "?")} ảnh trống)</td></tr>'
            if "gan_tay_co_nhap" in sa else "")
     return (f'<div class="nap-box nap-ok push-done" role="status"><b>Đã đẩy lên CVAT.</b>'
+            + (f'<div class="push-open">{open_btn}</div>' if open_btn else "") +
             f'<table class="m28-info"><tr><th>Task</th><td><b>{_e(ps.get("task", "?"))}</b> (id {_e(ps.get("task_id", "?"))})</td></tr>'
             f'<tr><th>Mở trong CVAT</th><td>{link}</td></tr>'
             f'<tr><th>Số job</th><td><b>{len(jobs)}</b> ({n_nhan} Nhận, {n_tay} Gán tay)</td></tr>{gan}</table>{kiem}{warn}</div>')

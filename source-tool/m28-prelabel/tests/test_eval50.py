@@ -17,10 +17,10 @@ REAL_CFG = os.path.join(HERE, '..', 'config', 'm28_config.json')
 
 def mini_cfg():
     """4 điểm: a, b (E, vùng eye; a, b là hai khoé mắt ngoài = iod_points), c (C, vùng lip, curve a-c-b), d (E, vùng lip)."""
-    pts = [dict(name='a', region='eye', type='E', curve=None, coincide=None),
-           dict(name='b', region='eye', type='E', curve=None, coincide=None),
-           dict(name='c', region='lip', type='C', curve=['a', 'c', 'b'], coincide=None),
-           dict(name='d', region='lip', type='E', curve=None, coincide=None)]
+    pts = [dict(name='a', group='g1', region='eye', type='E', curve=None, coincide=None),
+           dict(name='b', group='g1', region='eye', type='E', curve=None, coincide=None),
+           dict(name='c', group='g2', region='lip', type='C', curve=['a', 'c', 'b'], coincide=None),
+           dict(name='d', group='g2', region='lip', type='E', curve=None, coincide=None)]
     return dict(points=pts, iod_points=['a', 'b'])
 
 
@@ -86,19 +86,23 @@ def test_missing_points_are_skipped_and_counted_and_missing_iod_point_skips_the_
 
 
 def xml_of(cfg, faces, order=None, outside=(), skeletons=1, point_order=None):
-    """faces: {tên ảnh: {điểm: [x, y]}} -> bytes annotations.xml CVAT. order: thứ tự ảnh; point_order: thứ tự điểm; outside: {(ảnh, điểm)} có outside=1."""
+    """faces: {tên ảnh: {điểm: [x, y]}} -> bytes annotations.xml CVAT: MỘT skeleton cho mỗi nhóm (label = tên nhóm, QĐ-004). order: thứ tự ảnh; point_order: thứ tự điểm;
+    outside: {(ảnh, điểm)} có outside=1; skeletons=2: lặp mỗi skeleton hai lần."""
     names = point_order or [p['name'] for p in cfg['points']]
+    group_of = {p['name']: p.get('group') or p['name'] for p in cfg['points']}
+    groups = list(dict.fromkeys(group_of.values()))
     parts = ['<?xml version="1.0" encoding="utf-8"?>', '<annotations>', '  <version>1.1</version>']
     for i, im in enumerate(order or list(faces)):
         parts.append(f'<image id="{i}" name="{im}" width="640" height="480">')
         for _ in range(skeletons):
-            parts.append('<skeleton label="face50">')
-            for n in names:
-                if n in faces[im]:
-                    x, y = faces[im][n]
-                    out = '1' if (im, n) in outside else '0'
-                    parts.append(f'<points label="{n}" occluded="0" outside="{out}" points="{x},{y}"><attribute name="low_conf">false</attribute></points>')
-            parts.append('</skeleton>')
+            for g in groups:
+                parts.append(f'<skeleton label="{g}">')
+                for n in names:
+                    if group_of[n] == g and n in faces[im]:
+                        x, y = faces[im][n]
+                        out = '1' if (im, n) in outside else '0'
+                        parts.append(f'<points label="{n}" occluded="0" outside="{out}" points="{x},{y}"><attribute name="low_conf">false</attribute></points>')
+                parts.append('</skeleton>')
         parts.append('</image>')
     parts.append('</annotations>')
     return '\n'.join(parts).encode('utf-8')
@@ -226,16 +230,31 @@ def test_pair_order_follows_config_not_string_order():
     assert o == {'e_2': pytest.approx(30.0)}                                          # theo chữ cái ('e_10' < 'e_2') sẽ lấy sai điểm đầu cặp
 
 
-def test_labels_with_old_v2_point_names_are_reported_not_silently_empty(tmp_path):
+def test_labels_of_the_old_single_face50_skeleton_are_reported_not_silently_empty(tmp_path):
+    """Nhãn xuất từ project CŨ (một skeleton face50 mang 50 tên pNN_vùng_bên, hoặc bản đầu DMS): báo rõ một lần, không chấm bậy."""
     cfg = mini_cfg()
-    old_cfg = dict(points=[dict(name=f'p{i:02d}_eye_R', region='eye', type='E', curve=None, coincide=None) for i in range(1, 5)], iod_points=['p01_eye_R', 'p02_eye_R'])
+    old = ['<?xml version="1.0" encoding="utf-8"?>', '<annotations>', '<image id="0" name="x.png" width="640" height="480">', '<skeleton label="face50">']
+    for n, (x, y) in {'p01_eye_R': (0, 0), 'p02_eye_R': (100, 0), 'p03_eye_R': (1, 1), 'p04_eye_R': (2, 2)}.items():
+        old.append(f'<points label="{n}" occluded="0" outside="0" points="{x},{y}"><attribute name="low_conf">false</attribute></points>')
+    old += ['</skeleton>', '</image>', '</annotations>']
     p = tmp_path / 'old.xml'
-    p.write_bytes(xml_of(old_cfg, {'x.png': {'p01_eye_R': [0, 0], 'p02_eye_R': [100, 0], 'p03_eye_R': [1, 1], 'p04_eye_R': [2, 2]}}))
+    p.write_text('\n'.join(old), encoding='utf-8')
     warned = []
     got = eval50.read_labels(str(p), cfg, warn=warned.append)
-    assert got == {'x': {}} and len(warned) == 1 and 'CŨ' in warned[0] and 'version 2' in warned[0] and 'QĐ-003' in warned[0]
+    assert got == {} and len(warned) == 1 and 'face50' in warned[0] and 'CŨ' in warned[0] and 'version 2' in warned[0] and 'QĐ-004' in warned[0]
     res = eval50.evaluate(got, got, cfg)
-    assert res['rows'] == [] and res['skipped']                                         # không chấm bậy: mặt bị bỏ vì thiếu khoé mắt
+    assert res['rows'] == [] and res['summary']['n_faces'] == 0                           # không chấm bậy
+
+
+def test_partial_groups_are_read_and_missing_points_are_counted(tmp_path):
+    """Người gán chưa vẽ nhóm g2: ảnh vẫn đọc được, điểm của g2 thiếu (bị bỏ khỏi phép đo và đếm riêng), nhóm g1 vẫn chấm."""
+    cfg = mini_cfg()
+    p = tmp_path / 'p.xml'
+    p.write_bytes(xml_of(cfg, {'x.png': {'a': [0, 0], 'b': [100, 0]}}))
+    got = eval50.read_labels(str(p), cfg)
+    assert got == {'x': {'a': [0.0, 0.0], 'b': [100.0, 0.0]}}
+    s = eval50.face_scores({'a': [3, 4], 'b': [100, 0], 'c': [50, 5], 'd': [50, 60]}, got['x'], cfg)
+    assert s['ok'] and s['n_missing'] == 2 and s['nme'] == pytest.approx((5 + 0) / 2)
 
 
 def make_run(tmp_path, mode):

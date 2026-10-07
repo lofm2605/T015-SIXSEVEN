@@ -1429,3 +1429,104 @@ def test_xong_reloads_page_once_and_new_session_sees_done(five):
     assert 'm28-done-bar' in v['header'] and not v['nhan_ok'] and v['msg'] == ''     # không có 'done.txt' trong #msg -> JS không tải lại nữa
     s2 = ra.Store(five, 'P2', clock=FakeClock())                       # lượt đã có done.txt từ trước: không bar, không tải lại
     assert 'm28-done-bar' not in ra.make_view(s2, ra.new_session(s2))['header']
+
+
+# ---------- 10. màu theo nhóm (QĐ-004): ảnh chồng trên trang giống màu label trên CVAT ----------
+CFG_NAMES = [pt['name'] for pt in json.load(open(os.path.join(TOOL, '..', 'config', 'm28_config.json'), encoding='utf-8'))['points']]
+GRP_PTS = [(30 + 45 * (i % 10), 40 + 80 * (i // 10)) for i in range(N_PTS)]       # cách nhau 45 px: vòng chấm không đè nhau
+BG = (120, 130, 140)
+
+
+def grouped_run(tmp_path, overlay=None, mtime_shift=None):
+    """Lượt có tên điểm version 3 trong mp50.json (nhóm đọc được từ tên), ảnh cắt 512 xám, 3 điểm đầu low_conf.
+    overlay: None (không có file) hay màu RGB của một ảnh chồng đã có; mtime_shift: giây lệch so với giờ sửa của mau_nhom.py (âm = ảnh chồng cũ hơn)."""
+    pytest.importorskip('PIL')
+    from PIL import Image
+    rd = make_run(tmp_path, {'A': 3}, autoqc={'A': ('can_xem', [])})
+    os.makedirs(os.path.join(rd, 'crop', 'images'))
+    Image.new('RGB', (512, 512), BG).save(os.path.join(rd, 'crop', 'images', 'A.png'))
+    os.makedirs(os.path.join(rd, 'map50'))
+    with open(os.path.join(rd, 'map50', 'mp50.json'), 'w', encoding='utf-8') as f:
+        json.dump({'A': {'orig': {n: list(pt) for n, pt in zip(CFG_NAMES, GRP_PTS)}, 'flip': None}}, f)
+    if overlay is not None:
+        os.makedirs(os.path.join(rd, 'overlays'))
+        op = os.path.join(rd, 'overlays', 'A.png')
+        Image.new('RGB', (512, 512), overlay).save(op)
+        t = ra._style_mtime() + mtime_shift
+        os.utime(op, (t, t))
+    return rd
+
+
+def px(path, i, dx=0):
+    from PIL import Image
+    return Image.open(path).convert('RGB').getpixel((GRP_PTS[i][0] + dx, GRP_PTS[i][1]))
+
+
+def test_redraw_paints_group_colors_and_marks_low_conf_with_a_white_ring(tmp_path, monkeypatch):
+    from m28core import mau_nhom
+    monkeypatch.chdir(tmp_path)
+    rd = grouped_run(tmp_path)
+    path, warn = ra.overlay_for(ra.load_queue(rd)[0], rd)
+    assert path == os.path.join(rd, '_tmp', 'overlays', 'A.png') and 'vẽ lại' in warn           # không có file ảnh chồng: vẽ lại tạm, kèm cảnh báo cũ
+    want = {i: mau_nhom.hex_rgb(mau_nhom.GROUP_COLOR[mau_nhom.group_of(CFG_NAMES[i])]) for i in range(N_PTS)}
+    assert px(path, 3) == (0xe7, 0x4c, 0x3c) == want[3]                                         # longmaytrai_4 ổn: đỏ của nhóm
+    assert px(path, 5) == (0x34, 0x98, 0xdb) == want[5]                                         # longmayphai_1: xanh dương
+    assert px(path, 12) == (0x2e, 0xcc, 0x71) == want[12]                                       # songmui_3: xanh lá
+    assert px(path, 20) == want[20] and px(path, 40) == want[40]                                # mắt và môi theo nhóm
+    assert len({want[i] for i in range(N_PTS)}) == 7                                            # bảy màu khác nhau
+    for i in range(3):                                                                          # 3 điểm đầu low_conf: vẫn màu nhóm ở giữa, vòng trắng bên ngoài
+        assert px(path, i) == want[i]
+        assert px(path, i, dx=mau_nhom.R_LOW + 1) == (255, 255, 255)
+    assert px(path, 3, dx=mau_nhom.R_OK + 2) == BG                                              # chấm ổn nhỏ, không có vòng
+    assert px(path, 3, dx=mau_nhom.R_OK + 1) == mau_nhom.DARK                                   # chỉ một viền tối mảnh
+
+
+def test_page_recolors_an_old_style_overlay_without_a_warning_and_keeps_the_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd = grouped_run(tmp_path, overlay=(10, 20, 30), mtime_shift=-3600)                         # ảnh chồng chuẩn bị TRƯỚC khi có màu nhóm
+    face = ra.load_queue(rd)[0]
+    before = open(os.path.join(rd, 'overlays', 'A.png'), 'rb').read()
+    path, warn = ra.overlay_for(face, rd)
+    assert path == os.path.join(rd, '_tmp', 'overlays', 'A.png') and warn is None
+    assert px(path, 5) == (0x34, 0x98, 0xdb)
+    assert open(os.path.join(rd, 'overlays', 'A.png'), 'rb').read() == before                   # không ghi đè file gốc
+    m = os.path.getmtime(path)
+    assert ra.overlay_for(face, rd)[0] == path and os.path.getmtime(path) == m                  # cache
+    thumb = ra.thumb_for(face, 'nhan', rd)
+    assert os.path.isfile(thumb)
+
+
+def test_page_keeps_an_overlay_that_is_already_new(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd = grouped_run(tmp_path, overlay=(10, 20, 30), mtime_shift=+3600)
+    path, warn = ra.overlay_for(ra.load_queue(rd)[0], rd)
+    assert path == os.path.join(rd, 'overlays', 'A.png') and warn is None
+
+
+def test_page_keeps_an_old_overlay_of_a_run_with_old_point_names(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd, _ = fake_run_with_images(tmp_path, with_overlay=True)                                   # mp50.json tên p01…: không có nhóm để tô
+    op = os.path.join(rd, 'overlays', 'A.png')
+    os.utime(op, (1_000_000_000, 1_000_000_000))
+    path, warn = ra.overlay_for(ra.load_queue(rd)[0], rd)
+    assert path == op and warn is None
+
+
+def test_legend_lists_the_seven_group_colors_and_the_low_conf_marker():
+    from m28core import mau_nhom
+    h = ra.LEGEND_HTML
+    for g, c in mau_nhom.GROUP_COLOR.items():
+        assert c in h and mau_nhom.GROUP_VI[g] in h
+    assert 'low_conf' in h and 'vòng trắng' in h and 'chấm đỏ' not in h and 'chấm xanh' not in h
+
+
+def test_nap_anh_auto_open_action():
+    import nap_anh
+    act = nap_anh.auto_open_action
+    assert act(None, dict(run='A', state='xong')) == 'none' and act('', {}) == 'none'
+    assert act('A', dict(run='A', state='dang_chay')) == 'wait'
+    assert act('A', dict(run='A', state='xong')) == 'go'
+    assert act('A', dict(run='A', state='loi')) == 'drop' and act('A', dict(run='A', state='da_huy')) == 'drop'
+    assert act('A', dict(run='B', state='xong')) == 'drop' and act('A', dict(run='B', state='dang_chay')) == 'drop'    # job đã sang lượt khác
+    assert act('A', dict(state='chua')) == 'drop'
+

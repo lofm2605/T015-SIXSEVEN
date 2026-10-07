@@ -757,6 +757,24 @@ def grid_html(info, rows, page, trash, *, active=False, push=None):
     return (f'<div class="dot-detail">{head}{cvat}<div class="dot-grid" role="list">{grid}</div>{pager}{trash_html(info["name"], trash)}{danger}</div>')
 
 
+def safe_task_url(url):
+    """Địa chỉ task CVAT để mở ở tab mới: chỉ http/https, có máy chủ, KHÔNG có user:pass@ (push đã từ chối, push.json có thể bị sửa tay). Không hợp lệ thì ''."""
+    from urllib.parse import urlsplit
+    try:
+        u = urlsplit(str(url or "").strip())
+        if u.scheme not in ("http", "https") or not u.netloc or u.username is not None or u.password is not None:
+            return ""
+    except ValueError:
+        return ""
+    return str(url).strip()
+
+
+def open_task_button(url, cls="push-open-btn"):
+    """Nút (thẻ <a>) 'Mở task trên CVAT' mở tab mới; thiếu hoặc sai địa chỉ thì không có nút (chuỗi rỗng)."""
+    u = safe_task_url(url)
+    return (f'<a class="{cls}" href="{_e(u)}" target="_blank" rel="noopener noreferrer">Mở task trên CVAT ↗</a>' if u else "")
+
+
 def push_section_html(info):
     ps = info.get("push") or {}
     st = ps.get("trang_thai")
@@ -771,10 +789,12 @@ def push_section_html(info):
            "dang_tao": "Đẩy dở: đang tạo task (chưa có id)", "hong": "push.json hỏng"}[st]
     url = ps.get("task_url")
     link = (f' · <a href="{_e(url)}" target="_blank" rel="noopener">mở trong CVAT</a>' if url and str(url).startswith(("http://", "https://")) else "")
+    open_btn = open_task_button(url) if st in ("xong", "da_tao", "da_nhap") else ""
     warn = ('<div class="dot-warn">Xoá ảnh ở đây KHÔNG xoá ảnh trong task trên CVAT. Muốn bỏ ảnh khỏi CVAT phải xoá trong CVAT hoặc xoá task.</div>')
     can_del = st in ("xong", "da_tao", "da_nhap")
     btn = (f'<button type="button" class="dot-btn dot-btn-danger" data-act="deltask" data-run="{n}">Xoá task trên CVAT…</button>' if can_del else "")
-    return (f'<div class="dot-section dot-cvat"><div><b>CVAT:</b> {txt} · task <b>{name}</b> (id {tid}){link}</div>{warn}{btn}</div>')
+    return (f'<div class="dot-section dot-cvat"><div><b>CVAT:</b> {txt} · task <b>{name}</b> (id {tid}){link}</div>'
+            + (f'<div class="push-open">{open_btn}</div>' if open_btn else "") + f'{warn}{btn}</div>')
 
 
 def trash_html(run, items):

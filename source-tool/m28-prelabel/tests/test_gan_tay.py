@@ -18,7 +18,8 @@ from m28core import push as pushmod  # noqa: E402
 from test_dot_anh import ALL_DECIDED, make_dot_run, world  # noqa: E402,F401  (fixture world: thư mục tạm có config/pipeline.json)
 from test_push import cvat, calls, collect_args, pj, point_names, state  # noqa: E402,F401  (fixture cvat: CVAT giả + config/ tạm)
 
-NAMES = [f'p{i + 1:02d}' for i in range(50)]
+GROUP_LABELS = ['longmaytrai', 'longmayphai', 'songmui', 'mattrai', 'matphai', 'moingoai', 'moitrong']      # bảy label skeleton của project (tên nhóm)
+NAMES = [f'g{i // 10 + 1}_{i % 10 + 1}' for i in range(50)]                       # 5 nhóm giả g1..g5 x 10 điểm, tên <nhóm>_<k> như tên thật (mỗi nhóm một skeleton, QĐ-004)
 
 
 def entry(shift=0.0, names=NAMES):
@@ -31,27 +32,27 @@ def test_nhap_hop_le_cases():
     assert phan_loai.nhap_hop_le(ok) and phan_loai.nhap_hop_le(ok, NAMES)
     assert not phan_loai.nhap_hop_le(None) and not phan_loai.nhap_hop_le(1) and not phan_loai.nhap_hop_le({}) and not phan_loai.nhap_hop_le({'orig': []})
     short = entry()
-    del short['orig']['p50']
+    del short['orig'][NAMES[49]]
     assert not phan_loai.nhap_hop_le(short) and not phan_loai.nhap_hop_le(short, NAMES)            # thiếu điểm
     assert phan_loai.nhap_hop_le(short, NAMES[:49])                                                # đòi đủ tên trong point_names
     other = entry(names=[f'q{i}' for i in range(50)])
     assert phan_loai.nhap_hop_le(other) and not phan_loai.nhap_hop_le(other, NAMES)               # khác tên: đủ 50 khoá nhưng sai tên
     for bad in (float('nan'), float('inf'), -math.inf, None, True, 'x'):
         e = entry()
-        e['orig']['p07'] = [bad, 1.0]
+        e['orig'][NAMES[6]] = [bad, 1.0]
         assert not phan_loai.nhap_hop_le(e) and not phan_loai.nhap_hop_le(e, NAMES), bad
     for bad in ([1.0], [1, 2, 3], None, 5):
         e = entry()
-        e['orig']['p07'] = bad
+        e['orig'][NAMES[6]] = bad
         assert not phan_loai.nhap_hop_le(e), bad
     e = entry()
-    e['orig']['p07'] = [1, 2]                                                                      # số nguyên hữu hạn vẫn hợp lệ
+    e['orig'][NAMES[6]] = [1, 2]                                                                      # số nguyên hữu hạn vẫn hợp lệ
     assert phan_loai.nhap_hop_le(e)
 
 
 def test_classify_splits_tay_nhap_and_tay_trong():
     bad = entry()
-    bad['orig']['p03'] = [float('nan'), 0.0]
+    bad['orig'][NAMES[2]] = [float('nan'), 0.0]
     meta = {n: {} for n in ('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h')}
     mp50 = {'a': entry(), 'b': entry(), 'c': entry(), 'd': entry(), 'f': bad, 'g': entry()}       # e, h: không có nháp
     tri = dict(a=('nhan', ''), b=('gan_tay', ''), c=('gan_tay', ''), d=('bo', ''), e=('nhan', ''), f=('gan_tay', ''), g=('gan_tay', ''),
@@ -90,7 +91,7 @@ def _xml_images(path):
 def test_build_xml_tay_nhap_after_nhan_all_low_conf(tmp_path, mode):
     meta, cfg = _meta(), _cfg()
     mp50 = {n: entry(i) for i, n in enumerate(('n1', 'n2', 't1', 't2'))}
-    mp50['t2']['orig']['p01'] = [-500.0, 9999.0]                                  # ngoài ảnh: chế độ auto phải kẹp mép
+    mp50['t2']['orig'][NAMES[0]] = [-500.0, 9999.0]                                  # ngoài ảnh: chế độ auto phải kẹp mép
     fl = {'n1': [i % 3 == 0 for i in range(50)], 'n2': [False] * 50}
     path = str(tmp_path / 'x' / 'p.xml')
     steps.build_xml(mode, ['n1', 'n2'], meta, mp50, fl, cfg, path, tay_nhap=['t1', 't2'])
@@ -99,7 +100,8 @@ def test_build_xml_tay_nhap_after_nhan_all_low_conf(tmp_path, mode):
     assert list(ims) == ['n1' + ext, 'n2' + ext, 't1' + ext, 't2' + ext]          # Nhận trước, Gán tay có nháp nối sau; x1 (không nháp) không có
     assert [im.get('id') for im in ims.values()] == ['0', '1', '2', '3']             # id Nhận 0..len-1, Gán tay len(nhan)+i
     for n, im in ims.items():
-        pts = im.find('skeleton').findall('points')
+        assert [sk.get('label') for sk in im.findall('skeleton')] == ['g1', 'g2', 'g3', 'g4', 'g5']     # MỘT skeleton mỗi nhóm, label = tên nhóm
+        pts = im.findall('skeleton/points')
         assert [p.get('label') for p in pts] == NAMES                              # đúng 50 điểm theo thứ tự config
         low = [p.find('attribute').text for p in pts]
         if n.startswith('t'):
@@ -110,21 +112,21 @@ def test_build_xml_tay_nhap_after_nhan_all_low_conf(tmp_path, mode):
             assert low == ['false'] * 50
     if mode == 'crop':
         assert (ims['t1.png'].get('width'), ims['t1.png'].get('height')) == ('512', '512')
-        xy = [float(v) for v in ims['t1.png'].find('skeleton').findall('points')[4].get('points').split(',')]
+        xy = [float(v) for v in ims['t1.png'].findall('skeleton/points')[4].get('points').split(',')]
         assert xy == [pytest.approx(10.0 + 4 + 2), pytest.approx(20.0 + 4)]        # nháp t1 = entry(shift 2) giữ nguyên toạ độ ảnh cắt
     else:
         assert (ims['t1.jpg'].get('width'), ims['t1.jpg'].get('height')) == ('640', '480')
-        xy = [float(v) for v in ims['t1.jpg'].find('skeleton').findall('points')[4].get('points').split(',')]
+        xy = [float(v) for v in ims['t1.jpg'].findall('skeleton/points')[4].get('points').split(',')]
         left, top = 30.0 + 2, -5.0                                                  # t1 là meta thứ 3 (i=2)
         assert xy == [pytest.approx((10.0 + 4 + 2) / 2.0 + left), pytest.approx(max((20.0 + 4) / 2.0 + top, 0))]
-        corner = [float(v) for v in ims['t2.jpg'].find('skeleton').findall('points')[0].get('points').split(',')]
+        corner = [float(v) for v in ims['t2.jpg'].findall('skeleton/points')[0].get('points').split(',')]
         assert corner == [0.0, 479.0]                                               # kẹp vào mép ảnh gốc (0..w-1, 0..h-1)
 
 
 def test_build_xml_default_keeps_old_behaviour_and_skips_invalid_draft(tmp_path):
     meta, cfg = _meta(), _cfg()
     bad = entry()
-    bad['orig']['p05'] = [float('nan'), 1.0]
+    bad['orig'][NAMES[4]] = [float('nan'), 1.0]
     mp50 = {'n1': entry(), 't1': entry(), 't2': bad}
     fl = {'n1': [False] * 50}
     p1 = str(tmp_path / 'a.xml')
@@ -187,13 +189,13 @@ def test_push_19_nhan_2_tay_nhap_1_anh_trong(cvat):
     assert len(calls(cvat, 'Task.import_annotations')) == 1
     ann = task_ann(cvat)
     for t in ('T_001.png', 'T_002.png'):
-        (sk,) = ann[t]
-        assert sk['label'] == 'face50' and [p['label'] for p in sk['points']] == point_names()
-        assert [p['low_conf'] for p in sk['points']] == ['true'] * 50                # CVAT giả: 50 điểm toàn true
+        assert [sk['label'] for sk in ann[t]] == GROUP_LABELS                          # bảy skeleton, mỗi nhóm một, đúng thứ tự nhóm
+        assert [p['label'] for sk in ann[t] for p in sk['points']] == point_names()
+        assert [p['low_conf'] for sk in ann[t] for p in sk['points']] == ['true'] * 50   # CVAT giả: 50 điểm toàn true
     assert 'G_001.png' not in ann                                                     # ảnh trống: không có nhãn
     assert len(ann) == 21
-    (sk,) = ann['F_001.png']
-    assert [p['low_conf'] for p in sk['points']] == ['true' if k % 7 == 0 else 'false' for k in range(50)]   # Nhận giữ cờ thật
+    assert [sk['label'] for sk in ann['F_001.png']] == GROUP_LABELS
+    assert [p['low_conf'] for sk in ann['F_001.png'] for p in sk['points']] == ['true' if k % 7 == 0 else 'false' for k in range(50)]   # Nhận giữ cờ thật
 
 
 def test_push_only_tay_nhap_imports_exactly_once(cvat):
@@ -218,8 +220,10 @@ def test_push_only_tay_trong_does_not_import(cvat):
 
 def test_check_faces_flags_bad_tay_nhap_and_non_empty_blank():
     def sk(low, drop=0):
-        pts = {n: dict(x=1.0, y=2.0, occluded='0', outside='0', low_conf=low) for n in NAMES[drop:]}
-        return dict(width='512', height='512', skeletons=[dict(label='face50', points=pts)], n_shapes=1)
+        have = NAMES[drop:]
+        sks = [dict(label=g, points={n: dict(x=1.0, y=2.0, occluded='0', outside='0', low_conf=low) for n in names if n in have})
+               for g, names in cvat_io.groups_from_names(NAMES).items()]
+        return dict(width='512', height='512', skeletons=sks, n_shapes=len(sks))
 
     blank = dict(width='512', height='512', skeletons=[], n_shapes=0)
     ann = dict(F=sk('false'), T=sk('true'), G=blank)
@@ -231,6 +235,18 @@ def test_check_faces_flags_bad_tay_nhap_and_non_empty_blank():
     assert not res['ok'] and res['tay_nhap_thieu'] == ['T'] and res['n_tay_nhap_day_du'] == 0
     res = cvat_io.check_faces(dict(ann, T=sk('true', drop=1)), ['F'], ['T', 'G'], NAMES, ['T'])
     assert not res['ok'] and res['tay_nhap_thieu'] == ['T']                          # thiếu điểm
+    two = sk('true')
+    two['skeletons'].append(dict(two['skeletons'][2]))                               # hai skeleton cùng nhóm g3
+    res = cvat_io.check_faces(dict(ann, T=two), ['F'], ['T', 'G'], NAMES, ['T'])
+    assert not res['ok'] and res['tay_nhap_thieu'] == ['T']
+    old = sk('true')
+    old['skeletons'] = [dict(label='face50', points={n: p for s_ in old['skeletons'] for n, p in s_['points'].items()})]      # bản CŨ: một skeleton face50 đủ 50 điểm
+    res = cvat_io.check_faces(dict(ann, T=old), ['F'], ['T', 'G'], NAMES, ['T'])
+    assert not res['ok'] and res['tay_nhap_thieu'] == ['T']
+    missing_group = sk('true')
+    del missing_group['skeletons'][4]                                                # thiếu cả skeleton nhóm g5
+    res = cvat_io.check_faces(dict(ann, T=missing_group), ['F'], ['T', 'G'], NAMES, ['T'])
+    assert not res['ok'] and res['tay_nhap_thieu'] == ['T']
     res = cvat_io.check_faces(dict(ann, T=blank), ['F'], ['T', 'G'], NAMES, ['T'])
     assert not res['ok'] and res['tay_nhap_thieu'] == ['T']                          # có nháp mà CVAT không có skeleton
     res = cvat_io.check_faces(dict(ann, G=sk('true')), ['F'], ['T', 'G'], NAMES, ['T'])
@@ -448,3 +464,27 @@ def test_old_push_json_xong_still_works_in_run_info_and_push_model(tmp_path, wor
     assert m['kind'] == 'done' and 'Đã đẩy lên CVAT' in day_cvat.panel_html(m)
     p = day_cvat.plan_counts(rd, 'P2', str(world))
     assert (p['tay'], p['tay_nhap'], p['tay_trong']) == (2, 1, 1)                      # a3 có nháp, a6 (no_draft) ảnh trống
+
+
+def test_done_card_has_a_button_to_open_the_cvat_task():
+    import day_cvat
+    ps = dict(trang_thai='xong', task='demo-Khoi', task_id=4, task_url='http://localhost:8080/tasks/4', jobs=[dict(kind='nhan')])
+    h = day_cvat.result_html(ps, 'Khoi')
+    assert h.count('class="push-open-btn"') == 1 and 'href="http://localhost:8080/tasks/4" target="_blank" rel="noopener noreferrer">Mở task trên CVAT' in h
+    assert h.index('push-open-btn') < h.index('<table')                                          # nút nằm ngay dưới tiêu đề, trước bảng
+    assert 'class="push-link"' in h                                                              # link chữ cũ vẫn còn trong bảng
+    for bad in ('javascript:alert(1)', 'http://user:pass@localhost:8080/tasks/4', 'ftp://x/tasks/4', '', 'http://[bad', '//x/tasks/4'):
+        hb = day_cvat.result_html(dict(ps, task_url=bad), 'Khoi')
+        assert 'push-open-btn' not in hb and 'Mở task trên CVAT' not in hb, bad                   # địa chỉ lạ: không có nút
+    assert 'push-open-btn' not in day_cvat.result_html(dict(trang_thai='xong'), 'Khoi')           # push.json rất cũ: không có địa chỉ, không có nút
+
+
+def test_dot_tab_cvat_section_has_the_open_button_only_when_the_task_exists():
+    import dot_anh
+    ps = dict(trang_thai='xong', task='demo-Khoi', task_id=4, task_url='http://localhost:8080/tasks/4')
+    h = dot_anh.push_section_html(dict(name='Khoi', push=ps))
+    assert 'class="push-open-btn"' in h and 'href="http://localhost:8080/tasks/4"' in h and 'noopener noreferrer' in h
+    assert 'push-open-btn' not in dot_anh.push_section_html(dict(name='Khoi', push=dict(ps, trang_thai='task_deleted')))       # task đã xoá: không còn gì để mở
+    assert 'push-open-btn' not in dot_anh.push_section_html(dict(name='Khoi', push=dict(ps, trang_thai='dang_tao')))           # chưa có id: không nút
+    assert dot_anh.open_task_button('javascript:alert(1)') == '' and dot_anh.safe_task_url(' http://localhost:8080/tasks/4 ') == 'http://localhost:8080/tasks/4'
+
