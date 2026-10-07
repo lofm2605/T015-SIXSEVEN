@@ -81,8 +81,10 @@ python tool\m28.py all --run F5 --list data\f5_list.csv --images data\crops --bo
 ```
 Kết quả đúng: các bước `crop`, `mediapipe`, `map50`, `flags`, `autoqc`, `overlays` đều "xong", `push` in "Chạy thử (--dry-run)" rồi dừng,
 và có `runs\F5\xml\prelabel.xml` (5 mặt × 50 điểm). Lần chạy này `low_conf` = 0 vì `t_flip` trong `config\m28_config.json` còn `null` (P2 chốt sau họp 12/10).
-Lưu ý: 50 điểm là các đỉnh MediaPipe chọn sẵn (`config\m28_config.json`, `mp_idx`); khi mặt quay quá ~25-30 độ, các điểm viền phía xa nằm trong má chứ không trên đường viền nhìn thấy (xem README, mục "Ánh xạ 478→50 bằng chọn đỉnh").
-Để thấy điểm đỏ trên trang rà soát khi thử: mở `config\m28_config.json`, đổi `"t_flip": null` thành `"t_flip": 0.0464` (số đề xuất cho họp 12/10, chưa chốt) rồi chạy lại các bước từ `flags`:
+Lưu ý: 50 điểm là **định nghĩa DMS** (từ 7/10/2026, QĐ-003): lông mày trái/phải 5+5, sống mũi 4, mắt trái/phải 8+8, môi ngoài 12, môi trong 8; **không có viền hàm**. **Trái/phải theo bức ảnh** (`*trai` ở nửa trái ảnh, `*phai` ở nửa phải ảnh), ngược với bản cũ.
+Điểm là các đỉnh MediaPipe chọn sẵn (`config\m28_config.json`, `mp_idx`); khi mặt quay quá ~30 độ, mắt, mày, môi phía xa cụm lại sát sống mũi (xem README, mục "50 điểm DMS trên đỉnh MediaPipe").
+Nếu `runs\F5` còn từ lần chạy trước 7/10/2026 (50 điểm cũ, tên `p01_jaw_R`…), `m28.py` tự tính lại `map50 flags autoqc overlays` bằng config mới (giữ crop và MediaPipe) và in một dòng báo; XML của lượt đã đẩy lên CVAT (`push` đã xong) không bị ghi lại.
+Để thấy điểm đỏ trên trang rà soát khi thử: mở `config\m28_config.json`, đổi `"t_flip": null` thành `"t_flip": 0.0357` (số đề xuất cho họp 12/10 trên 50 điểm DMS, chưa chốt; số 0,0464 cũ là của 50 điểm cũ, không dùng) rồi chạy lại các bước từ `flags`:
 `python tool\m28.py prepare --run F5 --list data\f5_list.csv --images data\crops --box wflw --force flags autoqc overlays`.
 (Đừng commit file config sau khi sửa số này; hoàn lại bằng `git checkout config\m28_config.json`.)
 
@@ -127,6 +129,7 @@ Cài CVAT theo `de-tai-m28\huong-dan-chung.md` (mục cài CVAT), rồi cài SDK
 python -m pip install cvat-sdk==2.77.0
 python tool\make_label.py
 ```
+**Project CVAT dựng bằng label cũ (50 điểm `pNN_vùng_bên`, trước QĐ-003) không dùng được:** `push` dừng và báo "label face50 CŨ". P4 dựng lại project (hoặc project mới tên khác, đặt trong `config\pipeline.json`) bằng `configace50_label.json` mới (một skeleton `face50`, 50 sublabel tên mới, 47 cạnh).
 **Cách chính (từ trang rà soát):** mở trang → tab **Cài đặt** → dán link `http://localhost:8080` và token CVAT vào ô → **Lưu** → **Thử kết nối CVAT** (phải thấy "Kết nối được", bản 2.77.0, tên tài khoản).
 Mặc định token chỉ nằm trong bộ nhớ của trang này. Bật **Nhớ trên máy này** thì token lưu ở `%APPDATA%\m28\cvat.json` (ngoài repo; Windows không có quyền 0600 thật, file dựa vào quyền hồ sơ của bạn). Ngày 24/10 bấm **Quên token** và thu hồi token trong CVAT.
 Không dán token vào chat hay file trong repo.
@@ -164,7 +167,7 @@ Làm một lần trên máy có CVAT, trước khi đẩy ảnh thật (mất kh
 ```bat
 python -m pytest tests -q
 ```
-Phải ra `657 passed` (hoặc hơn; có thể thêm 1 `skipped`). Test chỉ dùng dữ liệu giả, không cần ảnh mặt thật hay mạng.
+Trên máy Windows của chủ repo (7/10/2026, Python 3.14.7) ra `666 passed, 3 skipped` và **11 lỗi có sẵn do Windows** (tạo symlink cần quyền, đường dẫn/CRLF của vài bài test; không do M28): đừng coi 11 lỗi đó là hỏng, chỉ cần không có lỗi MỚI. Test chỉ dùng dữ liệu giả, không cần ảnh mặt thật hay mạng.
 
 | Triệu chứng | Cách xử lý |
 |---|---|
