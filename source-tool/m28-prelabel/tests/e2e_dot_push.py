@@ -1,10 +1,10 @@
 """Kiểm thử đầu-cuối tab "Các đợt", xoá mềm, nút "Đẩy lên CVAT" và "Xoá task trên CVAT" bằng Chromium thật (Playwright) + CVAT GIẢ. TUỲ CHỌN.
 
-Cần playwright và Chromium (KHÔNG chạy `playwright install`), MediaPipe thật, ảnh WFLW thật, pytest không gom file này (tên không khớp test_*.py).
+Cần playwright và Chromium (KHÔNG chạy `playwright install`), MediaPipe thật, ảnh in-cabin thật, pytest không gom file này (tên không khớp test_*.py).
 Thư mục chạy (--work) có config/ (m28_config.json, map_mp50.json, face50_label.json, pipeline.json), face_landmarker.task và r_list.csv. Ví dụ:
 
     PYTHONPATH=$S/pwlib PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers \\
-        python tests/e2e_dot_push.py --work $S/work --wflw $S/wflw/WFLW_images --shots $S/ui_shots
+        python tests/e2e_dot_push.py --work $S/work --imgs $S/incab_data/frames --shots $S/ui_shots
 
 CVAT GIẢ: trang và tiến trình con chạy với PYTHONPATH=tests/fake_cvat (gói cvat_sdk giả giữ trạng thái trong file M28_FAKE_CVAT_STATE),
 CVAT_URL=http://localhost:8080, CVAT_ACCESS_TOKEN = chuỗi giả dễ nhận. KHÔNG có CVAT thật: kết quả chỉ chứng minh logic trang và tiến trình,
@@ -54,18 +54,18 @@ def n_calls(state, name):
     return sum(1 for c in fake_state(state)['calls'] if c['m'] == name)
 
 
-def pick_images(W, wflw, n):
+def pick_images(W, imgs_dir, n):
     rows = read_csv_rows(os.path.join(W, 'r_list.csv'))[1:]
     out, seen = [], set()
     for r in rows:
         sub = r[0].split('/')[0]
-        p = os.path.join(wflw, *r[0].split('/'))
+        p = os.path.join(imgs_dir, *r[0].split('/'))
         if sub not in seen and os.path.exists(p):
             seen.add(sub)
             out.append(p)
         if len(out) == n:
             return out
-    raise RuntimeError(f'không đủ {n} ảnh WFLW ở {wflw}')
+    raise RuntimeError(f'không đủ {n} ảnh in-cabin ở {imgs_dir}')
 
 
 def reset_runs(W):
@@ -155,7 +155,7 @@ def tree_text(path):
     return out
 
 
-def run(pw, W, wflw, shots, port):
+def run(pw, W, imgs_dir, shots, port):
     state = os.path.join(shots, 'fake_cvat_state.json')
     runs = os.path.join(W, 'runs')
     reset_runs(W)
@@ -163,7 +163,7 @@ def run(pw, W, wflw, shots, port):
         os.remove(state)
     for f in ('face50_label.json', 'pipeline.json'):
         shutil.copy(os.path.join(CODE, 'config', f), os.path.join(W, 'config', f))
-    imgs = pick_images(W, wflw, 10)
+    imgs = pick_images(W, imgs_dir, 10)
     sets = {'Khoi': imgs[:4], 'Nam': imgs[4:7], 'Cuong': imgs[7:10]}
     out_log = os.path.join(shots, 'app_dot_push.log')
     p = start([sys.executable, os.path.join(CODE, 'tool', 'review_app.py'), '--nap', 'E2E'], W, port, app_env(W, state), out_log)
@@ -653,7 +653,7 @@ def run(pw, W, wflw, shots, port):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--work', required=True, help='thư mục chạy có config/, face_landmarker.task, r_list.csv')
-    ap.add_argument('--wflw', required=True, help='thư mục WFLW_images')
+    ap.add_argument('--imgs', required=True, help='thư mục ảnh khung gốc in-cabin')
     ap.add_argument('--shots', required=True, help='thư mục lưu ảnh chụp (ngoài repo: có mặt người)')
     ap.add_argument('--port', type=int, default=7881)
     a = ap.parse_args()
@@ -663,7 +663,7 @@ def main():
     t0 = time.time()
     try:
         with sync_playwright() as pw:
-            run(pw, W, os.path.abspath(a.wflw), shots, a.port)
+            run(pw, W, os.path.abspath(a.imgs), shots, a.port)
     except (AssertionError, RuntimeError) as e:
         log(f'\nHỎNG: {e}')
         return 1

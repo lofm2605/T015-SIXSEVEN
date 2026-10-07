@@ -2,10 +2,8 @@
 
     python tool\\check_manifest.py data\\manifest.csv
 
-Tự nhận dạng kiểu manifest:
-  - có cột `source`      → manifest IN-CABIN (YawDD + DrivFace, QĐ-001): kiểm số lượng, tên file, khối X, tách người,
-                           cột giá trị, khoảng cách giữa hai khung cùng video.
-  - có cột `wflw_image`  → manifest WFLW CŨ (giữ để test và gói cũ vẫn kiểm được).
+Manifest là manifest IN-CABIN (YawDD + DrivFace, QĐ-001), có cột `source`: kiểm số lượng, tên file, khối X, tách người,
+cột giá trị, khoảng cách giữa hai khung cùng video. Thiếu cột `source` thì báo lỗi.
 Các hằng số và hàm dùng chung với inc_ingest.py nằm ở đây (một nguồn duy nhất): inc_ingest.py import từ file này.
 """
 import csv
@@ -104,14 +102,6 @@ def _check_common(rows, key_cols):
     return err
 
 
-def check_wflw(rows):
-    err = _check_common(rows, ('wflw_image', 'wflw_line'))
-    for k in '12345':
-        b = [r for r in rows if r['set'] == 'X' and r['block'] == k]
-        err += x_block_errors(b, f'khối X{k}')
-    return err
-
-
 def _name_matches_set(r):
     """Tên file phải khớp set/block/seq: F_001 (seq 1), G2_03 (block 2, seq 3), Pa_01 (block a), X5_10, D_07..."""
     m = re.match(r'^([A-Za-z]+?)([1-5ab]?)_(\d+)\.png$', r['file'])
@@ -172,14 +162,14 @@ def check_incabin(rows):
 
 
 def check(rows):
-    """Tự nhận dạng: có cột `source` → in-cabin; có `wflw_image` → WFLW cũ."""
+    """Manifest in-cabin: cần cột `source`, `image`, `face_idx`; thiếu thì báo lỗi."""
     if rows and 'source' in rows[0]:
         return check_incabin(rows)
-    return check_wflw(rows)
+    return ['manifest cần cột source, image, face_idx (manifest in-cabin YawDD + DrivFace)']
 
 
 def kind_of(rows):
-    return 'in-cabin (YawDD + DrivFace)' if rows and 'source' in rows[0] else 'WFLW cũ'
+    return 'in-cabin (YawDD + DrivFace)' if rows and 'source' in rows[0] else 'không rõ (thiếu cột source)'
 
 
 def main(path='data/manifest.csv'):

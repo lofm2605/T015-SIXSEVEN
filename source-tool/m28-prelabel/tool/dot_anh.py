@@ -277,7 +277,7 @@ def run_info(run_dir, reviewer):
 
 # ---------- ảnh của đợt ----------
 def image_names(run_dir):
-    """Tên (không đuôi) các ảnh còn sống của đợt, sắp theo tên. Đợt nạp: theo inbox/; đợt từ WFLW (không inbox): theo ảnh cắt, flags, no_face."""
+    """Tên (không đuôi) các ảnh còn sống của đợt, sắp theo tên. Đợt nạp: theo inbox/; đợt không có inbox: theo ảnh cắt, flags, no_face."""
     gone = loai_tru.read_excluded(run_dir)
     names = set()
     inbox = os.path.join(run_dir, "inbox")

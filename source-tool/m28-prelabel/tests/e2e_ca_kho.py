@@ -2,7 +2,7 @@
 
 Cần playwright và Chromium, KHÔNG nằm trong requirements, pytest không gom file này (tên không khớp test_*.py).
 Chỉ chạy trên Linux (dùng `lsof` để kiểm cổng chỉ bind 127.0.0.1). Cần một thư mục chạy (--work) có config/, data/ (có manifest.csv),
-runs/F5 (5 mặt in-cabin hoặc WFLW cũ đã prepare) và runs/NAP_001 (lượt từ tab Nạp ảnh, có inbox/), face_landmarker.task không bắt buộc. Các lượt chứa ảnh WFLW
+runs/F5 (5 mặt in-cabin đã prepare) và runs/NAP_001 (lượt từ tab Nạp ảnh, có inbox/), face_landmarker.task không bắt buộc. Các lượt chứa ảnh người lái xe
 nên chỉ để ngoài git. Ví dụ (Linux cloud):
 
     cd $W && PYTHONPATH=$S/pwlib PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python $M/tests/e2e_ca_kho.py --work $W --shots $S/ui_shots
@@ -257,7 +257,7 @@ def step2(pw, W, shots):
 
 # ---------- bước 3 ----------
 def nguon_cka(W):
-    """Nguồn mong đợi của lượt CKA (bản chép của F5) theo data/manifest.csv của thư mục chạy: yawdd, drivface, yawdd+drivface (manifest in-cabin) hoặc wflw (manifest cũ)."""
+    """Nguồn mong đợi của lượt CKA (bản chép của F5) theo data/manifest.csv của thư mục chạy: yawdd, drivface, yawdd+drivface (manifest in-cabin; khong_ro nếu manifest không có cột source)."""
     import ca_kho
     return ca_kho.run_source(os.path.join(W, 'runs', 'CKA'), W)
 
@@ -271,7 +271,7 @@ def step3(pw, pg, W, shots):
     check('Gói họp chứa ảnh mặt người thật' in page.inner_text('#ck-warn'), 'có hộp cảnh báo riêng tư')
     box = page.inner_text('#ck-ngoai')
     check('CKN' in box and 'khách hàng' in box and page.locator('#ck-ngoai .nap-err').count() == 1, f'hộp đỏ nêu lượt CKN: {box[:90]!r}')
-    check(not page.locator('#ck-kem-ngoai input').is_checked() and page.locator('#ck-kem-anh input').is_checked(), 'mặc định: kèm ảnh của bộ dữ liệu (YawDD/DrivFace/WFLW cũ) bật, ảnh không rõ nguồn tắt')
+    check(not page.locator('#ck-kem-ngoai input').is_checked() and page.locator('#ck-kem-anh input').is_checked(), 'mặc định: kèm ảnh của bộ dữ liệu (YawDD/DrivFace) bật, ảnh không rõ nguồn tắt')
     page.wait_for_function("Array.from(document.querySelectorAll('#ck-list img')).filter(i => i.complete && i.naturalWidth > 0).length >= 3", timeout=20000)
     check(True, 'ảnh nhỏ của ca tải được (≥ 3)')
     pg.shot(shots, 'cakho_03_tab_desktop')
@@ -381,7 +381,7 @@ def step4(pw, W, shots):
 # ---------- bước 5 ----------
 def make_evil(path):
     with zipfile.ZipFile(path, 'w') as zf:
-        man = {'loai_goi': 'm28-ca-kho', 'phien_ban': 1, 'nguoi': 'P2', 'ngay': '2026-10-16', 'luot': ['CKA'], 'nguon': {'CKA': 'wflw'}, 'so_ca': 0}
+        man = {'loai_goi': 'm28-ca-kho', 'phien_ban': 1, 'nguoi': 'P2', 'ngay': '2026-10-16', 'luot': ['CKA'], 'nguon': {'CKA': 'yawdd'}, 'so_ca': 0}
         zf.writestr('manifest.json', json.dumps(man))
         zf.writestr('ca_kho.csv', ','.join(['luot', 'anh', 'nguoi', 'loai', 'diem', 'ghi_chu', 'tao_luc', 'sua_luc', 'quyet_dinh_ra', 'thumb']) + '\n')
         zf.writestr('../evil.jpg', b'khong phai anh')

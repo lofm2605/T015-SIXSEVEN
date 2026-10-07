@@ -427,8 +427,8 @@ def test_jobs_get_saved_token_in_env_not_in_argv_and_prepare_gets_none(S, world,
 def test_push_cmd_images_and_prepare_cmd_model_have_no_token():
     cmd = na.push_cmd('Khoi', 'P2', 'demo-Khoi', tool_dir='T', python='py')
     assert cmd == ['py', '-u', os.path.join('T', 'm28.py'), 'push', '--run', 'Khoi', '--reviewer', 'P2', '--task', 'demo-Khoi']
-    cmd = na.push_cmd('Khoi', 'P2', 'demo-Khoi', tool_dir='T', python='py', images='D:\\WFLW\\WFLW_images')
-    assert cmd[-2:] == ['--images', 'D:\\WFLW\\WFLW_images'] and na.delete_task_cmd('Khoi', 'demo-Khoi')[-2:] == ['--confirm-name', 'demo-Khoi']
+    cmd = na.push_cmd('Khoi', 'P2', 'demo-Khoi', tool_dir='T', python='py', images='D:\\m28\\data\\frames')
+    assert cmd[-2:] == ['--images', 'D:\\m28\\data\\frames'] and na.delete_task_cmd('Khoi', 'demo-Khoi')[-2:] == ['--confirm-name', 'demo-Khoi']
     pc = na.prepare_cmd('NAP_001', tool_dir='T', python='py', model='D:\\m\\face_landmarker.task')
     assert pc[-2:] == ['--model', 'D:\\m\\face_landmarker.task'] and na.prepare_cmd('NAP_001', 'T', 'py')[-1] == 'auto'
     for c in (cmd, pc):
@@ -522,8 +522,8 @@ def test_reviewer_saved_and_read_back_and_applies_from_next_run(tmp_path, world)
 
 # ---------- đường dẫn ----------
 def test_clean_path_variants():
-    assert cai_dat.clean_path(' "D:\\WFLW\\WFLW_images"  ') == 'D:\\WFLW\\WFLW_images'
-    assert cai_dat.clean_path("'D:\\WFLW\\WFLW_images'") == 'D:\\WFLW\\WFLW_images'
+    assert cai_dat.clean_path(' "D:\\m28\\data\\frames"  ') == 'D:\\m28\\data\\frames'
+    assert cai_dat.clean_path("'D:\\m28\\data\\frames'") == 'D:\\m28\\data\\frames'
     assert cai_dat.clean_path('') == '' and cai_dat.clean_path('   ') == '' and cai_dat.clean_path(None) == ''
     assert cai_dat.clean_path(os.path.join('a', '..', 'b')) == 'b'
     with pytest.raises(cai_dat.SettingsError):
@@ -533,8 +533,8 @@ def test_clean_path_variants():
 
 
 def test_check_images_dir_missing_file_and_windows_string(tmp_path):
-    r = cai_dat.check_images_dir('  "D:\\WFLW\\WFLW_images" ')
-    assert r['level'] == 'err' and not r['ok'] and r['path'] == 'D:\\WFLW\\WFLW_images' and 'Không thấy' in r['lines'][0]
+    r = cai_dat.check_images_dir('  "D:\\m28\\data\\frames" ')
+    assert r['level'] == 'err' and not r['ok'] and r['path'] == 'D:\\m28\\data\\frames' and 'Không thấy' in r['lines'][0]
     f = tmp_path / 'file.txt'
     f.write_text('x')
     assert cai_dat.check_images_dir(str(f))['level'] == 'err' and 'một file' in cai_dat.check_images_dir(str(f))['lines'][0]
@@ -594,7 +594,7 @@ def test_check_model_variants(tmp_path):
 
 
 def test_set_path_saves_validates_and_clears(S, tmp_path):
-    d = tmp_path / 'WFLW_images'
+    d = tmp_path / 'frames'
     (d / 'a').mkdir(parents=True)
     (d / 'a' / '1.jpg').write_bytes(b'x')
     bad = S.set_path('images_dir', str(tmp_path / 'khong'))
@@ -633,7 +633,7 @@ def test_plan_counts_and_push_model_use_images_dir(world, S):
     rd = make_dot_run(world, 'Khoi', decisions=ALL_DECIDED, done=True, inbox=False)           # meta.src trỏ vào inbox/ không còn
     m0 = day_cvat.push_model(rd, 'P2', str(world), remaining=0, environ={'CVAT_URL': URL, 'CVAT_ACCESS_TOKEN': TOKEN})
     assert not m0['enabled'] and 'Không thấy' in m0['reason'] and 'Cài đặt' in m0['reason'] and m0['images_dir'] is None
-    imgs = world / 'WFLW'
+    imgs = world / 'frames'
     imgs.mkdir()
     for n in ('a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7'):
         (imgs / f'{n}.jpg').write_bytes(b'x')
@@ -1079,8 +1079,8 @@ def test_tflip_html_and_confirm_text():
     info.update(t_flip=0.0672, frozen=True, status='DONG BANG 12/10')
     h = cai_dat_ui.tflip_info_html(info)
     assert '0,0672' in h and 'ĐÃ ĐÓNG BĂNG' in h
-    c = cai_dat_ui.tflip_confirm_html(None, 0.0672, 'D:\\WFLW\\WFLW_images')
-    assert 'đóng băng 12/10' in c and 'lệch nhau' in c and '--force flags autoqc overlays' in c and 'D:\\WFLW\\WFLW_images' in c and '0,0672' in c
+    c = cai_dat_ui.tflip_confirm_html(None, 0.0672, 'D:\\m28\\data\\frames')
+    assert 'đóng băng 12/10' in c and 'lệch nhau' in c and '--force flags autoqc overlays' in c and 'D:\\m28\\data\\frames' in c and '0,0672' in c
 
 
 # ---------- giao diện Gradio: dựng được, đủ elem_id, handler gọi trực tiếp ----------
@@ -1241,7 +1241,7 @@ def test_gradio_handlers_reviewer_paths_tflip(world, monkeypatch, tmp_path):
     assert 'không hợp lệ' in m['cd-reviewer-msg']
     # kiểm đường dẫn
     chk = H['on_check']
-    imgs = tmp_path / 'WFLW_images' / '0--Parade'
+    imgs = tmp_path / 'frames' / 'sub'
     imgs.mkdir(parents=True)
     (imgs / 'a.jpg').write_bytes(b'x')
     for bf in chk:

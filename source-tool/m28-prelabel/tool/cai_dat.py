@@ -1,5 +1,5 @@
 """Cài đặt của trang rà soát M28 (tab "Cài đặt"): MỘT nguồn cấu hình duy nhất cho CVAT (link, token, tổ chức), tên người rà mặc định,
-đường dẫn (thư mục WFLW_images, file face_landmarker.task) và ngưỡng t_flip của cờ low_conf. Logic thuần: KHÔNG import gradio, torch,
+đường dẫn (thư mục ảnh, file face_landmarker.task) và ngưỡng t_flip của cờ low_conf. Logic thuần: KHÔNG import gradio, torch,
 cvat_sdk, và KHÔNG gọi mạng (chỉ module cai_dat_thu.py, chạy trong tiến trình con riêng, gọi CVAT).
 
 Nơi lưu (ngoài repo, trong hồ sơ người dùng; user_dir()):
@@ -259,7 +259,7 @@ def check_reviewer(name):
 
 
 def clean_path(text):
-    """Đường dẫn dán vào (kiểu Windows D:\\WFLW\\WFLW_images, có thể có ngoặc kép bọc ngoài, khoảng trắng đầu/cuối) -> chuỗi đã chuẩn hoá
+    """Đường dẫn dán vào (kiểu Windows D:\\m28\\data\\frames, có thể có ngoặc kép bọc ngoài, khoảng trắng đầu/cuối) -> chuỗi đã chuẩn hoá
     (os.path.normpath). Rỗng -> ''. Ký tự điều khiển hay quá dài -> SettingsError. Không mở rộng biến, không đụng đĩa."""
     s = (text or "").strip() if isinstance(text, str) else ""
     for _ in range(2):
@@ -279,7 +279,7 @@ def _res(level, path, lines, **kw):
 
 
 def check_images_dir(path, limit_files=5000, limit_seconds=2.0, clock=time.monotonic):
-    """Kiểm thư mục ảnh WFLW_images: tồn tại? là thư mục? đọc được? Đếm ảnh .jpg/.jpeg/.png CÓ GIỚI HẠN (dừng sau limit_files file hoặc
+    """Kiểm thư mục ảnh: tồn tại? là thư mục? đọc được? Đếm ảnh .jpg/.jpeg/.png CÓ GIỚI HẠN (dừng sau limit_files file hoặc
     limit_seconds giây, ghi 'từ N trở lên'), số thư mục con, 3 tên mẫu. Không mở ảnh, không hiển thị ảnh."""
     try:
         p = clean_path(path)
@@ -291,7 +291,7 @@ def check_images_dir(path, limit_files=5000, limit_seconds=2.0, clock=time.monot
     if not os.path.exists(p):
         return _res("err", p, [f"Không thấy {p}: kiểm lại đường dẫn (ổ đĩa đã gắn chưa, gõ đúng chữ hoa/thường chưa)."], **empty)
     if not os.path.isdir(p):
-        return _res("err", p, [f"{p} là một file, cần một thư mục (thư mục WFLW_images chứa các thư mục con 0--Parade…)."], **empty)
+        return _res("err", p, [f"{p} là một file, cần một thư mục (thư mục chứa ảnh, ví dụ data\\frames hoặc data\\crops)."], **empty)
     try:
         top = os.listdir(p)
     except OSError as e:
@@ -315,7 +315,7 @@ def check_images_dir(path, limit_files=5000, limit_seconds=2.0, clock=time.monot
     level = "ok"
     if n == 0:
         level = "warn"
-        lines.append(f"Chưa thấy ảnh .jpg/.jpeg/.png nào ({_n(n_sub)} thư mục con): đúng thư mục WFLW_images chưa?")
+        lines.append(f"Chưa thấy ảnh .jpg/.jpeg/.png nào ({_n(n_sub)} thư mục con): đúng thư mục ảnh chưa?")
     else:
         lines.append(f"Thấy {'từ ' if capped else ''}{_n(n)} ảnh{' trở lên (dừng đếm sớm)' if capped else ''}, {_n(n_sub)} thư mục con.")
         lines.append("Ví dụ: " + ", ".join(samples))
@@ -836,7 +836,7 @@ class Settings:
             self.prefs[kind] = p
             ok, err = self._save_prefs()
             self._bump()
-            what = "thư mục ảnh WFLW" if kind == "images_dir" else "đường dẫn model"
+            what = "thư mục ảnh" if kind == "images_dir" else "đường dẫn model"
             msg = (f"Đã lưu {what}: {p}" if p else f"Đã xoá {what} đã cài (dùng mặc định).") + ("" if ok else " " + err)
             return dict(ok=True, level="ok" if ok else "warn", stale=False, check=chk, msg=msg)
 

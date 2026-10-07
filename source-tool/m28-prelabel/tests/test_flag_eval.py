@@ -133,7 +133,7 @@ BAD5 = [p['name'] for p in CFG['points'] if p['type'] == 'E' and p['name'] not i
 
 
 def labelled_run(tmp_path, tol_region=None):
-    """Lượt wflw 3 mặt; đáp án = dự đoán trừ 5 điểm đầu lệch 10% IOD; ảnh lật lệch lớn đúng ở 5 điểm đó (điểm số cao nhất) -> AUROC = 1."""
+    """Lượt crop 3 mặt; đáp án = dự đoán trừ 5 điểm đầu lệch 10% IOD; ảnh lật lệch lớn đúng ở 5 điểm đó (điểm số cao nhất) -> AUROC = 1."""
     rd = tmp_path / 'runs' / 'R'
     (rd / 'crop').mkdir(parents=True)
     (rd / 'map50').mkdir()
@@ -146,10 +146,10 @@ def labelled_run(tmp_path, tol_region=None):
         mp50[n] = dict(orig=orig, flip=flip)
         gt[n] = {nm: [TMPL[nm][0], TMPL[nm][1] + (0.10 * IOD if nm in BAD5 else 0.0)] for nm in NAMES}
     (rd / 'crop' / 'meta.json').write_text(json.dumps(meta), encoding='utf-8')
-    (rd / 'crop' / 'box.txt').write_text('wflw', encoding='utf-8')
+    (rd / 'crop' / 'box.txt').write_text('crop', encoding='utf-8')
     (rd / 'map50' / 'mp50.json').write_text(json.dumps(mp50), encoding='utf-8')
     gt_mp50 = {n: dict(orig=gt[n], flip=None) for n in gt}
-    steps.build_xml('wflw', list(gt), meta, gt_mp50, {n: [False] * 50 for n in gt}, CFG, str(tmp_path / 'gt.xml'))
+    steps.build_xml('crop', list(gt), meta, gt_mp50, {n: [False] * 50 for n in gt}, CFG, str(tmp_path / 'gt.xml'))
     cfg = dict(CFG, tolerance=tol_region)
     (tmp_path / 'config').mkdir(exist_ok=True)
     json.dump(cfg, open(tmp_path / 'config' / 'm28_config.json', 'w'))

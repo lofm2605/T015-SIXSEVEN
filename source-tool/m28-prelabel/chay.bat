@@ -74,7 +74,7 @@ if not exist "data\crops\F_001.png" (
   goto :menu
 )
 python -c "import csv;r=[x for x in csv.DictReader(open('data/manifest.csv',encoding='utf-8')) if x['set']=='F'][:5];w=csv.writer(open('data/f5_list.csv','w',newline=''));w.writerow(['image','face_idx','seed']);[w.writerow([x['image'],x['face_idx'],x['seed']]) for x in r]"
-python tool\m28.py all --run F5 --list data\f5_list.csv --images data\crops --box wflw --review auto --dry-run
+python tool\m28.py all --run F5 --list data\f5_list.csv --images data\crops --box crop --review auto --dry-run
 echo.
 echo Neu thay "Chay thu (--dry-run)" la dung. Ket qua: runs\F5\xml\prelabel.xml
 goto :menu

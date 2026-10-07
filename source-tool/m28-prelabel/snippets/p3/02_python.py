@@ -1,22 +1,16 @@
-# Trích từ de-tai-m28/p3-anh-xa.md — mục: Làm thế nào › 3. eval50.py. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.
+# Trích từ de-tai-m28/p3-anh-xa.md — mục: Làm thế nào › 3. eval50.py (viết lại cho đáp án 50 điểm gán tay, QĐ-001). Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.
 import numpy as np
 
-def iod(gt98):                       # khoảng cách hai khoé mắt ngoài, theo đáp án
-    return np.linalg.norm(gt98[60] - gt98[72])
+def iod(gt50, cfg):                  # khoảng cách hai khoé mắt ngoài (cfg["iod_points"]), theo đáp án gán tay
+    a, b = cfg["iod_points"]
+    return np.linalg.norm(np.asarray(gt50[a], float) - np.asarray(gt50[b], float))
 
-def point_to_curve(p, curve):        # curve: (m, 2) điểm WFLW dày của đường đó
-    a, ab = curve[:-1], curve[1:] - curve[:-1]
-    u = ((p - a) * ab).sum(1) / np.maximum((ab ** 2).sum(1), 1e-9)
-    proj = a + np.clip(u, 0, 1)[:, None] * ab
-    return np.linalg.norm(proj - p, axis=1).min()
-
-def point_errors(pred, gt50, gt98, cfg):
-    """pred, gt50: dict tên -> (x, y) trên ảnh cắt 512. Trả dict tên -> lỗi % IOD."""
-    d, err = iod(gt98), {}
+def point_errors(pred, gt50, cfg):
+    """pred, gt50: dict tên -> (x, y) trên cùng hệ toạ độ ảnh. Trả dict tên -> lỗi % IOD (điểm-điểm).
+    Bản đầy đủ (điểm tới đường gấp khúc cho loại C, điểm thiếu) nằm ở tool/eval50.py."""
+    d, err = iod(gt50, cfg), {}
     for pt in cfg["points"]:
-        n, p = pt["name"], np.asarray(pred[pt["name"]], float)
-        if pt["type"] == "E":
-            err[n] = np.linalg.norm(p - np.asarray(gt50[n])) / d * 100
-        elif pt["type"] == "C":
-            err[n] = point_to_curve(p, gt98[pt["curve"]]) / d * 100
-    return err                       # NME của mặt = trung bình; loại N bỏ qua
+        n = pt["name"]
+        if n in pred and n in gt50:
+            err[n] = np.linalg.norm(np.asarray(pred[n], float) - np.asarray(gt50[n], float)) / d * 100
+    return err                       # NME của mặt = trung bình các lỗi

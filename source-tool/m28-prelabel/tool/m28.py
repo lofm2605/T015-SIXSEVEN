@@ -6,11 +6,11 @@
     python tool\\m28.py push    --run R1610 --resume            (lần push trước dừng sau khi đã tạo task: làm nốt trên đúng task đó)
     python tool\\m28.py push    --run R1610 --cleanup --confirm-name demo-R1610   (xoá ĐÚNG task trong push.json trên CVAT, không hoàn tác được)
     python tool\\m28.py collect --task demo-R1610
-    python tool\\m28.py all     --run thuP1 --list data\\f5_list.csv --images data\\crops --box wflw --review auto --task demo-thuP1
+    python tool\\m28.py all     --run thuP1 --list data\\f5_list.csv --images data\\crops --box crop --review auto --task demo-thuP1
 
 Công cụ đo (không nằm trong pipeline, cùng thư mục tool\\): make_config.py (sinh config + map + hoán vị gương), check_flip.py, flag_eval.py, eval50.py, check_drivface.py.
-Ánh xạ 478 -> 50 là CHỌN ĐỈNH trực tiếp (config\\m28_config.json, mp_idx); công cụ WFLW cũ nằm ở tool\\legacy_wflw\\ (lịch sử). `--box wflw` giữ tên vì chay.bat, README, test dùng
-(nghĩa: lấy hộp mặt từ manifest.csv; chỉ đổi tên sau khi P1/P4 đồng ý).
+Ánh xạ 478 -> 50 là CHỌN ĐỈNH trực tiếp (config\\m28_config.json, mp_idx; xem QĐ-001..003 trong so-quyet-dinh.md).
+--box crop: dùng ảnh đã cắt sẵn 512 (data\\crops) và hộp mặt từ cột x0,y0,x1,y1 của manifest.csv; --box auto: MediaPipe tự dò hộp trên ảnh gốc.
 Mỗi bước ghi vào runs/<run>/<bước>/ và để lại done.txt khi xong thật; chạy lại thì bước đã xong được bỏ qua
 (trừ khi tên bước nằm trong --force). Địa chỉ CVAT và token đọc từ CVAT_URL, CVAT_ACCESS_TOKEN (tuỳ chọn CVAT_ORG).
 push chỉ tạo task MỚI demo-…; collect chỉ xuất (--skip-export, --dry-run, nhiều --task, --reviewer). --cleanup xoá task đã đẩy rồi lượt đẩy lại được.
@@ -60,12 +60,12 @@ def build_parser():
     p.add_argument("cmd", choices=["prepare", "review", "push", "collect", "all"])
     p.add_argument("--run", help="tên lượt chạy, ví dụ R1610 (collect không cần)")
     p.add_argument("--images", help="thư mục ảnh: data\\frames (khung gốc in-cabin), data\\crops (khi chỉ có gói: dùng chính ảnh cắt) hoặc ảnh khách")
-    p.add_argument("--list", help="CSV có cột image, face_idx (manifest in-cabin) hoặc wflw_image, wflw_line (WFLW cũ)")
+    p.add_argument("--list", help="CSV có cột image, face_idx (như manifest.csv)")
     p.add_argument("--set", nargs="*", help="lọc theo cột set của manifest.csv")
     p.add_argument("--manifest", default=os.path.join("data", "manifest.csv"))
-    p.add_argument("--box", choices=["wflw", "auto"], default="auto",
-                   help="auto: MediaPipe tự dò hộp mặt (chế độ chính cho in-cabin). wflw: lấy hộp mặt từ cột x0,y0,x1,y1 của "
-                        "manifest.csv (tên giữ vì lịch sử)")
+    p.add_argument("--box", choices=["crop", "auto"], default="auto",
+                   help="auto: MediaPipe tự dò hộp mặt (chế độ chính cho in-cabin). crop: dùng ảnh đã cắt sẵn 512 (--images data\\crops) và lấy hộp mặt từ cột x0,y0,x1,y1 của "
+                        "manifest.csv (cần --list hoặc --set)")
     p.add_argument("--config", default=os.path.join("config", "m28_config.json"))
     p.add_argument("--map", default=os.path.join("config", "map_mp50.json"))
     p.add_argument("--pipeline", default=os.path.join("config", "pipeline.json"))

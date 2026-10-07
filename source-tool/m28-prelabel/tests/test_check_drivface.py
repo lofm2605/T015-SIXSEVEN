@@ -190,12 +190,9 @@ def test_process_maps_back_to_frame_coordinates_and_reports_missing(tmp_path, mo
     new2, old2, _, _ = cd.process(rows[:1], str(img_dir), 'm.task', CFG, MAP, v2_map, v2)
     assert len(new2) == 1 and len(old2) == 1 and set(old2[0]['err']) == set(new2[0]['err']) and old2[0]['err']['nose_tip'] == pytest.approx(0.0, abs=1e-6)
     assert old2[0]['err']['eye_trai'] > new2[0]['err']['eye_trai']                           # v2 ở đây chỉ lấy một đỉnh làm "tâm mắt": lệch hơn trung bình 8 điểm
-    # ridge WFLW cũ (legacy_wflw) vẫn so được: chạy được trên cùng 478 điểm
-    old_map = json.load(open(os.path.join(HERE, '..', 'tool', 'legacy_wflw', 'map_mp50_wflw.json'), encoding='utf-8'))
-    old_cfg = json.load(open(os.path.join(HERE, '..', 'tool', 'legacy_wflw', 'm28_config_wflw.json'), encoding='utf-8'))
-    pts[:] = np.array(old_map['mean478']) + np.random.default_rng(0).normal(scale=0.5, size=(478, 2))      # hình gần trung bình để ridge cho số hợp lý
-    new3, old3, _, _ = cd.process(rows[:1], str(img_dir), 'm.task', CFG, MAP, old_map, old_cfg)
-    assert len(new3) == 1 and old3 is not None and len(old3) == 1 and set(old3[0]['err']) >= {'eye_trai', 'eye_phai', 'nose_tip', 'mouth_trai', 'mouth_phai'}
+    # map không phải kind "vertex" (ví dụ bản ridge cũ có mean478) bị từ chối rõ ràng
+    with pytest.raises(ValueError, match='không còn hỗ trợ'):
+        cd.process(rows[:1], str(img_dir), 'm.task', CFG, MAP, dict(version=1, mean478=[[0, 0]] * 478), v2)
 
 
 def test_process_counts_no_face(tmp_path, monkeypatch):

@@ -1,8 +1,0 @@
-[Trích từ de-tai-m28/p1-du-lieu.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
-
-Viết hàm Python split_sets(train_rows, test_rows, seed) cho WFLW. Mỗi row là
-dict: line, image, pose, expression, illumination, makeup, occlusion, blur (0/1),
-inside (bool). F = 300 mặt ngẫu nhiên từ train. Từ test: T = 200 mặt, chia tầng
-theo bộ 6 cờ thành T-dev đúng 100 và T-test đúng 100. G 20, P 16, X 50, D 30 lấy
-từ test còn lại, chỉ inside=True. Không tập nào trùng nhau. Chỉ dùng
-random.Random(seed). Thêm assert kiểm số lượng và không trùng (image, line).

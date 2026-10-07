@@ -483,7 +483,7 @@ def test_split_command_writes_frames_crops_manifest(built):
 
 
 def test_crop_equals_pipeline_crop(built):
-    """Ảnh cắt trong gói = ảnh `m28.py prepare --box wflw` tạo từ khung gốc + hộp trong manifest (square_crop)."""
+    """Ảnh cắt trong gói = ảnh `m28.py prepare --box crop` tạo từ khung gốc + hộp trong manifest (square_crop)."""
     out, _ = built
     r = next(csv.DictReader(open(os.path.join(out, 'manifest.csv'), encoding='utf-8')))
     bgr = cv2.imread(os.path.join(out, 'frames', *r['image'].split('/')))

@@ -546,7 +546,7 @@ def check_reviewer(name):
 
 def push_cmd(run, reviewer, task, tool_dir=None, python=None, images=None):
     """Lệnh push (list đối số, không shell). CVAT_URL/CVAT_ACCESS_TOKEN đi qua MÔI TRƯỜNG của tiến trình con (child_env), không bao giờ qua
-    đối số. images: thư mục WFLW_images đã cài ở tab Cài đặt, chỉ truyền khi lượt cần (ảnh gốc ở đường dẫn cũ không còn, steps._upload_path
+    đối số. images: thư mục ảnh đã cài ở tab Cài đặt, chỉ truyền khi lượt cần (ảnh gốc ở đường dẫn cũ không còn, steps._upload_path
     tìm lại theo <thư mục>/<rel>)."""
     tool_dir = TOOL_DIR if tool_dir is None else tool_dir
     cmd = [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "push", "--run", run, "--reviewer", reviewer, "--task", task]

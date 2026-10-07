@@ -1,4 +1,4 @@
-"""Đo sai số 50 điểm so với nhãn gán tay (đáp án là nhãn của nhóm trong CVAT, không còn đáp án WFLW). Chỉ numpy + thư viện chuẩn.
+"""Đo sai số 50 điểm so với nhãn gán tay (đáp án là nhãn của nhóm trong CVAT). Chỉ numpy + thư viện chuẩn.
 
     python tool\\eval50.py --gt raw\\<đáp án>.xml --pred runs\\<run>\\xml\\prelabel.xml [--condition manual|assisted] [--out outputs\\nme_per_face.csv] [--append]
     python tool\\eval50.py --gt raw\\<đáp án>.xml --run <run>                      (dự đoán lấy từ runs\\<run>: map50\\mp50.json + crop\\meta.json + crop\\box.txt)
@@ -177,7 +177,7 @@ def read_run_pred(run, cfg, runs_dir="runs"):
     meta = steps._jload(os.path.join(rd, "crop", "meta.json"))
     mp50 = steps._jload(os.path.join(rd, "map50", "mp50.json"))
     box = os.path.join(rd, "crop", "box.txt")
-    mode = open(box, encoding="utf-8").read().strip() if os.path.exists(box) else "wflw"
+    mode = steps.read_box_mode(box, "crop")
     out = {}
     for n in mp50:
         if n not in meta:

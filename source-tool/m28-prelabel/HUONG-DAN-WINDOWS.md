@@ -45,7 +45,7 @@ curl -L -o face_landmarker.task https://storage.googleapis.com/mediapipe-models/
 Phải được file ~3,7 MB, đặt cùng thư mục chạy lệnh. Không commit file này.
 
 ## 4. Dữ liệu in-cabin (YawDD + DrivFace)
-Từ 6/10/2026 (QĐ-001) tập chính là ảnh tài xế trong xe; WFLW cũ: xem `nguon-du-lieu.md`. Ảnh người lái xe là dữ liệu nhạy cảm: chỉ để trên máy bạn, không đăng, không đưa vào chat AI.
+Từ 6/10/2026 (QĐ-001) tập chính là ảnh tài xế trong xe; nguồn và giấy phép: xem `nguon-du-lieu.md`. Ảnh người lái xe là dữ liệu nhạy cảm: chỉ để trên máy bạn, không đăng, không đưa vào chat AI.
 
 **a) Gói dữ liệu đã cắt sẵn** (do chủ repo gửi, `m28_incab_part00_meta.zip` và `m28_incab_part01_of_05.zip` … `part05_of_05.zip`): giải nén **tất cả vào cùng thư mục** `data\` rồi kiểm:
 ```bat
@@ -77,7 +77,7 @@ Chi tiết, các cờ và luật tách người: `README.md`, mục "Dữ liệu
 Chỉ cần gói dữ liệu ở mục 4a (**không** cần video hay khung gốc): `--images data\crops` dùng chính ảnh cắt. Cách nhanh nhất là `chay.bat`, chọn 3. Hoặc gõ tay: tạo danh sách 5 mặt F rồi chạy cả chuỗi ở chế độ chạy thử:
 ```bat
 python -c "import csv;r=[x for x in csv.DictReader(open('data/manifest.csv',encoding='utf-8')) if x['set']=='F'][:5];w=csv.writer(open('data/f5_list.csv','w',newline=''));w.writerow(['image','face_idx','seed']);[w.writerow([x['image'],x['face_idx'],x['seed']]) for x in r]"
-python tool\m28.py all --run F5 --list data\f5_list.csv --images data\crops --box wflw --review auto --dry-run
+python tool\m28.py all --run F5 --list data\f5_list.csv --images data\crops --box crop --review auto --dry-run
 ```
 Kết quả đúng: các bước `crop`, `mediapipe`, `map50`, `flags`, `autoqc`, `overlays` đều "xong", `push` in "Chạy thử (--dry-run)" rồi dừng,
 và có `runs\F5\xml\prelabel.xml` (5 mặt × 50 điểm). Lần chạy này `low_conf` = 0 vì `t_flip` trong `config\m28_config.json` còn `null` (P2 chốt sau họp 12/10).
@@ -85,7 +85,7 @@ Lưu ý: 50 điểm là **định nghĩa DMS** (từ 7/10/2026, QĐ-003): lông 
 Điểm là các đỉnh MediaPipe chọn sẵn (`config\m28_config.json`, `mp_idx`); khi mặt quay quá ~30 độ, mắt, mày, môi phía xa cụm lại sát sống mũi (xem README, mục "50 điểm DMS trên đỉnh MediaPipe").
 Nếu `runs\F5` còn từ lần chạy trước 7/10/2026 (50 điểm cũ, tên `p01_jaw_R`…), `m28.py` tự tính lại `map50 flags autoqc overlays` bằng config mới (giữ crop và MediaPipe) và in một dòng báo; XML của lượt đã đẩy lên CVAT (`push` đã xong) không bị ghi lại.
 Để thấy điểm đỏ trên trang rà soát khi thử: mở `config\m28_config.json`, đổi `"t_flip": null` thành `"t_flip": 0.0357` (số đề xuất cho họp 12/10 trên 50 điểm DMS, chưa chốt; số 0,0464 cũ là của 50 điểm cũ, không dùng) rồi chạy lại các bước từ `flags`:
-`python tool\m28.py prepare --run F5 --list data\f5_list.csv --images data\crops --box wflw --force flags autoqc overlays`.
+`python tool\m28.py prepare --run F5 --list data\f5_list.csv --images data\crops --box crop --force flags autoqc overlays`.
 (Đừng commit file config sau khi sửa số này; hoàn lại bằng `git checkout config\m28_config.json`.)
 
 ## 6. Trang rà soát (giao diện trước khi nhập CVAT)
@@ -176,7 +176,7 @@ Trên máy Windows của chủ repo (7/10/2026, Python 3.14.7) ra `666 passed, 3
 | `Cổng 7860 bận` | Đã có bản trang rà soát đang chạy: đóng nó, hoặc `set GRADIO_SERVER_PORT=7861` |
 | Trình duyệt không tự mở | `set M28_NO_BROWSER=1` rồi tự mở http://127.0.0.1:7860 |
 | `Thiếu file config\...` / `Thiếu m28core.push` | Chưa `git pull`, hoặc phần đó là của P4 chưa commit |
-| `không đọc được ảnh` ở bước crop | Sai `--images`: phải trỏ tới `data\frames` (khung gốc) hoặc `data\crops` (chỉ có gói, kèm `--box wflw`) |
+| `không đọc được ảnh` ở bước crop | Sai `--images`: phải trỏ tới `data\frames` (khung gốc) hoặc `data\crops` (chỉ có gói, kèm `--box crop`) |
 | `import mediapipe` lỗi | Python 3.14 chưa hỗ trợ trên máy bạn: tạo lại venv bằng `py -3.12`; ghi lại phiên bản và báo P2 |
 
 Khi báo lỗi gửi: bản Windows (`winver`), `python --version`, lệnh đã gõ và 10 dòng cuối của `runs\<run>\log.txt`. **Không** gửi ảnh mặt, `gt98.json`, file xuất CVAT hay token.

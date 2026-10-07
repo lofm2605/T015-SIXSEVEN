@@ -26,7 +26,6 @@ m28-prelabel/
 ├── tool/          m28.py, inc_ingest.py (nạp YawDD + DrivFace, chia tập, gói), check_manifest.py, m28core/ (steps, mapping, mirror, cat_mat, push, collect, cvat_io, loai_tru, dang_chay, phan_loai…), review_app.py, day_cvat.py,
 │                  dot_anh.py, dot_ui.py, nap_anh.py, ca_kho.py, cai_dat.py, cai_dat_ui.py, cai_dat_thu.py, make_label.py (giao cho khách: không torch, không ảnh)
 │                  make_config.py (sinh config + map + hoán vị gương), check_flip.py, flag_eval.py, eval50.py, check_drivface.py (P3/P2: kiểm và đo, xem mục "50 điểm DMS trên đỉnh MediaPipe")
-│                  legacy_wflw/ (LỊCH SỬ, không dùng: công cụ WFLW cũ, QĐ-001; check_drivface.py chỉ đọc ridge cũ khi bạn đưa --old-map/--old-config để so sánh)
 ├── config/        m28_config.json (50 điểm DMS, version 3: group, mp_idx, side theo ảnh), map_mp50.json (version 3, chọn đỉnh), mp_mirror478.json (hoán vị gương 478 đỉnh, không đổi ở QĐ-003), pipeline.json (không có bí mật), face50_label.json (sinh bằng make_label.py, một skeleton face50 tên mới)
 ├── snippets/      đoạn code + prompt mẫu trích từ kế hoạch, CHƯA chạy thử
 ├── data/          manifest.csv, crops/ (ảnh cắt; có trong gói), frames/ (khung gốc; chỉ người dựng gói có)   ← KHÔNG commit
@@ -40,7 +39,7 @@ m28-prelabel/
 từ mục nào. Đây là điểm xuất phát để viết code thật, không phải code đã kiểm.
 
 ## Dữ liệu in-cabin (YawDD + DrivFace, từ 6/10/2026, QĐ-001)
-Tập chính là ảnh tài xế trong xe; WFLW không còn dùng (công cụ WFLW cũ đã dời vào `tool\legacy_wflw\`, lịch sử, không dùng). Nguồn, điều khoản, trích dẫn: [`nguon-du-lieu.md`](nguon-du-lieu.md); trong gói zip có `sources\NOTICE.txt`.
+Tập chính là ảnh tài xế trong xe; bộ ảnh khuôn mặt cũ đã bỏ hoàn toàn (QĐ-001 trong `so-quyet-dinh.md`). Nguồn, điều khoản, trích dẫn: [`nguon-du-lieu.md`](nguon-du-lieu.md); trong gói zip có `sources\NOTICE.txt`.
 Ảnh người lái xe là dữ liệu nhạy cảm: chỉ dùng nội bộ nhóm, không commit, không phát tán, không đưa vào báo cáo/slide công khai (YawDD chỉ cho đăng ảnh của video có "Yes" trong `Table1.pdf`/`Table2.pdf`), không đưa vào chat AI ngoài phiên đã được phép.
 
 **Sơ đồ `data\`** (không commit):
@@ -69,14 +68,14 @@ Khối X (đúng luật cũ): 10 mặt dễ (6 cờ = 0), mỗi khối 2 mặt d
 >= 2 loại kính (không tính `unknown`), không hai khung cùng video; cả X: mỗi người <= 6 mặt, DrivFace <= 10 ảnh.
 
 **Cột `manifest.csv`** (UTF-8, `/` trong đường dẫn; đúng thứ tự này):
-`file, set, block, seq` (như WFLW cũ) · `source` (yawdd|drivface) · `camera` (dash|mirror|drivface) · `subject` · `gender` (F|M|unknown) · `glasses` (none|glasses|sunglasses|unknown) ·
+`file, set, block, seq` · `source` (yawdd|drivface) · `camera` (dash|mirror|drivface) · `subject` · `gender` (F|M|unknown) · `glasses` (none|glasses|sunglasses|unknown) ·
 `state` (normal|talking|yawning|talking_yawning|dash|unknown; Dash không có trạng thái trong tên vì một video chứa cả lái xe thường, nói và ngáp ⇒ `dash`) · `video` (đường dẫn video trong bộ gốc, hoặc tên ảnh DrivFace bỏ dấu cách) ·
 `frame` (chỉ số khung; DrivFace = `imgNum`) · `t_s` (giây trong video, để kiểm khoảng cách; trống với DrivFace) · `image` (khung gốc, tương đối so với `data\frames`) · `face_idx` (= 0, mặt lớn nhất) · `x0,y0,x1,y1` (hộp mặt = khung bao 478 điểm,
 toạ độ ảnh gốc, 4 chữ số thập phân) · `left, top, k` (cắt lại: `x_gốc = x_cắt / k + left`) · 6 cờ (`pose, expression, illumination, makeup, occlusion, blur`, 0/1) ·
 cột đo thô (`yaw, pitch, roll` độ; `jaw_open`; `luma, contrast, bright_frac`; `lap_var`; `gaze_label, gaze_ang` của DrivFace; `pad_frac` = phần viền xám của ảnh cắt) · `seed`.
 Với DrivFace, `gender` và `glasses` là `unknown`: readme chỉ nói "2 nữ, 2 nam" và "có kính/râu", không nói người nào. Loại kính YawDD lấy từ tên video, sửa hai chỗ tên sai so với bảng (`GLASSES_FIX`: Mirror nam 5 và Dash nữ 11 là kính râm).
 
-**Sáu cờ** (heuristic, ngưỡng cố định ở đầu `inc_ingest.py`, hiệu chỉnh một lần trên dữ liệu thật 6/10/2026 rồi ghi cứng; cột đo thô để soát lại). Tỉ lệ cờ = 1 trên 616 mặt chọn (mục tiêu kế hoạch tham khảo WFLW 13/20/20/15/29/20%):
+**Sáu cờ** (heuristic, ngưỡng cố định ở đầu `inc_ingest.py`, hiệu chỉnh một lần trên dữ liệu thật 6/10/2026 rồi ghi cứng; cột đo thô để soát lại). Tỉ lệ cờ = 1 trên 616 mặt chọn :
 
 | Cờ | Định nghĩa | Tỉ lệ thực tế (mục tiêu) |
 |---|---|---|
@@ -93,7 +92,7 @@ Với DrivFace, `gender` và `glasses` là `unknown`: readme chỉ nói "2 nữ,
 **Định dạng ảnh cắt: giữ PNG.** Đo trên 616 ảnh cắt (ước lượng từ 40 ảnh ngẫu nhiên): PNG mức 6 **128 MiB** (mức 9: 123 MiB nhưng chậm gấp ~8 lần), JPEG q95 31 MiB, JPEG q90 22 MiB. PNG = 5 phần zip 28 MiB (< 12 phần) +
 1 phần meta, không mất dữ liệu cho việc gán điểm và không phải đổi đuôi `.png` ở `check_manifest`, `ca_kho.py`, test, tài liệu. Khung gốc JPEG (YawDD: chất lượng 95; DrivFace: giữ nguyên byte gốc).
 
-**Cách dùng với `--list`, `--set`, `--box`:** xem mục "Các lệnh" bên dưới. Người chỉ có gói (không có `data\frames`) chạy `--images data\crops --box wflw` (dùng chính ảnh cắt); người dựng gói chạy `--images data\frames --box auto`
+**Cách dùng với `--list`, `--set`, `--box`:** xem mục "Các lệnh" bên dưới. Người chỉ có gói (không có `data\frames`) chạy `--images data\crops --box crop` (dùng chính ảnh cắt); người dựng gói chạy `--images data\frames --box auto`
 (ảnh cắt pipeline sinh ra trùng ảnh cắt của gói: sai khác điểm ảnh trung bình <= 0,0002).
 ## 50 điểm DMS trên đỉnh MediaPipe (giai đoạn 3, 7/10/2026; QĐ-003 thay định nghĩa 50 điểm của QĐ-002, chờ P3/P2/P4/P5 duyệt)
 Phương pháp của QĐ-002 giữ nguyên: **mỗi điểm trong 50 điểm là MỘT đỉnh của lưới 478 điểm MediaPipe** (`mp_idx` trong `config\m28_config.json`), không có số học nào ở giữa, không cần đáp án. Chỉ đổi **tập điểm, tên và quy ước bên**:
@@ -149,7 +148,7 @@ Trong nhóm đi theo vòng hoặc dọc đường để `make_label.edges_of` v�
 ```bat
 rem 1. crop + MediaPipe cho các tập cần dùng (ảnh gốc + lật); dùng config hiện có (map50 và các bước sau chạy được, nhưng sẽ tính lại ở bước 4)
 python tool\m28.py prepare --run INC3_ALL --images data\frames --set F Tdev Ttest G P X D --box auto
-rem    (người chỉ có gói: --images data\crops --box wflw --set F Tdev ...)
+rem    (người chỉ có gói: --images data\crops --box crop --set F Tdev ...)
 rem 2. ước lượng lại flip_width và tmpl từ dữ liệu thật (chỉ khi đổi bảng trong make_config.py hoặc đổi model); KHÔNG ghi đè hoán vị gương. Không có --run thì chỉ sinh lại file từ bảng và GIỮ số đã có
 python tool\make_config.py --run INC3_ALL --manifest data\manifest.csv
 rem    (chỉ khi thật sự phải học lại hoán vị gương: thêm --learn-mirror)
@@ -170,8 +169,8 @@ python tool\flag_eval.py --run INC3_ALL --gt raw\<đáp án>.xml       rem AUROC
 `nme_per_face.csv` **mất cột `reg_jaw`** (không còn viền hàm); `reg_brow`, `reg_eye`, `reg_lip`, `reg_nose` giữ nghĩa, `nme_eye` nay là trung bình đủ 16 điểm mắt và `eye_open_err` dùng 3 cặp `coincide` mỗi mắt.
 `check_drivface.py` đọc `drivPoints.txt` (5 điểm mốc DrivFace) làm kiểm khách quan **chỉ để tham khảo**: tâm mắt DrivFace so với trung bình **8 điểm** mỗi mắt, mũi so với chóp `songmui_4` (và đỉnh 2, 4 là tham chiếu ngoài 50 điểm), khoé miệng so với `moingoai_1`/`moingoai_7`, **ghép bên theo vị trí trong ảnh** (RE/RM ở nửa trái ảnh → nhóm `*trai`), không theo chữ R/L.
 
-**Số liệu của lượt chạy thật 7/10/2026** (máy Windows 11 của chủ repo, Python 3.14.7, mediapipe 1.0.1, CPU; **chỉ có gói** `data\crops` + `manifest.csv`, không có `data\frames` và không có DrivFace gốc nên `--box wflw` trên ảnh cắt, **không đo được DrivFace** ở lượt này):
-- `prepare --box wflw --images data\crops` 616 mặt: `crop` 26,8 giây, `mediapipe` (ảnh gốc + lật) 56,9, `map50` 2,8, `flags` 0,2, `autoqc` 0,2, `overlays` 24,1 giây. Không thấy mặt: **1/616** (`F_192`, bước mediapipe); 9 mặt MediaPipe không thấy mặt trên ảnh LẬT (bị bật cờ cả 50 điểm khi `t_flip` không `null`).
+**Số liệu của lượt chạy thật 7/10/2026** (máy Windows 11 của chủ repo, Python 3.14.7, mediapipe 1.0.1, CPU; **chỉ có gói** `data\crops` + `manifest.csv`, không có `data\frames` và không có DrivFace gốc nên `--box crop` trên ảnh cắt, **không đo được DrivFace** ở lượt này):
+- `prepare --box crop --images data\crops` 616 mặt: `crop` 26,8 giây, `mediapipe` (ảnh gốc + lật) 56,9, `map50` 2,8, `flags` 0,2, `autoqc` 0,2, `overlays` 24,1 giây. Không thấy mặt: **1/616** (`F_192`, bước mediapipe); 9 mặt MediaPipe không thấy mặt trên ảnh LẬT (bị bật cờ cả 50 điểm khi `t_flip` không `null`).
 - `make_config.py --run`: hoán vị gương trên 248 mặt F pose = 0 **giữ nguyên**: học lại trong bộ nhớ khác file ở **0/478 đỉnh**, 28 đỉnh trên trục, sai số ghép của file trung vị 1,76% / lớn nhất 3,57% IOD (đúng số của lượt Linux cloud: MediaPipe trên Windows cho hoán vị giống hệt).
   **`flip_width` = 513,40** (trung vị 513,22; trên cả 478 đỉnh 513,42; lệch y trung bình +0,08 px, trung vị tuyệt đối 1,25 px); so với 513,56 của 50 điểm v2 (Linux) và 512 lý thuyết (`x = p.x * width`): dùng 512 sẽ lệch hệ thống ~1,4 px (~0,8% IOD) khi bỏ lật. `tmpl` lấy trên 53 mặt F thẳng.
 - `check_flip.py`: lật hai lần lệch 0 px; hoán vị là đối hợp; cặp `flip` trùng hoán vị; **d_flip** (trung vị trên mặt thẳng): 20 mặt F đầu **1,43% IOD** (tiêu chí < 3%: đạt; v2 là 1,82%), mọi mặt thẳng F (248) 1,47%, **Tdev (83) 1,60%** (v2 là 2,03%).
@@ -186,7 +185,7 @@ python tool\flag_eval.py --run INC3_ALL --gt raw\<đáp án>.xml       rem AUROC
 
 **Lịch sử: 50 điểm version 2 (QĐ-002, trước QĐ-003) — số cũ KHÔNG còn hiệu lực.** 50 điểm `p01…p50` gồm viền hàm 17 điểm (p01-p17), mày 5+5, mũi 5, mắt 4+4, môi ngoài 8, môi trong 2; `side` theo người trong ảnh (R = nửa trái ảnh); `iod_points` = p33, p39.
 Số đo 6/10/2026 trên Linux cloud (Python 3.11): `flip_width` 513,56; d_flip 20 mặt F đầu 1,82% IOD, Tdev 2,03% (viền hàm 2,45 / 2,41, lông mày 1,59 / 1,74, mắt 1,26 / 1,32, mũi 1,58 / 1,69, môi 1,38 / 1,73); đề xuất `t_flip` 0,0464 (14,9% điểm, 7,5 cờ/mặt; cờ viền 27%);
-`check_drivface.py` trên 606 ảnh DrivFace (sai số trung vị % IOD DrivFace, v2 / ridge WFLW cũ): tâm mắt R 4,6 / 4,0, tâm mắt L 8,2 / 7,0, mũi p29 (chóp) 4,8 / 5,2, mũi p31 (chân giữa) 17,0 / 17,9, khoé miệng R 8,6 / 10,5, L 4,9 / 6,3, tâm iris 4,2 (R) và 6,1 (L); mốc mũi DrivFace khớp chóp (đỉnh 1), không khớp chân mũi (đỉnh 2, thấp hơn ~15% IOD).
+`check_drivface.py` trên 606 ảnh DrivFace (sai số trung vị % IOD DrivFace, v2 / ridge cũ): tâm mắt R 4,6 / 4,0, tâm mắt L 8,2 / 7,0, mũi p29 (chóp) 4,8 / 5,2, mũi p31 (chân giữa) 17,0 / 17,9, khoé miệng R 8,6 / 10,5, L 4,9 / 6,3, tâm iris 4,2 (R) và 6,1 (L); mốc mũi DrivFace khớp chóp (đỉnh 1), không khớp chân mũi (đỉnh 2, thấp hơn ~15% IOD).
 Điểm kém của v2: viền phía xa trong má khi mặt quay (10-50 px trên ảnh cắt 512), nên bị bỏ ở DMS.
 
 ## Cài đặt và chạy
@@ -211,14 +210,14 @@ python tool\m28.py prepare --run R1610 --list data\r_list_1610.csv --images data
 python tool\m28.py review  --run R1610 --review ui --reviewer P5
 python tool\m28.py push    --run R1610 --images data\frames --task demo-R1610 --review-file triage_P5.csv
 python tool\m28.py collect --task demo-R1610
-python tool\m28.py all     --run thuP1 --list data\f5_list.csv --images data\crops --box wflw --review auto --task demo-thuP1
+python tool\m28.py all     --run thuP1 --list data\f5_list.csv --images data\crops --box crop --review auto --task demo-thuP1
 ```
-- `--box wflw` (tên giữ vì lịch sử): lấy hộp mặt từ cột `x0,y0,x1,y1` của `data\manifest.csv` (manifest in-cabin mới hay WFLW cũ đều chạy), XML theo toạ độ **ảnh cắt 512**, `push` tải ảnh cắt `runs\<run>\crop\images\`.
+- `--box crop`: dùng ảnh đã cắt sẵn 512 và lấy hộp mặt từ cột `x0,y0,x1,y1` của `data\manifest.csv` (cần `--list` hoặc `--set`), XML theo toạ độ **ảnh cắt 512**, `push` tải ảnh cắt `runs\<run>\crop\images\`.
   `--box auto` (chế độ chính cho in-cabin): tự dò mặt, XML theo toạ độ **ảnh gốc** (điểm ra ngoài ảnh kẹp vào mép), `push` tải ảnh gốc (nhớ `--images data\frames`).
-- `--list`: CSV có cột `image,face_idx` (manifest in-cabin, mới) **hoặc** `wflw_image,wflw_line` (WFLW cũ); khoá nội bộ là `(image, face_idx)` / `(wflw_image, wflw_line)`. `--set F Tdev …` lọc theo cột `set` của `manifest.csv`.
+- `--list`: CSV có cột `image,face_idx` (như `manifest.csv`; thiếu hai cột này thì lệnh dừng và báo); khoá nội bộ là `(image, face_idx)`. `--set F Tdev …` lọc theo cột `set` của `manifest.csv`.
 - **Người trong đội chỉ có gói (ảnh cắt + manifest, không có khung gốc):** dùng `--images data\crops`. Khi `<images>\<image>` không tồn tại mà `<images>\<file>` (ví dụ `data\crops\F_001.png`) tồn tại,
   `m28.py` dùng chính ảnh cắt đó và đổi hộp mặt sang toạ độ ảnh cắt `((x0-left)*k, (y0-top)*k, (x1-left)*k, (y1-top)*k)`; `square_crop` lại ra (gần như) đúng ảnh cũ.
-  Chạy với `--box wflw` (XML theo ảnh cắt 512, đúng như đường chạy thử của `chay.bat` mục 3).
+  Chạy với `--box crop` (XML theo ảnh cắt 512, đúng như đường chạy thử của `chay.bat` mục 3).
   `prepare` ghi chế độ vào `runs\<run>\crop\box.txt`; `push` đọc lại từ đó, không cần gõ lại `--box`.
 - `--review ui` (mặc định, trang của P2 chỉ ở 127.0.0.1) | `excel` | `auto` (theo gợi ý autoqc, chỉ để chạy thử/demo).
   `--review excel`: mở `runs\<run>\autoqc\autoqc.csv` bằng Excel, điền cột `decision` (`nhan`/`gan_tay`/`bo`) và `reason`,
@@ -338,7 +337,7 @@ Ba phần cùng nằm trong trang rà soát (chỉ 127.0.0.1), mã trong `tool/c
   Không đụng `triage_<người>.csv`, `done.txt`, hàng đợi hay Hoàn tác. Gõ n/g/k trong ô ghi chú không kích hoạt phím tắt. Có **Bỏ đánh dấu** (bấm hai lần).
 - **Tab Ca khó (thành viên):** xem/sửa/xoá ca của mình ở mọi lượt, rồi **Xuất gói họp** ra `outputs/ca_kho/ca_kho_<người>_<ddmm>.zip` (tải về qua trang).
   Gói chỉ có `manifest.json`, `ca_kho.csv`, `anh/<lượt>__<tên>.jpg` (ảnh chồng, cạnh dài ≤ 480 px, JPEG q72, không EXIF). Ảnh chỉ kèm cho lượt có nguồn là một bộ dữ liệu đã biết
-  (không có `inbox/` và mọi mặt có trong `data/manifest.csv`; nguồn = cột `source` của manifest: `yawdd`, `drivface` hoặc `yawdd+drivface`, manifest WFLW cũ không có cột đó thì `wflw`); lượt không rõ nguồn (có thể là ảnh khách hàng) mặc định chỉ xuất ca, không kèm ảnh. Tối đa 500 ca và 20 MB mỗi gói.
+  (không có `inbox/` và mọi mặt có trong `data/manifest.csv`; nguồn = cột `source` của manifest: `yawdd`, `drivface` hoặc `yawdd+drivface`, manifest không có cột đó thì `khong_ro`); lượt không rõ nguồn (có thể là ảnh khách hàng) mặc định chỉ xuất ca, không kèm ảnh. Tối đa 500 ca và 20 MB mỗi gói.
 - **Tab Họp team (người tổ chức, ví dụ P5):** `python tool\review_app.py --nap P5`. Tạo phiên (`outputs/ca_kho/hop_<ddmm>/`, lưu `hop.json` nên mở lại làm tiếp được),
   kéo thả nhiều gói, xem bảng kết quả từng gói (nhập được / lỗi kèm lý do / đã nhập rồi). Gói không bao giờ được giải nén ra đĩa: chỉ đọc mục `manifest.json`, `ca_kho.csv`, `anh/*.jpg`,
   giới hạn byte thật khi giải nén (chống zip bomb), ảnh mã hoá lại. Họp trên lưới ảnh (nhóm theo loại / người / trạng thái, lọc, tìm chữ), đặt trạng thái Mở / Đang bàn / Đã chốt,
@@ -347,7 +346,7 @@ Ba phần cùng nằm trong trang rà soát (chỉ 127.0.0.1), mã trong `tool/c
   **Code không bao giờ ghi vào hai file đó**: người tổ chức tự chép các khối vào rồi commit.
 - Mã loại: SWAP, MIRROR, COLLAPSE, MISPLACED, OCC_FLAG (lỗi đặt điểm, như xem chéo 16/10), RULE, GL_CHUA_NOI, GL_MO_HO, GL_MAU_THUAN, CONG_CU, KHAC.
   Lỗi đặt điểm mặc định không vào backlog (người tổ chức đổi được).
-- Gói chứa ảnh mặt người (tài xế, dữ liệu nhạy cảm; YawDD/DrivFace chỉ cho dùng học tập, nghiên cứu): chỉ gửi trong đội, không đăng công khai, không giao bên thứ ba, không commit (`outputs/` và `*.zip` đã bị `.gitignore` chặn). Gói cũ có `nguon: wflw` vẫn đọc được.
+- Gói chứa ảnh mặt người (tài xế, dữ liệu nhạy cảm; YawDD/DrivFace chỉ cho dùng học tập, nghiên cứu): chỉ gửi trong đội, không đăng công khai, không giao bên thứ ba, không commit (`outputs/` và `*.zip` đã bị `.gitignore` chặn).
 
 ## Tab Cài đặt (CVAT, người rà, đường dẫn, cờ low_conf)
 Tab cuối của trang rà soát (`tool\cai_dat.py` logic, `tool\cai_dat_ui.py` giao diện, `tool\cai_dat_thu.py` tiến trình con thử kết nối). Năm khung:
@@ -356,8 +355,8 @@ Tab cuối của trang rà soát (`tool\cai_dat.py` logic, `tool\cai_dat_ui.py` 
   `● Đã kết nối (thử lúc …)`, `● Lỗi: <nguyên nhân>`, kèm nguồn (từ biến môi trường / đã lưu trên máy / nhập trong phiên này). Lưu bị từ chối khi đang đẩy hay xoá task
   (tiến trình con đang dùng token hiện tại), khi đang chạy kiểm tra nhanh và khi trang đang đóng. Lưu xong, khung Đẩy lên CVAT và tab Các đợt thấy giá trị mới ngay (nút Đẩy mở khoá, không cần mở lại cmd).
 - **Người rà:** lưu tên mặc định. Lượt đang mở vẫn ghi `triage_<tên cũ>.csv` (phần rà dở nằm ở file đó); tên mới dùng **từ lượt kế tiếp** (Rà lượt này, chuyển đợt).
-- **Đường dẫn:** thư mục `WFLW_images` và file `face_landmarker.task`, mỗi ô có **Kiểm** (tồn tại, đọc được, đếm ảnh có giới hạn 5.000 file / 2 giây, 3 tên mẫu; model: kích thước, đuôi `.task`, là zip) và **Lưu**.
-  Tab Nạp ảnh dùng model đã cài (`--model`); thư mục WFLW được thêm `--images` vào lệnh `push` của lượt chạy bằng lệnh trên ảnh WFLW khi ảnh gốc không còn ở đường dẫn cũ (chỉ khi cần).
+- **Đường dẫn:** thư mục ảnh (ví dụ `data\frames`) và file `face_landmarker.task`, mỗi ô có **Kiểm** (tồn tại, đọc được, đếm ảnh có giới hạn 5.000 file / 2 giây, 3 tên mẫu; model: kích thước, đuôi `.task`, là zip) và **Lưu**.
+  Tab Nạp ảnh dùng model đã cài (`--model`); thư mục ảnh được thêm `--images` vào lệnh `push` của lượt chạy bằng lệnh khi ảnh gốc không còn ở đường dẫn cũ (chỉ khi cần).
 - **Cờ low_conf:** xem và đặt `t_flip` trong `config\m28_config.json` (chỉ đổi khoá này, giữ nguyên mọi trường khác và định dạng), luôn qua hộp xác nhận (Huỷ mặc định, Esc = Huỷ); từ chối khi có việc đang chạy;
   khi `status` đã đóng băng (không còn bắt đầu bằng `NHAP`) phải tick thêm ô xác nhận. Sau khi ghi liệt kê các lượt đã có `flags.json` (tính theo ngưỡng cũ; tính lại bằng `prepare --force flags autoqc overlays`).
 - **Pipeline:** `config\pipeline.json`, chỉ đọc.
@@ -380,7 +379,7 @@ Tab thứ ba của trang. Mỗi **đợt** là một thư mục lượt `runs\<l
   và trạng thái: Đang chuẩn bị / Chưa prepare xong / Chưa rà / Đang rà / Đã Xong / Đang đẩy / Đã đẩy CVAT: `<task>` (id) / Đẩy dở: `<trạng thái push.json>`.
   Nút **Rà đợt này** chuyển trang sang đợt đó (cùng cơ chế, cùng cổng như "Rà lượt này"; khoá với đợt đang mở, đợt chưa có `flags.json`, hoặc khi đang có việc chạy). Đợt **Đã Xong** chưa đẩy có nút **Đẩy lên CVAT**
   (cùng hộp xác nhận và `PushJob` ở trên). Có nút **Làm mới**; danh sách tự làm mới khi chọn tab (không quét lại mỗi giây).
-- **Lưới ảnh** (bấm tên đợt hoặc **Xem ảnh**, 24 ảnh mỗi trang): ảnh gốc trong `inbox\` (đợt nạp) hoặc ảnh cắt (đợt từ WFLW), kèm tên, tên gốc, trạng thái (Nhận / Gán tay / Bỏ / Chưa rà / Không thấy mặt / Không dùng được).
+- **Lưới ảnh** (bấm tên đợt hoặc **Xem ảnh**, 24 ảnh mỗi trang): ảnh gốc trong `inbox\` (đợt nạp) hoặc ảnh cắt (đợt không có `inbox\`), kèm tên, tên gốc, trạng thái (Nhận / Gán tay / Bỏ / Chưa rà / Không thấy mặt / Không dùng được).
   Ảnh nhỏ (~160 px, JPEG, xoay EXIF) được tạo bằng PIL và **nhúng data URI** vào HTML: không mở thêm `allowed_paths`, không bao giờ phát file gốc trong `inbox\`.
 - **Xoá ảnh (xoá mềm):** rê chuột (hoặc Tab tới) vào ảnh thì hiện nút thùng rác (màn cảm ứng luôn hiện); bấm → hộp xác nhận (ảnh, tên gốc, đợt, quyết định hiện tại, hậu quả; **Huỷ** mặc định, **Esc** = Huỷ, nút xoá đỏ).
   Đợt đã đẩy CVAT thì hộp thêm khung đỏ: **"Xoá ở đây KHÔNG xoá ảnh trong task <tên> trên CVAT"**.
@@ -455,14 +454,14 @@ Cũng chạy được bằng menu `chay.bat` (mục "Kiem tra nhanh CVAT") hoặ
 python -m pytest tests -q
 ```
 Test chỉ dùng dữ liệu giả (ảnh ngẫu nhiên, landmarker/mapping giả, mặt tổng hợp đối xứng, **CVAT giả** ở `tests\fake_cvat\cvat_sdk\`) và các file config đã commit; không cần mediapipe (test thử `make_config` với `--no-mesh`; mediapipe chỉ cần khi chạy công cụ trên dữ liệu thật), CVAT thật hay mạng. Hiện **666 qua, 3 bỏ qua** trên máy Windows của chủ repo (Python 3.14.7, 7/10/2026), cộng **11 lỗi CÓ SẴN do Windows** (không do M28; cả 11 đều đã có lúc đo gốc trước khi sửa: 640 qua, 15 lỗi, 3 bỏ qua; 4 lỗi gốc còn lại nay qua: 3 bài `test_cai_dat` đọc `config\m28_config.json` vốn checkout kiểu CRLF nay ghi LF, 1 bài khoá `.dang_chay` chập chờn; xem "Chạy test và báo lỗi" trong `HUONG-DAN-WINDOWS.md`): tạo symlink cần quyền (3 bài: `test_dot_anh` 2, `test_cai_dat::test_settings_dir_inside_repo_is_refused`), dấu `\` trong tên mục zip (`test_ca_kho`), đường dẫn kiểu `D:\` (3 bài: `test_ca_kho::test_html_thoat_ky_tu`, `test_cai_dat` 2), test tự ghi file bằng `write_text` ra CRLF nên `write_t_flip` từ chối (`test_cai_dat` 2), thăm dò cổng đóng trả `timeout` thay vì `server_down` (`test_cai_dat::test_probe_statuses`) và khoá `.dang_chay` báo còn tiến trình `cvat_smoke` cũ (`test_cvat_smoke::test_smoke_job_runs_real_cvat_smoke_against_fake_cvat`). Trên cloud Linux, Python 3.11 (6/10/2026) ra 657 qua, 1 bỏ qua trước giai đoạn 3. `tests\e2e_*.py` cần playwright + Chromium nên chưa chạy ở lượt này.
-`tests\test_mapping.py` thử config version 3 (50 điểm DMS: đúng 7 nhóm 5/5/4/8/8/12/8, tên `<nhóm>_<k>` liên tục, không `jaw`, `region`/`line`/`lines.closed`/E-C/`curve` trong nhóm/`coincide` đối xứng/`side` theo ảnh/`side_convention`, cặp `flip` theo quy ước tên và khớp hoán vị gương, điểm side M trên trục), hoán vị gương (đối hợp, cặp chắc chắn, `check_against_data`), `apply_map` (lấy đúng đỉnh, lật + đổi tên, đúng bên trên mặt giả nhìn thẳng, tập con config, từ chối map ridge, map version 2 và config thiếu `side_convention`), `make_config` (ước lượng `flip_width` trên mặt giả, `--run` KHÔNG ghi đè file gương trừ khi `--learn-mirror`, giữ số người khác đã ghi nhưng không mang từ v2 sang v3) và file đã commit nhất quán với nhau (config, map, label, `tmpl` nhóm trái nằm nửa trái khuôn); `tests\test_dms_v3.py` thử cả chuỗi map50 -> flags -> XML -> cvat_io -> eval50 với tên mới và lượt cũ (tên v2) bị báo rõ; `test_eval50.py`, `test_check_flip.py`, `test_flag_eval.py` (hai chế độ), `test_check_drivface.py` thử các công cụ đo bằng nhãn và mặt giả; `test_legacy_wflw_*.py` thử công cụ WFLW cũ trong `tool\legacy_wflw\` (giữ các kiểm tra có giá trị).
+`tests\test_mapping.py` thử config version 3 (50 điểm DMS: đúng 7 nhóm 5/5/4/8/8/12/8, tên `<nhóm>_<k>` liên tục, không `jaw`, `region`/`line`/`lines.closed`/E-C/`curve` trong nhóm/`coincide` đối xứng/`side` theo ảnh/`side_convention`, cặp `flip` theo quy ước tên và khớp hoán vị gương, điểm side M trên trục), hoán vị gương (đối hợp, cặp chắc chắn, `check_against_data`), `apply_map` (lấy đúng đỉnh, lật + đổi tên, đúng bên trên mặt giả nhìn thẳng, tập con config, từ chối map ridge, map version 2 và config thiếu `side_convention`), `make_config` (ước lượng `flip_width` trên mặt giả, `--run` KHÔNG ghi đè file gương trừ khi `--learn-mirror`, giữ số người khác đã ghi nhưng không mang từ v2 sang v3) và file đã commit nhất quán với nhau (config, map, label, `tmpl` nhóm trái nằm nửa trái khuôn); `tests\test_dms_v3.py` thử cả chuỗi map50 -> flags -> XML -> cvat_io -> eval50 với tên mới và lượt cũ (tên v2) bị báo rõ; `test_eval50.py`, `test_check_flip.py`, `test_flag_eval.py` (hai chế độ), `test_check_drivface.py` thử các công cụ đo bằng nhãn và mặt giả.
 `tests\test_push.py` thử push/collect/xoá task bằng gói `cvat_sdk` giả (giữ "server" trong bộ nhớ, ghi mọi lời gọi, giả lỗi theo lệnh) và so từng lời gọi với chữ ký của cvat-sdk **thật** nếu import được
 (`pip install cvat-sdk==2.77.0`, hoặc đặt `M28_REAL_CVAT_SDK_PATH=<thư mục chứa gói cvat_sdk>`; không có thì bài đó `skip`). `tests\test_cvat_smoke.py` thử `tool\cvat_smoke.py` và nút kiểm tra nhanh bằng CVAT giả (đường ĐẠT, dry-run, từng bước HỎNG, dọn dẹp, không rò token, `SmokeJob`). `tests\test_gan_tay.py` thử Gán tay có nháp (phân loại, XML, push với CVAT giả, tương thích `push.json` cũ, collect, chữ trên trang). `tests\test_make_label.py` thử label skeleton. `tests\test_dot_anh.py` thử tab Các đợt, xoá mềm,
 nút Đẩy, PushJob/DeleteTaskJob. `tests\test_cai_dat.py` thử tab Cài đặt (lưu/nạp/quên, quyền file, ưu tiên nguồn, kiểm link/token/đường dẫn, t_flip, thử kết nối bằng tiến trình con với CVAT giả, tiền kiểm redirect bằng http.server cục bộ, không rò token); `tests\conftest.py` trỏ `M28_CONFIG_DIR` vào thư mục tạm cho mọi test. `tests\test_review_app.py` thử phần logic của trang rà soát mà không cần gradio hay trình duyệt. Kiểm thử trên trình duyệt thật
 (tuỳ chọn, cần playwright, không nằm trong requirements): `python tests\e2e_review_ui.py --work <thư mục có runs\F5 và runs\ALL616> --shots <thư mục ảnh chụp>`
-(pha F thử tab Nạp ảnh bằng ảnh WFLW thật: thêm `--wflw <WFLW_images>` nếu không nằm cạnh thư mục work) và
-`python tests\e2e_dot_push.py --work <thư mục có config\ và face_landmarker.task> --wflw <WFLW_images> --shots <thư mục ảnh chụp>` (nạp ba đợt Khoi, Nam, Cuong bằng MediaPipe thật, xoá mềm, rà, đẩy lên CVAT giả, xoá task, màn 1440 và 420 px) và
-`python tests\e2e_cai_dat.py --work <…> --wflw <WFLW_images> --shots <thư mục ảnh chụp>` (tab Cài đặt, bảy pha A–G, xem đầu file).
+(pha F thử tab Nạp ảnh bằng ảnh in-cabin thật: thêm `--imgs <thư mục khung gốc>` nếu không phải `<work>\data\frames`) và
+`python tests\e2e_dot_push.py --work <thư mục có config\ và face_landmarker.task> --imgs <thư mục khung gốc> --shots <thư mục ảnh chụp>` (nạp ba đợt Khoi, Nam, Cuong bằng MediaPipe thật, xoá mềm, rà, đẩy lên CVAT giả, xoá task, màn 1440 và 420 px) và
+`python tests\e2e_cai_dat.py --work <…> --imgs <thư mục khung gốc> --shots <thư mục ảnh chụp>` (tab Cài đặt, bảy pha A–G, xem đầu file).
 
 ## Giao diện m28 giả định từ P2/P3/P4
 Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nhận**. Ai thấy khác thì sửa bảng này hoặc báo P1.
@@ -473,7 +472,7 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 | P3 | `config/m28_config.json` khoá `points` | list, mỗi phần tử có `name` (thứ tự = thứ tự điểm trong XML), `mp_idx`, `group`, `curve` (danh sách tên hoặc `null`), `flip`, `side` (theo ảnh)... (version 3, 50 điểm DMS) | `map50`, `flags`, `autoqc`, XML, `eval50.py` | **có sẵn** (`tool/make_config.py`), P3 chốt trước 12/10 |
 | P3/P2 | `config` khoá `iod_points` | 2 tên điểm khoé mắt ngoài (`mattrai_1` trái ảnh, `matphai_1` phải ảnh) để tính khoảng cách hai mắt | `flags`, `eval50.py`, `check_flip.py`, `flag_eval.py` | chưa ai xác nhận |
 | P3/P2 | `config` khoá `t_flip` | số, hoặc `null` (chưa chốt) thì mọi `low_conf` = false | `flags` | chưa ai xác nhận |
-| P3 | `config/map_mp50.json`, `config/mp_mirror478.json` | map version 3 `{names, points: {tên: {mp_idx, flip}}, flip_width, meta}` và hoán vị gương `{perm, fixed, meta}`; m28 chỉ đọc JSON rồi đưa nguyên cho `apply_map` | `map50`, `check_flip.py` | **có sẵn** (`tool/make_config.py` sinh cả hai; không còn `fit_map.py`: đã dời vào `tool/legacy_wflw/`) |
+| P3 | `config/map_mp50.json`, `config/mp_mirror478.json` | map version 3 `{names, points: {tên: {mp_idx, flip}}, flip_width, meta}` và hoán vị gương `{perm, fixed, meta}`; m28 chỉ đọc JSON rồi đưa nguyên cho `apply_map` | `map50`, `check_flip.py` | **có sẵn** (`tool/make_config.py` sinh cả hai; không còn `fit_map.py`) |
 | P4 | `m28core.autoqc.run` | `run(name, pts50, config)` → list mã lỗi (chuỗi); mã bắt đầu bằng `guong`, `don_cuc` hoặc `diem_khong_hop_le` thì gợi ý "nen_gan_tay". Module tuỳ chọn | bước `autoqc` | chưa ai xác nhận |
 | P4 | `runs/<run>/autoqc/autoqc.csv` | m28 ghi: `name,suggestion,n_flags,decision,reason,seconds,problems` (`suggestion` = `on`/`can_xem`/`nen_gan_tay`; `name` có đuôi `.png`) | `review` (excel, auto), P2 xếp hàng | chưa ai xác nhận |
 | P4 | `m28core.push.push` | `push(run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project=, prefix=, label_json=, *, resume=False)` trả đường dẫn `check.zip`; đường ảnh là đường dẫn file đầy đủ; ảnh trong `tay_imgs` có `<image>` trong `xml_path` là Gán tay **có nháp** (mọi điểm `low_conf=true`), không có thì là ảnh trống; từ chối tên không bắt đầu `demo-`; tự ghi `push.json`; thêm `cleanup(run_dir, prefix=, confirm_name=)` / `delete_task(...)` | bước `push` | **bản đầu có sẵn** (`tool/m28core/push.py`), **chưa thử trên CVAT thật**; P4 xác nhận |
@@ -489,7 +488,7 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
 - Ra: `runs/<run>/…` (ảnh chồng, cờ, `triage_<Pk>.csv`, `push\manual_list.txt` (loại `co_nhap`/`anh_trong`), `ca_kho.csv`), `outputs/ca_kho/` (gói họp, phiên họp, biên bản), task CVAT `demo-…`, file xuất `raw/<task>_<Pk>_<ngày>.xml`.
 
 ## Đã thử trên
-- **50 điểm DMS (config version 3, QĐ-003) trên dữ liệu in-cabin thật** (7/10/2026, giai đoạn 3; máy Windows 11 của chủ repo, Python 3.14.7, mediapipe 1.0.1, CPU; chỉ có gói `data\crops`): `prepare --box wflw` 616 mặt, `make_config.py --run` (giữ hoán vị gương), `make_label.py`, `check_flip.py`, `flag_eval.py --set Tdev`,
+- **50 điểm DMS (config version 3, QĐ-003) trên dữ liệu in-cabin thật** (7/10/2026, giai đoạn 3; máy Windows 11 của chủ repo, Python 3.14.7, mediapipe 1.0.1, CPU; chỉ có gói `data\crops`): `prepare --box crop` 616 mặt, `make_config.py --run` (giữ hoán vị gương), `make_label.py`, `check_flip.py`, `flag_eval.py --set Tdev`,
   `review --review auto`, `push --dry-run` (`INC3_ALL`, `INC3_XCROP`, `INC3_AUTO`), `eval50.py` tự so và có nhiễu, ảnh kiểm 46 mặt đủ loại. Số liệu: mục "50 điểm DMS trên đỉnh MediaPipe". **Chưa thử:** `check_drivface.py` (không có DrivFace gốc ở máy này; chỉ thử bằng dữ liệu giả), `--box auto` trên khung gốc (không có `data\frames`),
   CVAT thật v2.77.0 với label mới, nhãn gán tay thật theo DMS (`eval50.py`, `flag_eval.py --gt` mới chạy trên nhãn giả), `tests\e2e_*.py` (không có playwright), lượt cũ (run v2) đọc bằng config v3 (xem "Giới hạn").
 - **Ánh xạ chọn đỉnh trên dữ liệu in-cabin thật, 50 điểm version 2 CŨ** (6/10/2026, giai đoạn 2, trước QĐ-003; Linux cloud, Python 3.11, mediapipe 1.0.1): `prepare` 616 mặt (auto và gói), `make_config.py --run`, `check_flip.py`, `flag_eval.py --set Tdev`, `check_drivface.py` (606 ảnh), `review --review auto`, `push --dry-run` (615 mặt tự dò: XML 615 x 50 điểm, 640 x 480; 50 mặt gói: 512 x 512; đủ tên điểm, đúng thứ tự, trong ảnh),
@@ -499,55 +498,25 @@ Các dòng dưới là **điều `m28.py` đang giả định, chưa ai xác nh�
   `split` seed khởi đầu 5, **seed thực dùng 19**: F 300 (33 người), Tdev 100 (20), Ttest 100 (20), G 20 (11), P 16 (9), X 50 (21), D 30 (16) = 616 mặt, 73 người ở nhóm A, 21 ở nhóm B, 0 người chung; 333 video, tối đa 3 mặt/video;
   `check_manifest.py` đạt. `pack`: 5 phần ảnh (27,8 / 27,8 / 27,8 / 27,8 / 17,0 MiB) + meta 0,18 MiB; giải nén bằng `bsdtar` vào thư mục trống, `check_manifest` đạt, md5 616 ảnh khớp `crops` gốc.
   Pipeline trên 5 mặt F thật: `prepare --box auto --images data\frames` (6 bước xong, ảnh cắt pipeline trùng ảnh cắt trong gói), `review --review auto`, `push --review auto --dry-run` ra XML 5 x 50 điểm (tên ảnh = tên khung gốc);
-  và lượt chỉ có gói (`--images data\crops --box wflw`, không có khung gốc) ra XML 5 x 50 điểm 512 x 512, ảnh cắt trùng từng điểm ảnh. Ảnh chồng: điểm nằm trên mặt (xem mục "50 điểm DMS trên đỉnh MediaPipe").
+  và lượt chỉ có gói (`--images data\crops --box crop`, không có khung gốc) ra XML 5 x 50 điểm 512 x 512, ảnh cắt trùng từng điểm ảnh. Ảnh chồng: điểm nằm trên mặt (xem mục "50 điểm DMS trên đỉnh MediaPipe").
   Chưa thử: `cv2` đọc `.avi` YawDD trên Windows (codec), `tar -xf` của Windows với `.rar`, MediaPipe trên Python 3.14, `chay.bat` mục 3 trong cmd thật.
 - **Ca khó và họp team** (6/10/2026, Linux cloud, Python 3.11, Gradio 6.29.1, Chromium headless): `tests/test_ca_kho.py` (88 test, gồm zip độc hại, biên bản so khớp mẫu) và `tests/e2e_ca_kho.py` (đánh dấu, tab Ca khó, xuất/tải gói, nhập gói, lưới, trình chiếu, mở lại phiên, biên bản). Chưa thử: Windows/cmd, Python 3.14, kéo thả bằng chuột thật, toàn màn hình thật, Excel mở CSV.
 - Test dữ liệu giả (`tests/`) trên Linux, Python 3.11, bằng landmarker/mapping/push/collect giả.
 - **Trang rà soát** (`tool/review_app.py`, 5/10/2026): Gradio 6.29.1, Python 3.11, Linux cloud, Chromium headless qua Playwright 1.56.0; trên `runs\F5` thật (5 mặt) và
-  lượt 616 mặt WFLW (24 mặt không có nháp). Đã thử: phím tắt, hoàn tác, đóng giữa chừng (kill) rồi mở lại, màn 1440x900 và 800x900, chế độ tối (`?__theme=dark`),
+  lượt 616 mặt (24 mặt không có nháp). Đã thử: phím tắt, hoàn tác, đóng giữa chừng (kill) rồi mở lại, màn 1440x900 và 800x900, chế độ tối (`?__theme=dark`),
   lỗi ghi file (giả lập), nút Xong (dải xanh, tải lại một lần, trang vẫn chạy) rồi nút Đóng trang rà soát (mã thoát 0) và đi tiếp trong `m28.py review` rồi `push --dry-run`, không có request ra ngoài 127.0.0.1 dù đặt proxy chết.
   Số đo trên 616 mặt (CPU cloud, lúc nguội, chưa có ảnh nhỏ nào): từ lệnh chạy đến khi lưới hiện ảnh khoảng 6,5 giây (nạp Gradio chiếm khoảng 4,5 giây), mỗi quyết định
   trung vị 0,11 giây, đổi trang lần đầu tối đa 0,61 giây. `tests\e2e_review_ui.py` tự đo lại các số này.
 - **Tab Nạp ảnh** (6/10/2026, `tool/nap_anh.py` + `review_app.py`): Linux cloud, Python 3.11, Gradio 6.29.1, mediapipe 1.0.1, Chromium qua Playwright. Pha F của `tests\e2e_review_ui.py`:
-  thả 12 file (6 ảnh WFLW thật, tên có dấu/đuôi hoa, hai ảnh cùng tên, PNG xám, file chữ đổi đuôi, ảnh trùng; `set_input_files`, không phải kéo chuột thật), prepare thật bằng MediaPipe, Huỷ/Thử lại,
+  thả 12 file (6 ảnh in-cabin thật, tên có dấu/đuôi hoa, hai ảnh cùng tên, PNG xám, file chữ đổi đuôi, ảnh trùng; `set_input_files`, không phải kéo chuột thật), prepare thật bằng MediaPipe, Huỷ/Thử lại,
   "Rà lượt này" (relaunch cùng cổng, lượt cũ y nguyên), thiếu model, chế độ `--nap`. **Chưa thử**: Windows/cmd, Python 3.14, relaunch cùng cổng trên Windows, kéo thả bằng chuột thật,
   ảnh > 25 MB thật, đường dẫn dự án có dấu tiếng Việt (`cv2.imread` trên Windows không đọc được đường dẫn Unicode; tên ảnh đã ASCII nhưng thư mục dự án thì không).
-- **Đẩy lên CVAT, tab Các đợt, xoá mềm, xoá task** (6/10/2026): Linux cloud, Python 3.11, Gradio 6.29.1, mediapipe 1.0.1, Chromium qua Playwright, ảnh WFLW thật, **CVAT GIẢ** (không phải server thật). `tests\e2e_dot_push.py`:
+- **Đẩy lên CVAT, tab Các đợt, xoá mềm, xoá task** (6/10/2026): Linux cloud, Python 3.11, Gradio 6.29.1, mediapipe 1.0.1, Chromium qua Playwright, ảnh in-cabin thật, **CVAT GIẢ** (không phải server thật). `tests\e2e_dot_push.py`:
   nạp ba đợt Khoi, Nam, Cuong (có ghi chú), thẻ đợt, xoá mềm/khôi phục/dọn thùng rác ảnh của Nam (Huỷ, Esc, Enter ở Huỷ không xoá), rà Khoi, nút Đẩy (khoá khi còn mặt chưa rà; hộp xác nhận; Huỷ/Esc; đẩy; thẻ kết quả; không đẩy lần hai),
   cảnh báo CVAT khi xoá ảnh của đợt đã đẩy, xoá task (gõ tên + tick; Huỷ/Esc không gọi xoá; xoá đúng một lần; đẩy lại được), xoá cả đợt Cuong và khôi phục, trang không có biến CVAT (hướng dẫn `set`), phím tắt không chạy ở tab Các đợt,
   màn 1440 và 420 px, token giả không lộ trong HTML/log/`push.json`. **Chưa thử**: server CVAT thật (cả `push`, `collect`, xoá task, label skeleton), Windows/cmd, Python 3.14.
 - **Chưa chạy**: `autoqc` của P4, `push` thật, `collect` thật, trang rà soát trên Windows/Python 3.14/trình duyệt thật có giao diện/máy có proxy công ty/Excel khoá file thật, Windows/cmd, Python 3.14, CVAT 2.77.0 (kể cả nhập được XML `<skeleton>` không), CSV do Excel lưu.
 - Cập nhật sau thí nghiệm 14–15/10 và lượt chạy tập R (16–18/10): thời gian trước/sau, số nháp hỏng trang rà soát bắt được.
-
-## Lịch sử (WFLW, trước QĐ-001): số cũ KHÔNG còn hiệu lực
-Các mục dưới ghi lại giai đoạn dùng WFLW (đáp án 98 điểm, ánh xạ ridge học trên WFLW, công cụ nay ở `tool\legacy_wflw\`). Giữ làm lịch sử và để so sánh; **không dùng các số này cho dữ liệu in-cabin**.
-
-- **Ảnh WFLW thật, MediaPipe thật** (5/10/2026, Linux cloud, Python 3.11, mediapipe 1.0.1, `face_landmarker.task`
-  float16; cần `libegl1`, `libgles2` trên Linux): bước `crop` + `mediapipe` (ảnh gốc + ảnh lật).
-  - 616 mặt của `manifest.csv`, `--box wflw`: thấy mặt **592/616** (96,1%); 24 mặt không thấy (F 6, Tdev 3, Ttest 7,
-    G 2, X 3, D 3) sau khi thử thêm viền xám; P 0/16. Chạy khoảng 50 giây trên CPU.
-  - Tập giống R (train, ảnh một mặt, mặt lớn ≥ 25% cạnh ngắn; 40 mặt, seed 18), `--box auto`: **40/40** thấy mặt;
-    hộp tự dò so với hộp WFLW có IoU trung vị 0,70, 2/40 mặt dưới 0,5. Xem bằng mắt: 478 điểm nằm đúng trên mặt.
-- **Bản nháp ánh xạ 478→50 (P3 xác nhận/sửa)**: `tool/make_config.py` sinh `config/m28_config.json` (50 điểm chọn từ 98 điểm WFLW:
-  viền cách một điểm 17, mày 5×2, mắt 4×2, mũi 5, môi 10; 21 R, 21 L, 8 M) và `data/gt50.json`; `tool/legacy_wflw/fit_map.py` khớp
-  `config/map_mp50.json` (hình trung bình + ridge, k = 6, λ chọn trong {0,1; 1; 10; 100}) và ghi `data/mp50.json` cho mọi mặt;
-  `tool/m28core/mapping.py` có `apply_map`; `tool/check_flip.py` kiểm phép lật. Chạy lại `make_config.py` không xoá `t_flip`,
-  `tolerance`, `status`, `tmpl` đã có trong file. Bố cục 98 điểm và cặp đối xứng đã kiểm bằng script ngoài repo trên 5.931 mặt thẳng của
-  WFLW train; ba người kiểm độc lập tìm ra và đã sửa lỗi bên R/L của môi dưới (WFLW 84 → `p46_lip_L`, 86 → `p48_lip_R`).
-  - Kết quả trên 58 mặt F kiểm (số nhỏ, dễ hơn T-dev/T-test; dùng **trung vị**): NME chính (E điểm-điểm, C tới đường cong) trung vị
-    **2,87%**, trung bình 3,80% IOD, 5,2% mặt hỏng (≥ 10%); NME phụ (điểm-điểm cả 50 điểm) 5,65% / 4,06% (đây là số ghi trong `map_mp50.json`
-    kèm `nme_main_*`). λ chọn = 100 sát mép lưới (λ ~1000–3000 chỉ tốt hơn ~0,04 điểm %: giữ lưới theo kế hoạch). Hằng số bỏ lật ước
-    lượng được `flip_width` = 512,97 (không phải 512: bỏ lật lệch ~1 px sang trái trên F, T-dev, T-test nếu dùng 512).
-  - `python tool\check_flip.py --run <run>`: lật đáp án hai lần lệch ~0; WFLW 0 và 60 ở nửa trái ảnh cắt 616/616; lệch gốc/lật trung vị
-    2,07% IOD trên 20 mặt thẳng F đầu tiên (tiêu chí kế hoạch < 3%: đạt), 2,36% trên mọi mặt thẳng F, **2,80% trên Tdev** (biên mỏng);
-    đối chứng quên đổi tên theo cặp: 71%.
-  - Khớp trên 235 mặt F (đã bỏ 4 mặt no_face và 1 mặt dò nhầm người từ 240 khớp ban đầu; 58 mặt kiểm sau khi bỏ 2 mặt no_face) thay vì 240/60 như kế hoạch; danh sách mặt
-    khớp/đo/kiểm ghi trong `meta` của `map_mp50.json`. Mặt tham chiếu Procrustes = mặt đầu theo mã trong tập khớp.
-  - `t_flip` để `null` theo kế hoạch (P2 chốt sau họp 12/10); **đề xuất cho P2** 0,0672 (quantile 0,85 lệch gốc/lật trên Tdev, đã tính với
-    ánh xạ này). `tmpl` = trung bình đáp án gt98 của các mặt F pose = 0 (không lấy từ meanface.txt của PIPNet vì PIPNet không được vào `tool/`).
-  - Quy ước khoá: `gt98.json`, `gt50.json` có đuôi `.png`; `pred478.json`, `mp50.json` không đuôi. 11 mặt ở các tập khác nằm trên cùng
-    một ảnh gốc với một mặt F (WFLW tách theo mặt, không theo ảnh); ghi vào `so-quyet-dinh.md` nếu nhóm muốn tách theo ảnh.
-- Chạy `all --box wflw --review auto --dry-run` trên 5 mặt F thật: ra XML 5 × 50 điểm, toạ độ khớp `mp50.json`.
 
 ## Rủi ro: chưa thử trên CVAT thật
 Cloud không có CVAT. `push`, `collect`, xoá task và label `face50` chỉ được thử bằng CVAT giả; chữ ký các lời gọi SDK đã đối chiếu với cvat-sdk 2.77.0 thật (`tests\test_push.py::test_signatures_match_real_sdk`) và định dạng label/XML đối chiếu với mã nguồn CVAT v2.77.0

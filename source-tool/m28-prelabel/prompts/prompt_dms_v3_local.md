@@ -47,14 +47,14 @@ phiên này, tự kiểm, rồi viết báo cáo cuối trung thực. **Không c
 - Test có tên điểm v2 viết cứng (grep `p[0-9]{2}_(jaw|brow|nose|eye|lip)_[RLM]`): `tests/test_mapping.py` (~32 chỗ), `test_check_drivface.py` (~22),
   `test_eval50.py`, `test_ca_kho.py`, `test_cai_dat.py`, `test_check_flip.py`, `test_flag_eval.py`, `test_m28.py`, `test_inc_ingest.py`, `e2e_ca_kho.py`, `e2e_cai_dat.py`.
 - Config: `config/m28_config.json` (v2), `config/map_mp50.json`, `config/mp_mirror478.json`, `config/face50_label.json`, `config/pipeline.json`.
-- `de-tai-m28/` là **bản chụp, KHÔNG sửa**. `tool/legacy_wflw/` **giữ nguyên** (không sửa, không xoá; test legacy vẫn phải qua).
+- `de-tai-m28/` là **bản chụp, KHÔNG sửa**. Công cụ của bộ ảnh cũ (đã bỏ theo QĐ-001) đã được xoá khỏi repo ở bước dọn dẹp sau đó.
 
 Ghi nhớ: chữ ký `apply_map(pts478, map, config, flipped=False, width=None)` và chỗ gọi trong `steps.map50` GIỮ NGUYÊN. Trước khi làm, chạy
 `cd /home/user/T015-SIXSEVEN/source-tool/m28-prelabel && python -m pytest tests -q` để có số gốc (người điều phối ghi: **657 qua + 1 bỏ qua**).
 
 ## 1. Bối cảnh
 
-- QĐ-001: bỏ WFLW, dữ liệu in-cabin YawDD + DrivFace, phi thương mại. QĐ-002: 50 điểm đặt **trực tiếp lên đỉnh MediaPipe** Face Landmarker (478 đỉnh có iris),
+- QĐ-001: bỏ bộ ảnh khuôn mặt cũ, dữ liệu in-cabin YawDD + DrivFace, phi thương mại. QĐ-002: 50 điểm đặt **trực tiếp lên đỉnh MediaPipe** Face Landmarker (478 đỉnh có iris),
   config v2 (`mp_idx`, `curve` là tên điểm), `config/mp_mirror478.json` là hoán vị gương 478 đỉnh, `flip_width` ước lượng không cần đáp án. Giai đoạn 2 đã xong
   (commit `56ba446`, gộp `158d440`).
 - **Chủ repo vừa chốt định nghĩa mới thay hẳn 50 điểm cũ, gọi là "DMS"** (Driver Monitoring System). Phương pháp chọn đỉnh trực tiếp của QĐ-002 giữ nguyên;
@@ -84,8 +84,7 @@ Ghi nhớ: chữ ký `apply_map(pts478, map, config, flipped=False, width=None)`
 Đặt `S=/tmp/claude-0/-home-user-T015-SIXSEVEN/777f6f16-d3e2-509e-b0b3-59b796760279/scratchpad`, `M=/home/user/T015-SIXSEVEN/source-tool/m28-prelabel`.
 - `$S/work/` = thư mục chạy thử: `config/` (bản v2 của giai đoạn 2), `face_landmarker.task`, `data` → symlink `$S/incab_data` (`crops/<file>.png` 616 ảnh cắt 512,
   `frames/<nguồn>/<người>/<tên>.jpg` khung gốc, `manifest.csv` có cột `set` (F 300, Tdev 100, Ttest 100, X 50, D 30, G 20, P 16), `source`, `pose`, `yaw`, `glasses`,
-  `state`, `expression`, `gaze_label`…). Các lượt giai đoạn 2: `runs/INC2_ALL` (616 mặt, `--box auto`), `runs/INC2_XCROP`, `runs/INC2_TFLIP`. `$S/work/data_wflw`:
-  **KHÔNG dùng**. Script và ảnh kiểm giai đoạn 2 ở `$S/inc2/` (ví dụ `vert_pages.py`, `render.py`, `overlay_grids.py`, `df_shots.py`) — được tái dùng/chép sang `$S/inc3/`.
+  `state`, `expression`, `gaze_label`…). Các lượt giai đoạn 2: `runs/INC2_ALL` (616 mặt, `--box auto`), `runs/INC2_XCROP`, `runs/INC2_TFLIP`.  Script và ảnh kiểm giai đoạn 2 ở `$S/inc2/` (ví dụ `vert_pages.py`, `render.py`, `overlay_grids.py`, `df_shots.py`) — được tái dùng/chép sang `$S/inc3/`.
 - DrivFace: `$S/incab/drivface/DrivFace/` — ảnh `imgs/DrivImages/` (606 ảnh 640×480, **tên có dấu cách trước `.jpg`**), `drivPoints.txt` (cột `fileName` có dấu
   cách cuối, không có `.jpg`; `subject,imgNum,label(1=lr,2=f,3=lf),ang,xF,yF,wF,hF,xRE,yRE,xLE,yLE,xN,yN,xRM,yRM,xLM,yLM`).
 - Ảnh kiểm/lưới: `$S/ui_shots/inc3_*.jpg`. **Phải mở và XEM từng ảnh `inc3_*.jpg` bằng công cụ Read** (không chỉ tạo ra), và ghi vào báo cáo điều thấy được.
@@ -207,7 +206,7 @@ Trong `$S/work` (cwd = `$S/work`; gọi `python $M/tool/m28.py …`, `python $M/
 1. Chép config v2 hiện tại (`$M/config/*` và `$S/work/config/*`) sang `$S/inc3/v2_old/` trước khi sửa (để so v2 vs v3 ở ảnh và DrivFace).
 2. `prepare --box auto --images data\frames --set F Tdev Ttest G P X D --run INC3_ALL` (cả 616 mặt; báo `no_face`, thời gian). Trình tự phụ thuộc: chạy crop+mediapipe,
    rồi `make_config.py --run INC3_ALL --manifest data\manifest.csv` (không ghi đè gương trừ khi cần, mục 3.3), chép config/map/label mới vào `$S/work/config/`, rồi
-   `prepare --run INC3_ALL --force map50 flags autoqc overlays`. Lượt fallback chỉ có gói: `--images data\crops --box wflw --set X --run INC3_XCROP`.
+   `prepare --run INC3_ALL --force map50 flags autoqc overlays`. Lượt fallback chỉ có gói: `--images data\crops --box crop --set X --run INC3_XCROP`.
    Ghi đúng trình tự này (lệnh cmd) vào README cho P3.
 3. `flags` với `t_flip = null` (mọi cờ false), rồi lượt riêng `INC3_TFLIP` (bản sao run) với `t_flip` đề xuất qua `config\m28_config_tflip.json` **chỉ trong `$S/work`**.
 4. Lưới `inc3_overlays_*.jpg` (X, Tdev, mặt khó) và `inc3_flags_tflip_*.jpg` (điểm đỏ). XEM từng ảnh; cờ đỏ có rơi vào điểm thật sự sai không.
@@ -239,7 +238,6 @@ Trong `$S/work` (cwd = `$S/work`; gọi `python $M/tool/m28.py …`, `python $M/
 
 - Sửa mọi test hardcode tên/số v2 sang v3 **mà không xoá kiểm tra**: mỗi assert cũ phải có assert tương đương cho định nghĩa mới (ví dụ "p33 nửa trái ảnh" → "mattrai_1
   nửa trái ảnh"; "viền 17 điểm" → bỏ được nhưng thay bằng kiểm số điểm theo nhóm). Test nào phải bỏ vì đối tượng không còn (viền, chân mũi) thì liệt kê trong báo cáo.
-  Test `legacy_wflw` giữ nguyên.
 - Thêm test (chỉ dữ liệu giả, không ảnh thật, không mạng): config v3 hợp lệ (50 điểm; đúng 7 nhóm với số 5/5/4/8/8/12/8; thứ tự nhóm; tên `<nhóm>_<k>` liên tục; không có
   `jaw`; `region` thuộc {brow, nose, eye, lip}; `line == group`; `lines.closed` đúng; `curve` trong nhóm, chứa chính điểm; E/C đúng; `coincide` đối xứng; `side_convention == "image"`;
   side `*trai` = L, `*phai` = R, M đúng danh sách); cặp `flip` (trai_k↔phai_k; môi theo 2.1) khớp `mp_mirror478.json`; side M là điểm cố định; `iod_points`; trên mặt
@@ -262,7 +260,7 @@ Trong `$S/work` (cwd = `$S/work`; gọi `python $M/tool/m28.py …`, `python $M/
 5. Phương án label CVAT có lý do; `push`/`collect`/`cvat_io`/`eval50` chạy với tên mới; lỗi rõ khi gặp project/map cũ.
 6. Pipeline thật: prepare (auto + crop), map50, flags (null và t_flip đề xuất), overlays, review auto, push --dry-run; đã XEM mọi ảnh `inc3_*.jpg`.
 7. README, BAO-CAO, HUONG-DAN-WINDOWS, nguon-du-lieu, docstring cập nhật; QĐ-003 + dòng bảng ghi vào `so-quyet-dinh.md`, QĐ-002 chỉ đổi trạng thái.
-8. `de-tai-m28/`, `CLAUDE.md`, `tool/legacy_wflw/` không đổi; không còn import gãy (`python -c "import …"` từng file `tool/`, `python tool\<x>.py --help`).
+8. `de-tai-m28/`, `CLAUDE.md`; không còn import gãy (`python -c "import …"` từng file `tool/`, `python tool\<x>.py --help`).
 9. pytest xanh; e2e_ca_kho chạy; không ảnh/`runs/`/`data/`/token trong `git status`; không commit; không đường dẫn `/tmp/claude-0/...` trong repo.
 
 ## 10. Báo cáo cuối (trung thực, tiếng Việt, ngắn gọn nhưng đủ)
@@ -281,4 +279,4 @@ Trong `$S/work` (cwd = `$S/work`; gọi `python $M/tool/m28.py …`, `python $M/
 10. **Việc cần người đồng ý**: P3 (đỉnh, quy ước tên/thứ tự, `curve`, `anchor`, đóng băng config 12/10 — lưu ý kế hoạch ghi "50 điểm không đổi từ 7/10" nên phải chốt DMS
     ngay); P2 (`t_flip` mới, cờ theo nhóm); **P4 (dựng lại project/label CVAT bằng `face50_label.json` mới, file sao lưu task, QC theo tên mới)**; P5 (guideline gán tay
     theo DMS và quy ước bên theo ảnh, cột `nme_per_face.csv`); P1 (đóng băng config v3). Kèm danh sách chỗ trong `CLAUDE.md`, bản Claude Docs và bản chụp `de-tai-m28/`
-    cần sửa (định nghĩa 50 điểm, "tham khảo bố cục 98 điểm WFLW", viền hàm, quy ước bên).
+    cần sửa (định nghĩa 50 điểm, "tham khảo bố cục 98 điểm", viền hàm, quy ước bên).

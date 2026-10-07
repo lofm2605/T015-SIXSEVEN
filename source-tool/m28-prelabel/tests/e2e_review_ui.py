@@ -3,7 +3,7 @@
 Cần playwright và Chromium, KHÔNG nằm trong requirements, pytest không gom file này (tên không khớp test_*.py).
 Chỉ chạy trên Linux (dùng `lsof` để kiểm cổng chỉ bind 127.0.0.1, và `strace` nếu có để liệt kê mọi connect() của server).
 Cần một thư mục chạy (--work) có config/, data/ (hoặc không), runs/F5 (5 mặt, đã prepare) và runs/ALL616 (616 mặt, đã prepare);
-các lượt này chứa ảnh WFLW nên chỉ để ngoài git. Ví dụ (Linux cloud):
+các lượt này chứa ảnh in-cabin nên chỉ để ngoài git. Ví dụ (Linux cloud):
 
     PYTHONPATH=$S/pwlib PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers \\
         python tests/e2e_review_ui.py --work $W --shots $S/ui_shots
@@ -17,9 +17,9 @@ Sáu pha (A-F):
   D  (thêm) lỗi ghi CSV (giả lập Excel khoá file bằng cách đặt một thư mục vào chỗ file): báo "Không ghi được", giữ nguyên mặt, sửa xong bấm lại thì ghi được.
   E  sửa theo đợt kiểm 6/10: đổi bộ lọc, lưới rỗng, dải xanh sau Xong (không lớp phủ), phím tắt/tab cũ không ghi sau Xong, gõ chữ ở tab khác
      được, hộp Đóng (cảnh báo khi chưa Xong, Huỷ, Esc, focus mặc định ở Huỷ), Host lạ bị chặn, cổng bận, tab thứ hai sau Xong, bấm lặp.
-  F  tab "Nạp ảnh": kéo thả (set_input_files) ảnh WFLW thật + ảnh xấu vào trang đang rà dở F5UP, tạo lượt NAP_001, prepare thật (MediaPipe),
+  F  tab "Nạp ảnh": kéo thả (set_input_files) ảnh in-cabin thật + ảnh xấu vào trang đang rà dở F5UP, tạo lượt NAP_001, prepare thật (MediaPipe),
      tóm tắt, màn hẹp 420 px, "Rà lượt này" (trang tự tải lại cùng cổng, lượt F5UP không bị đụng), Huỷ rồi Thử lại (NAP_002), thiếu model
-     (khung đỏ, khoá nút), nút Đóng bị từ chối khi prepare đang chạy, và chế độ `review_app.py --nap` từ trang trống (Đóng ở chế độ này). Cần thêm --wflw (mặc định <work>/../wflw/WFLW_images).
+     (khung đỏ, khoá nút), nút Đóng bị từ chối khi prepare đang chạy, và chế độ `review_app.py --nap` từ trang trống (Đóng ở chế độ này). Cần thêm --imgs (mặc định <work>/data/frames).
 Mọi tiến trình đã mở được dọn ở `finally`. Cổng 7871–7879, M28_NO_BROWSER=1.
 """
 import argparse
@@ -706,8 +706,8 @@ def _sha(path):
     return hashlib.sha256(open(path, 'rb').read()).hexdigest()
 
 
-def make_nap_inputs(W, wflw, shots):
-    """Bộ file thả vào tab Nạp ảnh (ngoài repo, có mặt người thật): 6 ảnh WFLW, một bản chép đổi tên có dấu và đuôi hoa,
+def make_nap_inputs(W, imgs_dir, shots):
+    """Bộ file thả vào tab Nạp ảnh (ngoài repo, có mặt người thật): 6 ảnh in-cabin, một bản chép đổi tên có dấu và đuôi hoa,
     hai ảnh cùng tên ở hai thư mục, PNG xám không có mặt, file text đổi đuôi .jpg, một bản chép y nguyên (trùng nội dung)."""
     from PIL import Image
     d = os.path.join(shots, '_nap_in')
@@ -717,12 +717,12 @@ def make_nap_inputs(W, wflw, shots):
     picked, seen = [], set()
     for r in rows:
         sub = r[0].split('/')[0]
-        if sub not in seen and os.path.exists(os.path.join(wflw, *r[0].split('/'))):
+        if sub not in seen and os.path.exists(os.path.join(imgs_dir, *r[0].split('/'))):
             seen.add(sub)
-            picked.append(os.path.join(wflw, *r[0].split('/')))
+            picked.append(os.path.join(imgs_dir, *r[0].split('/')))
         if len(picked) == 9:
             break
-    check(len(picked) == 9, f'tìm được 9 ảnh WFLW ở 9 thư mục con khác nhau ({wflw})')
+    check(len(picked) == 9, f'tìm được 9 ảnh in-cabin ở 9 thư mục con khác nhau ({imgs_dir})')
     six = []
     for src in picked[:6]:
         dst = os.path.join(d, os.path.basename(src))
@@ -762,10 +762,10 @@ def _drop(pg, files, n_ok, n_rej):
                          "return t.includes(a + ' ảnh hợp lệ') && t.includes(b + ' bị loại'); }", arg=[n_ok, n_rej], timeout=60000)
 
 
-def phase_f(pw, W, shots, ports, wflw):
+def phase_f(pw, W, shots, ports, imgs_dir):
     log('\n== PHA F: tab Nạp ảnh (kéo thả -> prepare -> rà lượt mới) ==')
     port, port_nomodel, port_nap = ports
-    inp = make_nap_inputs(W, wflw, shots)
+    inp = make_nap_inputs(W, imgs_dir, shots)
     runs = os.path.join(W, 'runs')
     for d in os.listdir(runs):
         if d.upper().startswith('NAP_'):
@@ -971,7 +971,7 @@ def main():
     ap.add_argument('--work', required=True, help='thư mục chạy có config/, runs/F5, runs/ALL616')
     ap.add_argument('--shots', required=True, help='thư mục lưu ảnh chụp (ngoài repo: có mặt người)')
     ap.add_argument('--phases', default='ABCDEF')
-    ap.add_argument('--wflw', help='thư mục WFLW_images (mặc định <work>/../wflw/WFLW_images), cho pha F')
+    ap.add_argument('--imgs', help='thư mục ảnh khung gốc (mặc định <work>/data/frames), cho pha F')
     a = ap.parse_args()
     W, shots = os.path.abspath(a.work), os.path.abspath(a.shots)
     os.makedirs(shots, exist_ok=True)
@@ -991,7 +991,7 @@ def main():
             if 'E' in a.phases:
                 phase_e(pw, W, shots, 7876)
             if 'F' in a.phases:
-                phase_f(pw, W, shots, (7877, 7878, 7879), a.wflw or os.path.join(os.path.dirname(W), 'wflw', 'WFLW_images'))
+                phase_f(pw, W, shots, (7877, 7878, 7879), a.imgs or os.path.join(W, 'data', 'frames'))
     except (AssertionError, RuntimeError) as e:
         log(f'\nHỎNG: {e}')
         return 1

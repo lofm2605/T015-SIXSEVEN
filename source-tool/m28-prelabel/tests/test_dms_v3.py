@@ -26,7 +26,7 @@ NAMES = [p['name'] for p in CFG['points']]
 
 
 def make_run(tmp_path, n=3, t_flip=None):
-    """Lượt giả: pred478 của n mặt đối xứng (có cả ảnh lật), crop/meta.json, chế độ wflw; trả (args, thư mục lượt)."""
+    """Lượt giả: pred478 của n mặt đối xứng (có cả ảnh lật), crop/meta.json, chế độ crop; trả (args, thư mục lượt)."""
     rd = tmp_path / 'runs' / 'R'
     (rd / 'mediapipe').mkdir(parents=True)
     (rd / 'crop').mkdir()
@@ -35,7 +35,7 @@ def make_run(tmp_path, n=3, t_flip=None):
     (rd / 'mediapipe' / 'pred478.json').write_text(json.dumps({k: {'orig': o.tolist(), 'flip': f.tolist()} for k, o, f in zip(names, origs, flips)}), encoding='utf-8')
     meta = {k: dict(src=f'/x/{k}.jpg', rel=f'{k}.jpg', left=0.0, top=0.0, k=1.0, w=512, h=512) for k in names}
     (rd / 'crop' / 'meta.json').write_text(json.dumps(meta), encoding='utf-8')
-    (rd / 'crop' / 'box.txt').write_text('wflw', encoding='utf-8')
+    (rd / 'crop' / 'box.txt').write_text('crop', encoding='utf-8')
     cfg = dict(CFG, t_flip=t_flip)
     cfg_path = tmp_path / 'cfg.json'
     cfg_path.write_text(json.dumps(cfg), encoding='utf-8')
@@ -59,7 +59,7 @@ def test_map50_flags_xml_cvat_io_and_eval50_all_work_with_the_new_names(tmp_path
     assert all(len(v) == 50 and not any(v) for v in fl.values())                                           # mặt giả đối xứng: lật khớp, không cờ nào
     # XML theo ảnh cắt: đúng một skeleton face50 mỗi ảnh, đủ 50 điểm tên mới đúng thứ tự, kèm low_conf
     xml = tmp_path / 'xml' / 'prelabel.xml'
-    steps.build_xml('wflw', list(names), meta, mp50, fl, CFG, str(xml))
+    steps.build_xml('crop', list(names), meta, mp50, fl, CFG, str(xml))
     ann = cvat_io.parse_annotations(xml.read_bytes())
     assert sorted(ann) == [f'{n}.png' for n in names]
     for im in ann.values():

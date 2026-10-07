@@ -1,7 +1,7 @@
 [Trích từ de-tai-m28/p1-du-lieu.md — mục: Nhờ AI cho đúng. Đoạn mẫu trong kế hoạch, chưa chạy thử như một chương trình hoàn chỉnh.]
 
-Viết check_manifest.py đọc manifest.csv (cột file, set, block, seq, wflw_image,
-wflw_line, pose, occlusion và 4 cờ khác). In lỗi và thoát mã 1 nếu:
+Viết check_manifest.py đọc manifest.csv in-cabin (cột file, set, block, seq, source,
+image, face_idx, video, frame, t_s và các cột mô tả khác). In lỗi và thoát mã 1 nếu:
 số mặt khác F 300, Tdev 100, Ttest 100, G 20, P 16, X 50, D 30; trùng
-(wflw_image, wflw_line); khối X nào không có 10 mặt, 1-2 mặt pose=1, 2-4 mặt
-occlusion=1; seq 1-2 của khối X có cờ khác 0; tên file sai mẫu X1_01.png.
+(image, face_idx); khối X nào không có 10 mặt; hai mặt cùng video cách nhau
+dưới ngưỡng giây; source không phải yawdd hoặc drivface; tên file sai mẫu X1_01.png.

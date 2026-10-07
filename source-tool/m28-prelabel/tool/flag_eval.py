@@ -205,7 +205,7 @@ def main(argv=None):
         from m28core import steps
         meta = steps._jload(os.path.join("runs", a.run, "crop", "meta.json"))
         box = os.path.join("runs", a.run, "crop", "box.txt")
-        mode = open(box, encoding="utf-8").read().strip() if os.path.exists(box) else "wflw"
+        mode = steps.read_box_mode(box, "crop")
         keys = {n: eval50.stem(steps._file_name(n, meta[n], mode)) for n in mp50 if n in meta}
         if os.path.exists(a.manifest):
             sets, _ = _faces_of_set(a.manifest, {a.set})

@@ -1,7 +1,6 @@
 """Cắt mặt vuông 512 x 512 quanh hộp mặt (dùng chung cho mọi nguồn dữ liệu). Chỉ numpy và cv2.
 
-Tách ra từ tool/wflw.py cũ (nay ở tool/legacy_wflw/) khi bỏ WFLW (QĐ-001): hai hàm này không phụ thuộc WFLW,
-steps.py, inc_ingest.py và các test cần chúng nên để ở module trung lập này.
+Module trung lập cho mọi nguồn dữ liệu: steps.py, inc_ingest.py và các test dùng chung hai hàm này.
 """
 import numpy as np
 

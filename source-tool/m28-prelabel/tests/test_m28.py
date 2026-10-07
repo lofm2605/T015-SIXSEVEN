@@ -125,21 +125,21 @@ def write_images(root, extra_black=None, corrupt=None):
 
 
 def write_manifest(tmp_path, rows):
-    """rows: [(file, wflw_image, wflw_line, (h, w))]; hộp mặt giữa ảnh."""
+    """rows: [(file, image, face_idx, (h, w))]; hộp mặt giữa ảnh."""
     os.makedirs('data', exist_ok=True)
     with open('data/manifest.csv', 'w', newline='', encoding='utf-8') as f:
         w = csv.writer(f)
-        w.writerow(['file', 'set', 'block', 'seq', 'wflw_image', 'wflw_line', 'x0', 'y0', 'x1', 'y1'])
+        w.writerow(['file', 'set', 'block', 'seq', 'image', 'face_idx', 'x0', 'y0', 'x1', 'y1'])
         for fn, img, line, (h, wd) in rows:
             w.writerow([fn, 'F', '', 1, img, line, wd * .25, h * .25, wd * .75, h * .75])
     with open('data/list.csv', 'w', newline='', encoding='utf-8') as f:
         w = csv.writer(f)
-        w.writerow(['wflw_image', 'wflw_line'])
+        w.writerow(['image', 'face_idx'])
         w.writerows((img, line) for _, img, line, _ in rows)
 
 
-def wflw_setup(tmp_path):
-    """Lượt wflw: 3 mặt tốt, 1 ảnh đen (no_face ở mediapipe), 1 file hỏng (no_face ở crop)."""
+def box_setup(tmp_path):
+    """Lượt --box crop: 3 mặt tốt, 1 ảnh đen (no_face ở mediapipe), 1 file hỏng (no_face ở crop)."""
     imgs = tmp_path / 'imgs'
     write_images(imgs, extra_black='black.png', corrupt='bad.png')
     rows = [(f'F_{i + 1:03d}.png', rel, i, SIZES[rel]) for i, rel in enumerate(SIZES)]
@@ -178,23 +178,23 @@ def test_prepare_auto_six_steps(tmp_path, world):
     assert (tmp_path / 'runs' / 'A' / 'autoqc' / 'autoqc.csv').exists()
 
 
-def test_prepare_wflw_six_steps(tmp_path, world):
-    imgs = wflw_setup(tmp_path)
-    m28.main(prep_args('W', imgs, '--box', 'wflw'))
+def test_prepare_crop_six_steps(tmp_path, world):
+    imgs = box_setup(tmp_path)
+    m28.main(prep_args('W', imgs, '--box', 'crop'))
     for s in m28.PREPARE:
         assert (tmp_path / 'runs' / 'W' / s / 'done.txt').exists(), s
     assert (tmp_path / 'runs' / 'W' / 'crop' / 'images' / 'F_001.png').exists()
-    assert world.lm == 1                              # --box wflw không dựng landmarker ở bước crop
+    assert world.lm == 1                              # --box crop không dựng landmarker ở bước crop
 
 
 def test_set_filter_and_missing_inputs(tmp_path, world):
-    imgs = wflw_setup(tmp_path)
-    m28.main(['prepare', '--run', 'S', '--set', 'F', '--images', str(imgs), '--box', 'wflw'])
+    imgs = box_setup(tmp_path)
+    m28.main(['prepare', '--run', 'S', '--set', 'F', '--images', str(imgs), '--box', 'crop'])
     assert len(json.load(open('runs/S/crop/meta.json'))) == 4        # 3 mặt + ảnh đen; file hỏng không đọc được
     with pytest.raises(SystemExit, match='--images'):
         m28.main(['prepare', '--run', 'X'])               # không --images, không --list
     with pytest.raises(SystemExit, match='--list'):
-        m28.main(['prepare', '--run', 'X2', '--images', str(imgs), '--box', 'wflw'])
+        m28.main(['prepare', '--run', 'X2', '--images', str(imgs), '--box', 'crop'])
 
 
 # 2 ---------------------------------------------------------------------------
@@ -228,9 +228,9 @@ def test_xml_coordinates_auto(tmp_path, world):
         assert all(p.find('attribute').get('name') == 'low_conf' for p in pts)
 
 
-def test_xml_coordinates_wflw(tmp_path, world):
-    imgs = wflw_setup(tmp_path)
-    to_review_auto('W', imgs, 'wflw')
+def test_xml_coordinates_crop(tmp_path, world):
+    imgs = box_setup(tmp_path)
+    to_review_auto('W', imgs, 'crop')
     with pytest.raises(SystemExit):
         m28.main(['push', '--run', 'W', '--review', 'auto', '--dry-run'])    # không gõ lại --box: lấy từ crop/box.txt
     ims = read_xml('W')
@@ -279,14 +279,14 @@ def test_t_flip_null_all_false(tmp_path, world):
 
 # 4 ---------------------------------------------------------------------------
 def test_no_face_csv_and_rerun_keeps_other_step(tmp_path, world):
-    imgs = wflw_setup(tmp_path)
-    m28.main(prep_args('W', imgs, '--box', 'wflw'))
+    imgs = box_setup(tmp_path)
+    m28.main(prep_args('W', imgs, '--box', 'crop'))
     rows = no_face_rows('W')
     assert rows[0] == ['name', 'reason', 'step']
     assert sorted(rows[1:]) == sorted([['F_004', 'khong_thay_mat', 'mediapipe'], ['F_005', 'khong_doc_duoc_anh', 'crop']])
-    m28.main(prep_args('W', imgs, '--box', 'wflw', '--force', 'mediapipe'))
+    m28.main(prep_args('W', imgs, '--box', 'crop', '--force', 'mediapipe'))
     assert sorted(no_face_rows('W')[1:]) == sorted(rows[1:])                   # không mất dòng của bước crop
-    m28.main(prep_args('W', imgs, '--box', 'wflw', '--force', 'crop'))
+    m28.main(prep_args('W', imgs, '--box', 'crop', '--force', 'crop'))
     assert sorted(no_face_rows('W')[1:]) == sorted(rows[1:])                   # crop chạy lại: mediapipe còn nguyên
 
 
@@ -331,11 +331,11 @@ def test_done_skip_and_force(tmp_path, world, capsys):
 
 # 6 ---------------------------------------------------------------------------
 def test_review_auto_decisions(tmp_path, world, monkeypatch):
-    imgs = wflw_setup(tmp_path)
+    imgs = box_setup(tmp_path)
     qc = types.ModuleType('m28core.autoqc')
     qc.run = lambda name, pts, cfg: ['guong'] if name == 'F_002' else []
     monkeypatch.setitem(sys.modules, 'm28core.autoqc', qc)
-    m28.main(prep_args('W', imgs, '--box', 'wflw'))
+    m28.main(prep_args('W', imgs, '--box', 'crop'))
     sug = {r['name']: r['suggestion'] for r in csv.DictReader(open('runs/W/autoqc/autoqc.csv'))}
     assert sug == {'F_001.png': 'can_xem', 'F_002.png': 'nen_gan_tay', 'F_003.png': 'can_xem'}
     m28.main(['review', '--run', 'W', '--review', 'auto'])
@@ -348,8 +348,8 @@ def test_review_auto_decisions(tmp_path, world, monkeypatch):
 
 
 def test_review_excel_flow(tmp_path, world, capsys):
-    imgs = wflw_setup(tmp_path)
-    m28.main(prep_args('W', imgs, '--box', 'wflw'))
+    imgs = box_setup(tmp_path)
+    m28.main(prep_args('W', imgs, '--box', 'crop'))
     with pytest.raises(SystemExit):
         m28.main(['review', '--run', 'W', '--review', 'excel', '--reviewer', 'P5'])
     assert 'autoqc.csv' in capsys.readouterr().out
@@ -378,8 +378,8 @@ def test_read_triage_formats(tmp_path):
 
 # 7, 8 ------------------------------------------------------------------------
 def test_push_dry_run(tmp_path, world):
-    imgs = wflw_setup(tmp_path)
-    to_review_auto('W', imgs, 'wflw')
+    imgs = box_setup(tmp_path)
+    to_review_auto('W', imgs, 'crop')
     with pytest.raises(SystemExit):
         m28.main(['push', '--run', 'W', '--review', 'auto', '--dry-run'])
     assert os.path.exists('runs/W/xml/prelabel.xml')
@@ -411,9 +411,9 @@ def test_push_real_with_fake_push(tmp_path, world, monkeypatch, capsys):
     assert len(world.push) == 1 and 'bỏ qua push' in capsys.readouterr().out
 
 
-def test_push_wflw_uploads_crops_and_default_task_name(tmp_path, world):
-    imgs = wflw_setup(tmp_path)
-    to_review_auto('W', imgs, 'wflw')
+def test_push_crop_uploads_crops_and_default_task_name(tmp_path, world):
+    imgs = box_setup(tmp_path)
+    to_review_auto('W', imgs, 'crop')
     m28.main(['push', '--run', 'W', '--review', 'auto'])
     c = world.push[0]
     assert c['task'] == 'demo-W'
@@ -453,7 +453,7 @@ def test_push_duplicate_image_name_detected(tmp_path, world):
     with pytest.raises(SystemExit, match='trùng'):
         m28.main(['push', '--run', 'A', '--review', 'auto', '--dry-run'])
     assert world.push == []
-    m28.main(['prepare', '--run', 'B', '--list', 'data/list.csv', '--images', str(imgs), '--box', 'wflw'])  # ảnh cắt: tên khác nhau
+    m28.main(['prepare', '--run', 'B', '--list', 'data/list.csv', '--images', str(imgs), '--box', 'crop'])  # ảnh cắt: tên khác nhau
     m28.main(['review', '--run', 'B', '--review', 'auto'])
     with pytest.raises(SystemExit):
         m28.main(['push', '--run', 'B', '--review', 'auto', '--dry-run'])
@@ -504,9 +504,9 @@ def test_missing_push_module(tmp_path, world, monkeypatch):
 
 # 10 --------------------------------------------------------------------------
 def test_all_auto_dry_run_stops_at_push(tmp_path, world, capsys):
-    imgs = wflw_setup(tmp_path)
+    imgs = box_setup(tmp_path)
     with pytest.raises(SystemExit, match='push'):
-        m28.main(['all', '--run', 'F5', '--list', 'data/list.csv', '--images', str(imgs), '--box', 'wflw',
+        m28.main(['all', '--run', 'F5', '--list', 'data/list.csv', '--images', str(imgs), '--box', 'crop',
                   '--review', 'auto', '--dry-run'])
     assert 'Chạy thử' in capsys.readouterr().out
     assert os.path.exists('runs/F5/xml/prelabel.xml') and os.path.exists('runs/F5/review/done.txt')
@@ -514,8 +514,8 @@ def test_all_auto_dry_run_stops_at_push(tmp_path, world, capsys):
 
 
 def test_all_real_then_rerun_skips_everything(tmp_path, world, capsys):
-    imgs = wflw_setup(tmp_path)
-    argv = ['all', '--run', 'F5', '--list', 'data/list.csv', '--images', str(imgs), '--box', 'wflw',
+    imgs = box_setup(tmp_path)
+    argv = ['all', '--run', 'F5', '--list', 'data/list.csv', '--images', str(imgs), '--box', 'crop',
             '--review', 'auto', '--task', 'demo-F5']
     m28.main(argv)
     assert len(world.push) == 1 and world.collect == []                         # all không gọi collect
@@ -636,8 +636,8 @@ def test_soft_deleted_faces_are_filtered_everywhere(tmp_path, world):
     """Xoá mềm (excluded.txt) là bộ lọc lúc đọc: hàng đợi, review, push, chạy lại các bước đều trừ mặt đó; file kết quả không bị sửa."""
     import dot_anh
     from m28core import loai_tru
-    imgs = wflw_setup(tmp_path)
-    to_review_auto('W', imgs, 'wflw')
+    imgs = box_setup(tmp_path)
+    to_review_auto('W', imgs, 'crop')
     rd = os.path.join('runs', 'W')
     before = {f: open(os.path.join(rd, *f.split('/')), 'rb').read() for f in ('crop/meta.json', 'flags/flags.json', 'map50/mp50.json')}
     dot_anh.soft_delete_image(rd, 'F_002')                        # mặt tốt
@@ -658,7 +658,7 @@ def test_soft_deleted_faces_are_filtered_everywhere(tmp_path, world):
     assert open('runs/W/push/rejected.csv').read().splitlines() == [
         'name,reason', 'F_005,khong_doc_duoc_anh', 'F_002,da_xoa', 'F_004,da_xoa']
     # chạy lại các bước (--force) với crop/overlays đã chuyển vào _trash: không lỗi, không tạo lại file, không mất mục cũ trong file kết quả
-    m28.main(prep_args('W', imgs, '--box', 'wflw', '--force', *m28.PREPARE))
+    m28.main(prep_args('W', imgs, '--box', 'crop', '--force', *m28.PREPARE))
     assert not os.path.exists(os.path.join(rd, 'crop', 'images', 'F_002.png'))
     assert not os.path.exists(os.path.join(rd, 'overlays', 'F_002.png'))
     meta, flags_, mp50 = (json.load(open(os.path.join(rd, *f.split('/')))) for f in ('crop/meta.json', 'flags/flags.json', 'map50/mp50.json'))
@@ -687,8 +687,8 @@ def test_dot_plan_counts_equal_steps_push(tmp_path, world, capsys):
     """Hộp xác nhận đếm bằng cùng hàm phân loại với steps.push: số Nhận/Gán tay/Bỏ khớp dòng 'push: …' in ra."""
     import day_cvat
     import dot_anh
-    imgs = wflw_setup(tmp_path)
-    to_review_auto('W', imgs, 'wflw')
+    imgs = box_setup(tmp_path)
+    to_review_auto('W', imgs, 'crop')
     rd = os.path.join('runs', 'W')
     dot_anh.soft_delete_image(rd, 'F_003')
     with pytest.raises(SystemExit):
@@ -741,18 +741,18 @@ def write_manifest_incabin(rows, crops_dir=None):
             wl.writerow([img, 0, 5])
 
 
-def test_incabin_manifest_columns_with_box_wflw_and_set(tmp_path, world):
+def test_incabin_manifest_columns_with_box_crop_and_set(tmp_path, world):
     imgs = tmp_path / 'imgs'
     write_images(imgs)
     write_manifest_incabin([(f'F_{i + 1:03d}.png', rel, SIZES[rel]) for i, rel in enumerate(SIZES)])
-    m28.main(prep_args('N', imgs, '--box', 'wflw'))                       # --list có cột image, face_idx
+    m28.main(prep_args('N', imgs, '--box', 'crop'))                       # --list có cột image, face_idx
     assert sorted(f.name for f in (tmp_path / 'runs' / 'N' / 'crop' / 'images').iterdir()) == ['F_001.png', 'F_002.png', 'F_003.png']
     meta = json.load(open('runs/N/crop/meta.json'))
     assert meta['F_001']['rel'] == 'sub/face_a.png' and meta['F_001']['w'] == 640           # ảnh gốc, toạ độ gốc
-    assert world.lm == 1                                                  # --box wflw không dựng landmarker ở bước crop
-    m28.main(['prepare', '--run', 'S2', '--set', 'F', '--images', str(imgs), '--box', 'wflw'])   # --set lọc theo cột set
+    assert world.lm == 1                                                  # --box crop không dựng landmarker ở bước crop
+    m28.main(['prepare', '--run', 'S2', '--set', 'F', '--images', str(imgs), '--box', 'crop'])   # --set lọc theo cột set
     assert len(json.load(open('runs/S2/crop/meta.json'))) == 3
-    m28.main(['prepare', '--run', 'S3', '--set', 'G', '--images', str(imgs), '--box', 'wflw'])
+    m28.main(['prepare', '--run', 'S3', '--set', 'G', '--images', str(imgs), '--box', 'crop'])
     assert json.load(open('runs/S3/crop/meta.json')) == {}                # không có mặt thuộc tập G
 
 
@@ -768,11 +768,15 @@ def test_incabin_list_without_manifest_uses_box_auto(tmp_path, world):
     assert list(json.load(open('runs/L/crop/meta.json'))) == ['face_a']
 
 
-def test_old_wflw_columns_still_accepted(tmp_path, world):
-    imgs = wflw_setup(tmp_path)
-    assert open('data/list.csv', encoding='utf-8').readline().strip() == 'wflw_image,wflw_line'
-    m28.main(prep_args('Old', imgs, '--box', 'wflw'))
-    assert (tmp_path / 'runs' / 'Old' / 'crop' / 'images' / 'F_001.png').exists()
+def test_list_without_image_face_idx_columns_is_rejected_clearly(tmp_path, world):
+    imgs = box_setup(tmp_path)
+    assert open('data/list.csv', encoding='utf-8').readline().strip() == 'image,face_idx'
+    with open('data/list.csv', 'w', newline='', encoding='utf-8') as f:                  # CSV cột kiểu cũ: không còn đọc
+        f.write('old_image,old_line\nsub/face_a.png,0\n')
+    with pytest.raises(SystemExit, match='image, face_idx'):
+        m28.main(prep_args('Old', imgs, '--box', 'crop'))
+    with pytest.raises(SystemExit):                                                       # giá trị --box ngoài {crop, auto} (kể cả tên cũ của crop) bị argparse từ chối
+        m28.main(['prepare', '--run', 'Old2', '--images', str(imgs), '--box', 'ten_cu'])
 
 
 def test_only_crops_package_runs_with_images_data_crops(tmp_path, world):
@@ -782,7 +786,7 @@ def test_only_crops_package_runs_with_images_data_crops(tmp_path, world):
     write_images(imgs)
     rows = [(f'F_{i + 1:03d}.png', rel, SIZES[rel]) for i, rel in enumerate(SIZES)]
     write_manifest_incabin(rows)
-    m28.main(prep_args('Full', imgs, '--box', 'wflw'))                     # có khung gốc: chuẩn so sánh
+    m28.main(prep_args('Full', imgs, '--box', 'crop'))                     # có khung gốc: chuẩn so sánh
     crops = tmp_path / 'data' / 'crops'
     crops.mkdir(parents=True)
     for fn, rel, (h, w) in rows:                                          # gói: ảnh cắt của mỗi mặt, đúng như inc_ingest.py ghi
@@ -790,7 +794,7 @@ def test_only_crops_package_runs_with_images_data_crops(tmp_path, world):
         img, _, _, _ = square_crop(bgr, (w * .25, h * .25, w * .75, h * .75), np.zeros((1, 2), np.float32))
         cv2.imwrite(str(crops / fn), img)
     shutil_rmtree(imgs)                                                   # khung gốc không còn
-    m28.main(prep_args('Pack', crops, '--box', 'wflw'))
+    m28.main(prep_args('Pack', crops, '--box', 'crop'))
     for s in m28.PREPARE:
         assert (tmp_path / 'runs' / 'Pack' / s / 'done.txt').exists(), s
     meta = json.load(open('runs/Pack/crop/meta.json'))
@@ -806,7 +810,7 @@ def test_only_crops_package_runs_with_images_data_crops(tmp_path, world):
     assert sorted(ims) == ['F_001.png', 'F_002.png', 'F_003.png']
     assert all((im.get('width'), im.get('height')) == ('512', '512') for im in ims.values())
     # --set cũng chạy chỉ với gói
-    m28.main(['prepare', '--run', 'PackSet', '--set', 'F', '--images', str(crops), '--box', 'wflw'])
+    m28.main(['prepare', '--run', 'PackSet', '--set', 'F', '--images', str(crops), '--box', 'crop'])
     assert len(json.load(open('runs/PackSet/crop/meta.json'))) == 3
 
 
@@ -838,3 +842,12 @@ def test_make_landmarker_default_outputs_unchanged(monkeypatch, tmp_path):
     assert seen['output_face_blendshapes'] is False and seen['output_facial_transformation_matrixes'] is False
     assert steps.make_landmarker(str(model), outputs=True) == 'LM'
     assert seen['output_face_blendshapes'] is True and seen['output_facial_transformation_matrixes'] is True and seen['num_faces'] == 5
+
+
+def test_read_box_mode_accepts_runs_written_by_older_tool_versions(tmp_path):
+    from m28core import steps
+    f = tmp_path / 'box.txt'
+    assert steps.read_box_mode(str(f), 'auto') == 'auto' and steps.read_box_mode(str(f), 'crop') == 'crop'      # thiếu file: lấy mặc định
+    for text, expect in (('auto', 'auto'), ('crop', 'crop'), ('ten_cu_cua_che_do_crop', 'crop')):                   # giá trị lạ (lượt cũ) = ảnh cắt
+        f.write_text(text, encoding='utf-8')
+        assert steps.read_box_mode(str(f)) == expect

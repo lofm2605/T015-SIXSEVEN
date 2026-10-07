@@ -4,20 +4,19 @@
     flipped=True: pts478 là kết quả MediaPipe trên ảnh lật ngang; điểm n (đã bỏ lật) = [w - x, y] của đỉnh mp_idx(flip(n)) trên ảnh lật,
                   với w = width nếu có, không thì map["flip_width"]. Kết quả nằm trên ảnh gốc, cùng tên điểm như bản không lật.
 
-Vì sao chọn đỉnh (QĐ-001, QĐ-002): bỏ WFLW thì không còn đáp án 50 điểm để học phép khớp ridge như trước (ridge học trên WFLW lệch ở
-hàm và lông mày khi gặp mặt tài xế). Mỗi điểm của config là MỘT đỉnh MediaPipe (config `mp_idx`), nên điểm nháp nằm đúng trên lưới mặt
+Vì sao chọn đỉnh (QĐ-001, QĐ-002): dữ liệu chính là in-cabin, không còn đáp án 50 điểm có sẵn để học phép khớp ridge như trước
+(ridge lệch ở hàm và lông mày khi gặp mặt tài xế). Mỗi điểm của config là MỘT đỉnh MediaPipe (config `mp_idx`), nên điểm nháp nằm đúng trên lưới mặt
 của model, không có số học nào cần nhóm kiểm lại, và đổi định nghĩa một điểm chỉ là đổi một chỉ số.
 
 Định dạng config/map_mp50.json (version 3, kind "vertex"), do tool/make_config.py sinh cùng m28_config.json (config version 3, định nghĩa 50 điểm DMS, QĐ-003):
     {"version": 3, "kind": "vertex", "names": [tên điểm theo thứ tự config],
      "points": {tên: {"mp_idx": đỉnh 0-477, "flip": tên điểm đối xứng}}, "flip_width": w, "meta": {...}}
-Không có mean478, ridge hay ma trận nào. Map kiểu cũ bị từ chối bằng ValueError rõ ràng: map ridge (học trên WFLW) và map version 2 (cùng cấu trúc nhưng định nghĩa 50 điểm
+Không có mean478, ridge hay ma trận nào. Map kiểu cũ bị từ chối bằng ValueError rõ ràng: map ridge (có mean478) và map version 2 (cùng cấu trúc nhưng định nghĩa 50 điểm
 cũ `pNN_vùng_bên`, bên theo người trong ảnh). Config thiếu `side_convention: "image"` (config version 2) cũng bị từ chối: quy ước bên đã đổi sang theo bức ảnh.
 Config có thể là TẬP CON các điểm của map; `mp_idx` hoặc `flip` của một điểm trong config lệch với map thì báo lỗi (chạy lại make_config.py).
 
 Quy ước toạ độ: pts478 theo pixel kiểu MediaPipe (x = p.x * width, biên pixel). Ảnh lật đúng nghĩa là x' = width - x; `flip_width` là
 số ước lượng trên dữ liệu thật (make_config.py, mặt thẳng của tập F, không cần đáp án) và có thể lệch khỏi 512 chút ít.
-Ánh xạ cũ (ridge) nằm ở tool/legacy_wflw/mapping_ridge.py, chỉ để so sánh (tool/check_drivface.py).
 """
 import numpy as np
 
@@ -64,8 +63,8 @@ def _check_map(mp_map):
         raise ValueError("map_mp50.json không phải đối tượng JSON")
     if "mean478" in mp_map or any(isinstance(v, dict) and "W" in v for v in (mp_map.get("points") or {}).values()) \
             or mp_map.get("version") not in (2, 3) or mp_map.get("kind") != "vertex":
-        raise ValueError("map_mp50.json là bản cũ (ánh xạ ridge học trên WFLW, đã lỗi thời theo QĐ-001): "
-                         "chạy lại tool\\make_config.py để sinh map version 3 (chọn đỉnh, 50 điểm DMS)")
+        raise ValueError("map_mp50.json là bản ridge cũ (có mean478), không còn hỗ trợ theo QĐ-001: "
+                         "lấy lại config/map_mp50.json mới hoặc chạy lại tool\\make_config.py để sinh map version 3 (chọn đỉnh, 50 điểm DMS)")
     if mp_map.get("version") == 2:
         raise ValueError("map_mp50.json là version 2 (50 điểm pNN_vùng_bên của QĐ-002, bên theo người trong ảnh), đã thay bằng version 3 (50 điểm DMS, QĐ-003): "
                          "chạy lại tool\\make_config.py để sinh config và map version 3")

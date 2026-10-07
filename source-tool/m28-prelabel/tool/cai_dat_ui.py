@@ -1,5 +1,5 @@
 """Tab "Cài đặt" của trang rà soát M28 (Gradio): CVAT (link, token, tổ chức, Nhớ trên máy này, Thử kết nối, Quên token), người rà, đường dẫn
-(thư mục WFLW_images, file face_landmarker.task), cờ low_conf (t_flip) và pipeline (chỉ đọc).
+(thư mục ảnh, file face_landmarker.task), cờ low_conf (t_flip) và pipeline (chỉ đọc).
 
 Không import gradio ở đầu module (gradio chỉ đến từ tham số `gr`, như dot_ui.py); phần dựng HTML thuần ở đầu file để test không cần trình duyệt.
 Logic nằm ở cai_dat.py; tab này chỉ nối với Gradio. An toàn:
@@ -171,13 +171,13 @@ def reviewer_info_html(snap, ctx_reviewer, run_name, next_name):
 def paths_info_html(snap, run="<lượt>"):
     imgs = snap["prefs"]["images_dir"]
     mod = snap["prefs"]["model_path"]
-    ex_img = imgs or "<thư mục WFLW_images>"
-    rows = [("Thư mục ảnh WFLW", f'<code class="cd-path">{_e(imgs)}</code>' if imgs else "(chưa cài)"),
+    ex_img = imgs or "<thư mục ảnh>"
+    rows = [("Thư mục ảnh", f'<code class="cd-path">{_e(imgs)}</code>' if imgs else "(chưa cài)"),
             ("Model", f'<code class="cd-path">{_e(mod)}</code>' if mod else "(chưa cài: tìm face_landmarker.task như cũ)")]
     cmd = f'python tool\\m28.py prepare --run {run} --list data\\r_list.csv --images "{ex_img}" --box auto'
     return ("<table class=\"cd-kv\">" + "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in rows) + "</table>"
-            '<div class="cd-note">Model đã cài: tab Nạp ảnh dùng nó (thêm <code>--model</code> khi chạy prepare). Thư mục ảnh WFLW: khi đẩy một lượt '
-            "chạy bằng lệnh trên ảnh WFLW mà ảnh gốc không còn ở đường dẫn cũ, trang thêm <code>--images</code> cho lệnh push; ảnh nạp từ tab Nạp ảnh "
+            '<div class="cd-note">Model đã cài: tab Nạp ảnh dùng nó (thêm <code>--model</code> khi chạy prepare). Thư mục ảnh: khi đẩy một lượt '
+            "chạy bằng lệnh mà ảnh gốc không còn ở đường dẫn cũ, trang thêm <code>--images</code> cho lệnh push; ảnh nạp từ tab Nạp ảnh "
             f'không cần.<br>Lệnh gợi ý (cmd): <code class="cd-path">{_e(cmd)}</code></div>')
 
 
@@ -211,7 +211,7 @@ def _pipe_table(p, exists=True):
 
 
 def tflip_confirm_html(old, new, images_dir):
-    img = images_dir or "<thư mục WFLW_images>"
+    img = images_dir or "<thư mục ảnh>"
     cmd1 = "python tool\\m28.py prepare --run <lượt> --images runs\\<lượt>\\inbox --box auto --force flags autoqc overlays"
     cmd2 = f'python tool\\m28.py prepare --run <lượt> --list <danh sách> --images "{img}" --box auto --force flags autoqc overlays'
     return ('<div class="modal-title" id="cd-tflip-title">Đổi t_flip?</div>'
@@ -326,7 +326,7 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
     with gr.Column(elem_classes=["cd-sec"]):
         gr.HTML('<div class="cd-sec-title">Đường dẫn</div>', apply_default_css=False)
         paths_info = gr.HTML(elem_id="cd-paths-info", apply_default_css=False)
-        img_tb = gr.Textbox(label="Thư mục ảnh WFLW_images", max_lines=1, elem_id="cd-images", placeholder="D:\\WFLW\\WFLW_images")
+        img_tb = gr.Textbox(label="Thư mục ảnh", max_lines=1, elem_id="cd-images", placeholder="D:\\m28\\data\\frames")
         with gr.Row(elem_id="cd-images-btns"):
             b_img_check = gr.Button("Kiểm", elem_id="cd-images-check")
             b_img_save = gr.Button("Lưu", elem_id="cd-images-save")

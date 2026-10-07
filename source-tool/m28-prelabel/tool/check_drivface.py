@@ -14,7 +14,7 @@ khung gốc (x / k + left, y / k + top). Bộ 5 điểm của DrivFace: tâm m�
     RE/RM nằm nửa trái ảnh thì ghép với nhóm `*trai` (nửa trái ảnh), ngược lại ghép với `*phai`; không kết luận được thì dừng;
   * chuẩn hoá bằng IOD = khoảng cách hai tâm mắt CỦA DRIVFACE (khác IOD khoé mắt ngoài của eval50): ảnh nhìn trái/phải IOD co lại nên % lớn hơn.
 Báo trung vị / trung bình / p90 theo điểm, theo nhóm hướng nhìn (label 1 nhìn phải, 2 thẳng, 3 nhìn trái) và theo tài xế. Có --old-config/--old-map (bản chép config + map
-VERSION 2 của định nghĩa cũ, hoặc map ridge WFLW trong tool\\legacy_wflw) thì chạy thêm trên CÙNG ảnh để so; mặc định không so.
+VERSION 2 của định nghĩa cũ, kind "vertex") thì chạy thêm trên CÙNG ảnh để so; mặc định không so.
 
 Dữ liệu DrivFace: "free for academic usage" (liên hệ tác giả nếu dùng mục đích khác), chỉ dùng nội bộ nhóm, không đăng, không commit ảnh hay kết quả theo ảnh.
 """
@@ -170,19 +170,16 @@ def old_vertex_apply(pts478, old_map, old_cfg):
 
 def process(rows, img_dir, model, cfg, new_map, old_map=None, old_cfg=None, limit=None, log=print, re_left=True):
     """Chạy toàn bộ: trả (per_image mới, per_image cũ hoặc None, no_face[], thiếu ảnh[]). Cần cv2 + mediapipe. re_left: RE/RM nằm nửa trái ảnh (side_convention).
-    old_map/old_cfg: bản chép map + config VERSION 2 (kind "vertex") hoặc map ridge WFLW cũ (có mean478): chạy trên CÙNG 478 điểm để so."""
+    old_map/old_cfg: bản chép map + config VERSION 2 (kind "vertex"): chạy trên CÙNG 478 điểm để so. Map kiểu khác (ví dụ bản ridge cũ có mean478) không hỗ trợ."""
     import cv2
     from m28core import steps
     from m28core.cat_mat import square_crop
     from m28core.mapping import apply_map
     old_apply = None
     if old_map is not None:
-        if old_map.get("kind") == "vertex":
-            old_apply = old_vertex_apply
-        else:
-            sys.path.insert(0, os.path.join(HERE, "legacy_wflw"))
-            import mapping_ridge
-            old_apply = mapping_ridge.apply_map
+        if old_map.get("kind") != "vertex":
+            raise ValueError('--old-map chỉ nhận map VERSION 2 kind "vertex" (chọn đỉnh trực tiếp); map ridge cũ (có mean478) không còn hỗ trợ theo QĐ-001.')
+        old_apply = old_vertex_apply
     lm = steps.make_landmarker(model)
     new_res, old_res, no_face, no_img = [], [], [], []
     try:
@@ -229,7 +226,7 @@ def main(argv=None):
     ap.add_argument("--model", default="face_landmarker.task")
     ap.add_argument("--config", default=os.path.join("config", "m28_config.json"))
     ap.add_argument("--map", default=os.path.join("config", "map_mp50.json"))
-    ap.add_argument("--old-map", default="", help="bản chép map_mp50.json VERSION 2 (hoặc map ridge WFLW trong tool\\legacy_wflw) để so trên cùng ảnh ('' = không so)")
+    ap.add_argument("--old-map", default="", help="bản chép map_mp50.json VERSION 2 (kind vertex) để so trên cùng ảnh ('' = không so)")
     ap.add_argument("--old-config", default="", help="bản chép m28_config.json tương ứng với --old-map")
     ap.add_argument("--limit", type=int, help="chỉ chạy N ảnh đầu (thử nhanh)")
     ap.add_argument("--out", help="ghi lỗi từng ảnh ra CSV (ví dụ outputs\\drivface_errors.csv; không commit)")

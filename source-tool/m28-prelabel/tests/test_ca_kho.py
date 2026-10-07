@@ -35,19 +35,20 @@ def at(minutes=0):
     return T0 + datetime.timedelta(minutes=minutes)
 
 
-def write_manifest(root, names=('F_001', 'F_002', 'F_003')):
+def write_manifest(root, names=('F_001', 'F_002', 'F_003'), source='yawdd'):
+    """Manifest tối thiểu; source=None: không có cột `source` (manifest không nói rõ bộ dữ liệu)."""
     d = os.path.join(str(root), 'data')
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, 'manifest.csv'), 'w', encoding='utf-8', newline='') as f:
         w = csv.writer(f)
-        w.writerow(['file', 'set', 'block'])
+        w.writerow(['file', 'set', 'block'] + ([] if source is None else ['source']))
         for n in names:
-            w.writerow([n + '.png', 'F', ''])
+            w.writerow([n + '.png', 'F', ''] + ([] if source is None else [source]))
 
 
 @pytest.fixture
 def proj(tmp_path):
-    """tmp_path = project_root; runs/CKA là lượt WFLW (có manifest), runs/NAP_001 có inbox."""
+    """tmp_path = project_root; runs/CKA là lượt có manifest (nguồn yawdd), runs/NAP_001 có inbox."""
     write_manifest(tmp_path)
     cka = make_run(tmp_path, FACES, run='CKA', crops=list(FACES), overlays=list(FACES))
     nap = make_run(tmp_path, {'khach_1': 0}, run='NAP_001', crops=['khach_1'], overlays=['khach_1'])
@@ -157,7 +158,7 @@ def test_doc_file_do_excel_luu_dau_cham_phay(proj):
 
 # ---------- nguồn của lượt ----------
 def test_run_source(proj, tmp_path):
-    assert ck.run_source(proj['cka'], proj['root']) == 'wflw'
+    assert ck.run_source(proj['cka'], proj['root']) == 'yawdd'
     assert ck.run_source(proj['nap'], proj['root']) == 'khong_ro'                              # có inbox/
     make_run(tmp_path, {'F_001': 0, 'F_999': 0}, run='LA', crops=['F_001', 'F_999'])
     assert ck.run_source(os.path.join(proj['runs'], 'LA'), proj['root']) == 'khong_ro'         # có tên lạ
@@ -197,8 +198,8 @@ def test_run_source_in_cabin_lop_khong_ro_van_giu(proj, tmp_path):
     assert ck.run_source(os.path.join(proj['runs'], 'LA'), proj['root']) == 'khong_ro'          # có mặt không nằm trong manifest
     shutil.rmtree(os.path.join(proj['root'], 'data'))
     assert ck.run_source(proj['cka'], proj['root']) == 'khong_ro'                               # không có manifest
-    write_manifest(proj['root'])                                                                  # manifest WFLW cũ (không có cột source): 'wflw' như trước
-    assert ck.run_source(proj['cka'], proj['root']) == 'wflw'
+    write_manifest(proj['root'], source=None)                                                     # manifest không có cột source: không biết bộ nào -> khong_ro
+    assert ck.run_source(proj['cka'], proj['root']) == 'khong_ro'
 
 
 def test_goi_in_cabin_kem_anh_va_nguon_trong_manifest(proj):
@@ -211,14 +212,12 @@ def test_goi_in_cabin_kem_anh_va_nguon_trong_manifest(proj):
     with zipfile.ZipFile(info['path']) as zf:
         assert json.loads(zf.read('manifest.json'))['nguon'] == {'CKA': 'yawdd+drivface', 'NAP_001': 'khong_ro'}
         assert 'anh/CKA__F_001.jpg' in zf.namelist() and 'anh/NAP_001__khach_1.jpg' not in zf.namelist()
-    assert pkg(proj, kem_ngoai_wflw=True)['so_anh'] == 2                                         # tham số cũ vẫn là "kèm cả lượt không rõ nguồn"
+    assert pkg(proj, kem_khong_ro=True)['so_anh'] == 2                                         # tham số kem_khong_ro: "kèm cả lượt không rõ nguồn"
     k = ck.read_package(info['path'])
     assert k.nguon == {'CKA': 'yawdd+drivface', 'NAP_001': 'khong_ro'}                          # đọc lại gói mới
 
 
-def test_goi_cu_nguon_wflw_van_doc_duoc_va_nguon_la_bi_tu_choi(tmp_path):
-    p = zip_with(tmp_path / 'g.zip', good_entries(**{'manifest.json': good_manifest(nguon={'CKA': 'wflw'})}))
-    assert ck.read_package(p).nguon == {'CKA': 'wflw'}
+def test_goi_doc_nguon_hop_le_va_nguon_la_bi_tu_choi(tmp_path):
     for nguon in ('yawdd', 'drivface', 'yawdd+drivface'):
         q = zip_with(tmp_path / f'{nguon}.zip', good_entries(**{'manifest.json': good_manifest(nguon={'CKA': nguon})}))
         assert ck.read_package(q).nguon == {'CKA': nguon}
@@ -228,7 +227,7 @@ def test_goi_cu_nguon_wflw_van_doc_duoc_va_nguon_la_bi_tu_choi(tmp_path):
 
 
 def test_cung_mot_mat_giua_nhieu_nguoi_ap_cho_moi_bo_du_lieu(proj, tmp_path):
-    """Hai người đánh dấu cùng F_001.png ở hai lượt khác tên: bộ dữ liệu (yawdd/drivface/wflw) thì cùng một mặt, lượt không rõ nguồn thì không."""
+    """Hai người đánh dấu cùng F_001.png ở hai lượt khác tên: bộ dữ liệu (yawdd/drivface) thì cùng một mặt, lượt không rõ nguồn thì không."""
     write_manifest_incab(proj['root'], {'F_001': 'yawdd', 'F_002': 'yawdd', 'F_003': 'yawdd'})
     ckb = make_run(tmp_path, FACES, run='CKB', crops=list(FACES), overlays=list(FACES))
     make_run(tmp_path, {'khach_1': 0}, run='NAP_002', crops=['khach_1'], overlays=['khach_1'])
@@ -241,19 +240,19 @@ def test_cung_mot_mat_giua_nhieu_nguoi_ap_cho_moi_bo_du_lieu(proj, tmp_path):
     os.makedirs(out)
     paths = []
     for who in ('P1', 'P3'):
-        src = pkg(proj, nguoi=who, now=at(10), kem_ngoai_wflw=True)['path']
+        src = pkg(proj, nguoi=who, now=at(10), kem_khong_ro=True)['path']
         paths.append(shutil.copy(src, os.path.join(out, who + '.zip')))
     m = meeting(proj)
     m.import_packages([(paths[0], 'p1.zip'), (paths[1], 'p3.zip')], now=at(30))
     assert m.cases['P1|CKA|F_001.png']['nguon'] == m.cases['P3|CKB|F_001.png']['nguon'] == 'yawdd'
     assert sorted(m.same_face('P1|CKA|F_001.png')) == ['P1|CKA|F_001.png', 'P3|CKB|F_001.png']          # khác lượt nhưng cùng ảnh bộ dữ liệu: gộp
     assert m.same_face('P1|NAP_001|khach_1.png') == ['P1|NAP_001|khach_1.png']                           # không rõ nguồn: chỉ gộp trong cùng lượt
-    assert ckb and ck.NGUON_VI['yawdd'] == 'YawDD' and ck.NGUON_VI['drivface'] == 'DrivFace' and ck.NGUON_VI['wflw']
+    assert ckb and ck.NGUON_VI['yawdd'] == 'YawDD' and ck.NGUON_VI['drivface'] == 'DrivFace'
 
 
 def test_chu_tren_giao_dien_noi_ve_anh_tai_xe_khong_con_cc_by_nc_nd():
     html = ck.warn_html()
-    assert 'tài xế' in html and 'YawDD' in html and 'DrivFace' in html and 'nhạy cảm' in html and 'CC BY' not in html and 'WFLW' not in html
+    assert 'tài xế' in html and 'YawDD' in html and 'DrivFace' in html and 'nhạy cảm' in html and 'CC BY' not in html
 
 
 # ---------- xuất gói ----------
@@ -269,7 +268,7 @@ def test_build_package_ba_loai_muc_va_manifest(proj):
         assert names == ['anh/CKA__F_001.jpg', 'anh/CKA__F_002.jpg', 'ca_kho.csv', 'manifest.json']
         man = json.loads(zf.read('manifest.json'))
         assert man == {'loai_goi': 'm28-ca-kho', 'phien_ban': 1, 'nguoi': 'P1', 'ngay': '2026-10-16', 'tao_luc': ck.iso(at()), 'luot': ['CKA'],
-                       'nguon': {'CKA': 'wflw'}, 'so_ca': 2, 'so_anh': 2, 'kem_anh': True}
+                       'nguon': {'CKA': 'yawdd'}, 'so_ca': 2, 'so_anh': 2, 'kem_anh': True}
         blob = json.dumps(man) + zf.read('ca_kho.csv').decode('utf-8-sig')
         assert proj['root'] not in blob and '@' not in blob and 'token' not in blob.lower()
         assert {i.filename: i.compress_type for i in zf.infolist()}['anh/CKA__F_001.jpg'] == zipfile.ZIP_STORED
@@ -288,8 +287,8 @@ def test_luot_khong_ro_mac_dinh_khong_kem_anh_co_co_thi_kem(proj):
     assert info['so_ca'] == 2 and info['so_anh'] == 1 and list(info['bo_anh']) == ['NAP_001']
     with zipfile.ZipFile(info['path']) as zf:
         assert 'anh/NAP_001__khach_1.jpg' not in zf.namelist()
-        assert json.loads(zf.read('manifest.json'))['nguon'] == {'CKA': 'wflw', 'NAP_001': 'khong_ro'}
-    info2 = pkg(proj, kem_ngoai_wflw=True)
+        assert json.loads(zf.read('manifest.json'))['nguon'] == {'CKA': 'yawdd', 'NAP_001': 'khong_ro'}
+    info2 = pkg(proj, kem_khong_ro=True)
     assert info2['so_anh'] == 2 and info2['replaced'] and not info2['bo_anh']                  # cùng ngày thì thay gói cũ
     info3 = pkg(proj, kem_anh=False)
     assert info3['so_anh'] == 0 and set(info3['bo_anh']) == {'CKA', 'NAP_001'}
@@ -347,7 +346,7 @@ def zip_with(path, entries, manifest=None):
 
 def good_manifest(**kw):
     m = {'loai_goi': 'm28-ca-kho', 'phien_ban': 1, 'nguoi': 'P1', 'ngay': '2026-10-16', 'tao_luc': ck.iso(at()), 'luot': ['CKA'],
-         'nguon': {'CKA': 'wflw'}, 'so_ca': 1, 'so_anh': 1, 'kem_anh': True}
+         'nguon': {'CKA': 'yawdd'}, 'so_ca': 1, 'so_anh': 1, 'kem_anh': True}
     m.update(kw)
     return json.dumps(m).encode()
 
@@ -516,7 +515,7 @@ def test_khong_giai_nen_ra_dia(tmp_path, monkeypatch):
 
 # ---------- phiên họp ----------
 def make_packages(proj):
-    """Hai gói: P1 (2 ca, ảnh WFLW) và P3 (2 ca: cùng F_001 + một ca khác); trả (đường dẫn P1, đường dẫn P3)."""
+    """Hai gói: P1 (2 ca, ảnh bộ dữ liệu) và P3 (2 ca: cùng F_001 + một ca khác); trả (đường dẫn P1, đường dẫn P3)."""
     mark(proj, nguoi='P1', anh='F_001.png', loai='SWAP', note='Hai điểm mắt đổi chỗ', diem='mattrai_1;mattrai_2', now=at(0))
     mark(proj, nguoi='P1', anh='F_002.png', loai='CONG_CU', note='Khó kéo điểm', now=at(1))
     mark(proj, nguoi='P3', anh='F_001.png', loai='RULE', note='Chưa có quy tắc cho kính', now=at(2))
@@ -558,7 +557,7 @@ def test_nhap_hai_goi_nhap_lai_goi_loi(proj, tmp_path):
     assert len(m.cases) == 4 and len(m.data['goi']) == 2
     c = m.cases['P1|CKA|F_001.png']
     assert c['thumb'] == 'anh/P1__CKA__F_001.jpg' and os.path.isfile(os.path.join(m.dir, 'anh', 'P1__CKA__F_001.jpg'))
-    assert (c['trang_thai'], c['loai_backlog'], c['ghi_backlog'], c['nguon']) == ('mo', 'Guideline mơ hồ', False, 'wflw')   # SWAP: lỗi đặt điểm
+    assert (c['trang_thai'], c['loai_backlog'], c['ghi_backlog'], c['nguon']) == ('mo', 'Guideline mơ hồ', False, 'yawdd')   # SWAP: lỗi đặt điểm
     assert m.cases['P1|CKA|F_002.png']['loai_backlog'] == 'Pain point công cụ' and m.cases['P1|CKA|F_002.png']['ghi_backlog'] is True
     assert m.cases['P3|CKA|F_001.png']['loai_backlog'] == 'Guideline chưa nói tới'
     assert sorted(os.listdir(os.path.join(m.dir, 'anh'))) == sorted(

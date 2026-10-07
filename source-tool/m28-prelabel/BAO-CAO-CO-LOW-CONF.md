@@ -31,21 +31,11 @@ Cờ trông thế nào (chạy thử với 0,0357 trên cả 615 mặt, lượt 
 Việc cần làm tiếp:
 - Khi nhóm gán tay xong G/X: `python tool\flag_eval.py --run <run> --gt raw\<đáp án>.xml` cho AUROC toàn bộ, theo vùng và theo nhóm, % điểm sai bắt được, độ chính xác (sai số chấp nhận lấy `config.tolerance` theo vùng của P3 nếu có, không thì `--tol`, mặc định 3% IOD).
 - P2 chốt ngưỡng ngày 12/10 trên Tdev (không dùng Ttest để chọn ngưỡng).
-- Cờ chỉ dùng độ bất nhất gốc/lật của MediaPipe. Cờ gộp có thêm bất đồng với PIPNet (chỉ cho thí nghiệm, PIPNet không vào `tool/`; PIPNet học trên WFLW nên cũng không còn là so sánh công bằng trên mặt tài xế) có thể khác.
+- Cờ chỉ dùng độ bất nhất gốc/lật của MediaPipe. Cờ gộp có thêm bất đồng với PIPNet (chỉ cho thí nghiệm, PIPNet không vào `tool/`; PIPNet học trên bộ ảnh khác mặt tài xế nên cũng không còn là so sánh công bằng) có thể khác.
 
 ## Lịch sử (50 điểm version 2, QĐ-002, trước QĐ-003): số cũ KHÔNG còn hiệu lực
 
 Đo 6/10/2026 trên Tdev (99 mặt có ảnh lật, 4.950 điểm) với 50 điểm cũ `p01…p50` (viền hàm 17 điểm): đề xuất `t_flip` = 0,0464 (phân vị 0,85): 14,9% điểm bị cờ, ~7,5 cờ/mặt; điểm số theo vùng (trung vị / phân vị 0,85 / phân vị 0,95): viền 0,0275 / 0,0655 / 0,1139,
 lông mày 0,0189 / 0,0435 / 0,0701, mũi 0,0170 / 0,0353 / 0,0509, mắt 0,0135 / 0,0341 / 0,0559, môi 0,0160 / 0,0335 / 0,0501; tỉ lệ bị cờ theo vùng: viền 27%, lông mày 13%, mắt 9%, mũi 6%, môi 6% (cờ dồn vào viền khi mặt nghiêng). Trên 615 mặt với 0,0464: trung vị 1 cờ/mặt, p90 21,6; `pose` = 1 trung bình 14,3 cờ, `pose` = 0 4,6 cờ.
 
-## Lịch sử (WFLW, trước QĐ-001): số cũ KHÔNG còn hiệu lực
-
-Bản cũ (6/10/2026 sáng) đo trên T-dev của WFLW (95 mặt, 4.750 điểm) với ánh xạ ridge học trên WFLW và đáp án 98 điểm của WFLW. Giữ lại để so, **không dùng cho in-cabin**:
-
-| tol (% IOD) | điểm sai | AUROC | bắt được (cờ 15% điểm) | độ chính xác của cờ |
-|---|---|---|---|---|
-| 3 | 46,8% | 0,70 | 24,9% điểm sai | 77,7% |
-| 5 | 27,7% | 0,73 | 34,1% | 63,0% |
-| 8 | 14,5% | 0,79 | 47,9% | 46,3% |
-
-`t_flip` ứng với cờ 15% khi đó là 0,0672 (khoảng 7,5 điểm/mặt). Nhận xét cũ: AUROC 0,70-0,79 (có ích nhưng chưa mạnh), lỗi càng lớn cờ bắt càng tốt.
+Chưa có số AUROC / % điểm sai bắt được trên tập in-cabin: cần chạy lại `flag_eval` (có `--gt`) trên tập in-cabin khi có nhãn gán tay G/X (số đo cũ trên bộ ảnh đã bỏ không còn hiệu lực và đã xoá).

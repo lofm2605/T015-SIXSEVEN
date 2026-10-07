@@ -86,7 +86,7 @@ def _xml_images(path):
     return {im.get('name'): im for im in ET.parse(path).getroot().findall('image')}
 
 
-@pytest.mark.parametrize('mode', ['wflw', 'auto'])
+@pytest.mark.parametrize('mode', ['crop', 'auto'])
 def test_build_xml_tay_nhap_after_nhan_all_low_conf(tmp_path, mode):
     meta, cfg = _meta(), _cfg()
     mp50 = {n: entry(i) for i, n in enumerate(('n1', 'n2', 't1', 't2'))}
@@ -95,7 +95,7 @@ def test_build_xml_tay_nhap_after_nhan_all_low_conf(tmp_path, mode):
     path = str(tmp_path / 'x' / 'p.xml')
     steps.build_xml(mode, ['n1', 'n2'], meta, mp50, fl, cfg, path, tay_nhap=['t1', 't2'])
     ims = _xml_images(path)
-    ext = '.png' if mode == 'wflw' else '.jpg'
+    ext = '.png' if mode == 'crop' else '.jpg'
     assert list(ims) == ['n1' + ext, 'n2' + ext, 't1' + ext, 't2' + ext]          # Nhận trước, Gán tay có nháp nối sau; x1 (không nháp) không có
     assert [im.get('id') for im in ims.values()] == ['0', '1', '2', '3']             # id Nhận 0..len-1, Gán tay len(nhan)+i
     for n, im in ims.items():
@@ -108,7 +108,7 @@ def test_build_xml_tay_nhap_after_nhan_all_low_conf(tmp_path, mode):
             assert low == ['true' if f else 'false' for f in fl['n1']]               # Nhận giữ cờ thật
         else:
             assert low == ['false'] * 50
-    if mode == 'wflw':
+    if mode == 'crop':
         assert (ims['t1.png'].get('width'), ims['t1.png'].get('height')) == ('512', '512')
         xy = [float(v) for v in ims['t1.png'].find('skeleton').findall('points')[4].get('points').split(',')]
         assert xy == [pytest.approx(10.0 + 4 + 2), pytest.approx(20.0 + 4)]        # nháp t1 = entry(shift 2) giữ nguyên toạ độ ảnh cắt

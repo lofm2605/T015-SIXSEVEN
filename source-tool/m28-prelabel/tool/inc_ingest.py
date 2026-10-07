@@ -1,6 +1,6 @@
 """Nạp dữ liệu in-cabin (YawDD + DrivFace), chia tập, cắt ảnh và đóng gói (P1, giai đoạn 1 mới, QĐ-001).
 
-Thay cho split.py + crop.py của WFLW (nay ở tool/legacy_wflw/, lịch sử, không dùng; phần cắt mặt dùng chung ở m28core/cat_mat.py). Ba lệnh con, chạy lần lượt hoặc gộp bằng `all`:
+Dựng gói dữ liệu in-cabin (phần cắt mặt dùng chung ở m28core/cat_mat.py). Ba lệnh con, chạy lần lượt hoặc gộp bằng `all`:
 
     scan   trích khung từ video YawDD / đọc ảnh DrivFace, dò mặt bằng MediaPipe, đo, ghi cache (chậm, chạy một lần)
     split  chia tập F/Tdev/Ttest/G/P/X/D theo người, ghi khung gốc + ảnh cắt + manifest.csv (nhanh, TẤT ĐỊNH: cùng cache
@@ -991,7 +991,7 @@ GIAI NEN (cmd). Tat ca cac phan vao CUNG thu muc data\\ de ra data\\manifest.csv
 KIEM TRA:
     python tool\\check_manifest.py data\\manifest.csv
 CHAY THU (5 mat F, chi can goi nay; chay.bat muc 3 lam san viec nay):
-    python tool\\m28.py all --run F5 --list data\\f5_list.csv --images data\\crops --box wflw --review auto --dry-run
+    python tool\\m28.py all --run F5 --list data\\f5_list.csv --images data\\crops --box crop --review auto --dry-run
   (data\\f5_list.csv co cot image,face_idx,seed cua 5 dong F dau trong manifest.csv. --images data\\crops: nguoi chi co goi dung chinh anh cat.)
 
 CAC COT manifest.csv: file (ten anh cat), set (F/Tdev/Ttest/G/P/X/D), block (G 1-5, P a/b, X 1-5), seq, source (yawdd|drivface),

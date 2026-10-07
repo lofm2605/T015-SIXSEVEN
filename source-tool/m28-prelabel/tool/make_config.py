@@ -36,14 +36,14 @@ Config version 3 (QĐ-003, 7/10/2026: định nghĩa 50 điểm DMS thay hẳn 5
     config version 2 không mang `tmpl`/`t_flip` sang version 3.
 
 Trình tự cho P3 (mọi lệnh chạy từ source-tool\\m28-prelabel, cmd):
-  1. python tool\\m28.py prepare --run <run> --images data\\frames --set F Tdev --box auto   (người chỉ có gói: --images data\\crops --box wflw)
+  1. python tool\\m28.py prepare --run <run> --images data\\frames --set F Tdev --box auto   (người chỉ có gói: --images data\\crops --box crop)
   2. python tool\\make_config.py --run <run> --manifest data\\manifest.csv        (không ghi đè hoán vị gương; thêm --learn-mirror nếu thật sự cần học lại)
   3. python tool\\make_label.py
   4. python tool\\m28.py prepare --run <run> --force map50 flags autoqc overlays
   5. python tool\\check_flip.py --run <run>
 
 Bảng đỉnh MediaPipe (k = 1.. theo thứ tự trong nhóm). Chọn theo topology Face Mesh rồi KIỂM BẰNG MẮT trên 46 mặt tài xế thật của F, G, P, X, D (thẳng, quay hai phía, kính, kính râm,
-ngáp, nhắm mắt, tối/sáng gắt, camera Dash và Mirror, hai tài xế DrivFace; không dùng Tdev, Ttest để chọn). Không dùng dữ liệu hay đáp án WFLW.
+ngáp, nhắm mắt, tối/sáng gắt, camera Dash và Mirror, hai tài xế DrivFace; không dùng Tdev, Ttest để chọn). Không dùng đáp án có sẵn nào.
     longmaytrai  107  66 105  63  70                          (mép TRÊN lông mày nửa trái ảnh, đầu mày -> đuôi mày)
     longmayphai  336 296 334 293 300                          (gương của nhóm trên)
     songmui      168 197   5   1                              (gốc mũi giữa hai mắt -> chóp mũi)
@@ -211,7 +211,7 @@ def build_map(cfg, flip_width=512.0, meta=None):
 
 
 def gt50_template():
-    """Đáp án 50 điểm nay đến từ nhãn nhóm gán tay trong CVAT (tool\\eval50.py), không còn sinh từ đáp án WFLW: chỉ ghi file mẫu rỗng."""
+    """Đáp án 50 điểm nay đến từ nhãn nhóm gán tay trong CVAT (tool\\eval50.py): chỉ ghi file mẫu rỗng."""
     return {}
 
 
@@ -263,7 +263,7 @@ def template(cfg, mp_map, origs):
 
 def keep_existing(cfg, old, t_flip_given):
     """Chạy lại không được xoá số người khác đã ghi: t_flip (P2), tolerance (P3, 10/10), status, tmpl.
-    Chỉ giữ khi old cùng version và cùng tên điểm (tmpl của config version 1 là hình học WFLW, của version 2 là hình của định nghĩa 50 điểm cũ: không được mang sang)."""
+    Chỉ giữ khi old cùng version và cùng tên điểm (tmpl của config version 1 là hình học 98 điểm cũ, của version 2 là hình của định nghĩa 50 điểm cũ: không được mang sang)."""
     kept = []
     if old and old.get("version") == cfg["version"] and [p["name"] for p in old.get("points", [])] == [p["name"] for p in cfg["points"]]:
         if not t_flip_given and old.get("t_flip") is not None:

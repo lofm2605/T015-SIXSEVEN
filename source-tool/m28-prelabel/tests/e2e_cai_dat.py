@@ -1,11 +1,11 @@
 """Kiểm thử đầu-cuối tab "Cài đặt" (CVAT, người rà, đường dẫn, t_flip) bằng Chromium thật (Playwright) + CVAT GIẢ. TUỲ CHỌN.
 
-Cần playwright và Chromium (KHÔNG chạy `playwright install`), MediaPipe thật (pha E nạp ảnh thật), ảnh WFLW thật; pytest không gom file này
+Cần playwright và Chromium (KHÔNG chạy `playwright install`), MediaPipe thật (pha E nạp ảnh thật), ảnh in-cabin thật; pytest không gom file này
 (tên không khớp test_*.py). Thư mục --work có config/ (m28_config.json, map_mp50.json, face50_label.json, pipeline.json), face_landmarker.task,
-r_list.csv và runs/F5 (lượt wflw 5 mặt). Ví dụ:
+r_list.csv và runs/F5 (lượt 5 mặt in-cabin). Ví dụ:
 
     PYTHONPATH=$S/pwlib PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers \\
-        python tests/e2e_cai_dat.py --work $S/work --wflw $S/wflw/WFLW_images --shots $S/ui_shots
+        python tests/e2e_cai_dat.py --work $S/work --imgs $S/incab_data/frames --shots $S/ui_shots
 
 Cách làm việc (không đụng thư mục --work): dựng thư mục riêng <shots>/cd_work (chép config/, liên kết model, chép runs/F5 thành CD1/CD2/CD3 đã rà
 xong hoặc chưa) và thư mục hồ sơ giả <shots>/cd_home (HOME, APPDATA, XDG_CONFIG_HOME trỏ vào đó, M28_CONFIG_DIR rỗng) nên không có gì ghi vào hồ sơ
@@ -295,22 +295,22 @@ def phase_a(pw, E, port):
         app.html()
         # 7. đường dẫn
         to_settings(pg)
-        wflw = E.wflw
-        fill(pg, 'cd-images', f'  "{wflw}"  ')
+        imgs_dir = E.imgs
+        fill(pg, 'cd-images', f'  "{imgs_dir}"  ')
         pg.click('#cd-images-check')
         wait_in(pg, '#cd-images-msg', 'Thấy', 30000)
         mt = txt(pg, '#cd-images-msg')
         check('Ổn' in mt and 'ảnh' in mt and 'thư mục con' in mt and 'Ví dụ:' in mt, f'Kiểm thư mục ảnh (có ngoặc kép và khoảng trắng): {mt[:140]!r}')
         check(not os.path.exists(os.path.join(E.cfg, 'cai_dat.json')), 'chỉ Kiểm: chưa lưu gì')
-        fill(pg, 'cd-images', 'Z:\\khong\\co\\WFLW_images')
+        fill(pg, 'cd-images', 'Z:\\khong\\co\\frames')
         pg.click('#cd-images-check')
         wait_in(pg, '#cd-images-msg', 'Không thấy')
         pg.click('#cd-images-save')
         wait_in(pg, '#cd-images-msg', 'Chưa lưu')
         check(not os.path.exists(os.path.join(E.cfg, 'cai_dat.json')), 'đường dẫn không tồn tại: không lưu')
-        fill(pg, 'cd-images', wflw)
+        fill(pg, 'cd-images', imgs_dir)
         pg.click('#cd-images-save')
-        wait_in(pg, '#cd-images-msg', 'Đã lưu thư mục ảnh WFLW')
+        wait_in(pg, '#cd-images-msg', 'Đã lưu thư mục ảnh')
         fill(pg, 'cd-model', os.path.join(E.work, 'face_landmarker.task'))
         pg.click('#cd-model-check')
         wait_in(pg, '#cd-model-msg', 'MB', 30000)
@@ -319,7 +319,7 @@ def phase_a(pw, E, port):
         pg.click('#cd-model-save')
         wait_in(pg, '#cd-model-msg', 'Đã lưu đường dẫn model')
         prefs = json.load(open(os.path.join(E.cfg, 'cai_dat.json'), encoding='utf-8'))
-        check(prefs['images_dir'] == wflw and prefs['model_path'].endswith('face_landmarker.task') and prefs['version'] == 1, f'cai_dat.json: {prefs}')
+        check(prefs['images_dir'] == imgs_dir and prefs['model_path'].endswith('face_landmarker.task') and prefs['version'] == 1, f'cai_dat.json: {prefs}')
         check('cvat.json' not in os.listdir(E.cfg), 'cvat.json vẫn không có (Nhớ tắt)')
         snap(pg, E, 'caidat_paths_desktop.png')
         # 8. người rà
@@ -382,7 +382,7 @@ def phase_a(pw, E, port):
         pg.wait_for_timeout(600)
         check(overflow(pg) <= 1, f'420 px: không cuộn ngang ({overflow(pg)})')
         snap(pg, E, 'caidat_narrow.png')
-        fill(pg, 'cd-images', 'D:\\WFLW\\' + 'rat_dai_' * 12 + 'WFLW_images')
+        fill(pg, 'cd-images', 'D:\\m28\\' + 'rat_dai_' * 12 + 'frames')
         pg.click('#cd-images-check')
         wait_in(pg, '#cd-images-msg', 'Không thấy')
         pg.wait_for_timeout(300)
@@ -589,7 +589,7 @@ def phase_f(pw, E, port):
 # ---------------------------------------------------------------- pha G
 def phase_g(pw, E, port):
     log('\n== PHA G: --images (ảnh nạp từ tab Nạp ảnh, ảnh gốc bị chuyển đi) ==')
-    imgs = dp.pick_images(E.src_w, E.wflw, 2)
+    imgs = dp.pick_images(E.src_w, E.imgs, 2)
     run = 'CDG'
     model_dir = os.path.join(E.shots, 'cd_model')
     shutil.rmtree(model_dir, ignore_errors=True)
@@ -619,7 +619,7 @@ def phase_g(pw, E, port):
         pg.click('#nap-start')
         pg.wait_for_function("n => (document.querySelector('#nap-summary')?.innerText || '').includes('Kết quả lượt ' + n) && "
                              "(document.querySelector('#nap-prog')?.innerText || '').includes('Xong')", arg=run, timeout=300000)
-        check(os.path.exists(os.path.join(E.work, 'runs', run, 'flags', 'flags.json')), 'prepare thật xong bằng model ở đường dẫn đã cài (MediaPipe trên ảnh WFLW)')
+        check(os.path.exists(os.path.join(E.work, 'runs', run, 'flags', 'flags.json')), 'prepare thật xong bằng model ở đường dẫn đã cài (MediaPipe trên ảnh in-cabin)')
         app.html()
     finally:
         app.stop()
@@ -656,7 +656,7 @@ def phase_g(pw, E, port):
         to_settings(pg)
         fill(pg, 'cd-images', imgdir)
         pg.click('#cd-images-save')
-        wait_in(pg, '#cd-images-msg', 'Đã lưu thư mục ảnh WFLW')
+        wait_in(pg, '#cd-images-msg', 'Đã lưu thư mục ảnh')
         to_review(pg)
         wait_push(pg, True)
         pg.click('#btn-push')
@@ -705,7 +705,7 @@ def final_grep(E):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--work', required=True)
-    ap.add_argument('--wflw', required=True)
+    ap.add_argument('--imgs', required=True)
     ap.add_argument('--shots', required=True)
     ap.add_argument('--port', type=int, default=7891)
     ap.add_argument('--phases', default='ABCDEFG')
@@ -719,7 +719,7 @@ def main():
     PORTS = itertools.count(a.port)
     try:
         E = Env(W, shots)
-        E.wflw, E.src_w = os.path.abspath(a.wflw), W
+        E.imgs, E.src_w = os.path.abspath(a.imgs), W
         with sync_playwright() as pw:
             for ph in 'ABCDEFG':
                 if ph in a.phases:

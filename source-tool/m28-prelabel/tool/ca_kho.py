@@ -64,8 +64,8 @@ TT_VI = {c: t for c, t, _i in TRANG_THAI}
 TT_ICON = {c: i for c, _t, i in TRANG_THAI}
 TT_COLOR = {"mo": "#dc2626", "dang_ban": "#d97706", "da_chot": "#16a34a"}       # như STATUS_COLOR của review_app: đỏ / vàng / xanh
 DECISION_VI = {"nhan": "Nhận", "gan_tay": "Gán tay", "bo": "Bỏ ảnh", "": ""}
-NGUON_VI = {"yawdd": "YawDD", "drivface": "DrivFace", "yawdd+drivface": "YawDD + DrivFace", "wflw": "WFLW (cũ)", "khong_ro": "không rõ nguồn"}
-NGUON_BO_DU_LIEU = ("yawdd", "drivface", "yawdd+drivface", "wflw")     # nguồn là một bộ dữ liệu đã biết (ảnh chồng được phép kèm); còn lại là khong_ro
+NGUON_VI = {"yawdd": "YawDD", "drivface": "DrivFace", "yawdd+drivface": "YawDD + DrivFace", "khong_ro": "không rõ nguồn"}
+NGUON_BO_DU_LIEU = ("yawdd", "drivface", "yawdd+drivface")   # nguồn là một bộ dữ liệu đã biết (ảnh chồng được phép kèm); còn lại là khong_ro
 NGUON_IN_CABIN = ("yawdd", "drivface")                                 # giá trị cột `source` của manifest in-cabin (QĐ-001)
 
 MAX_GOI = 20 * 1024 * 1024         # tổng dung lượng một gói (dưới giới hạn upload 25 MB của trang)
@@ -375,7 +375,7 @@ _MANIFEST = {}
 
 
 def _manifest_data(project_root):
-    """(tập `file` của data/manifest.csv, {file: source} hoặc None nếu manifest không có cột `source` = WFLW cũ); None nếu không đọc được manifest."""
+    """(tập `file` của data/manifest.csv, {file: source} hoặc None nếu manifest không có cột `source`); None nếu không đọc được manifest."""
     p = os.path.join(project_root, "data", "manifest.csv")
     try:
         m = os.path.getmtime(p)
@@ -430,7 +430,7 @@ def run_source(run_dir, project_root):
     """Nguồn của một lượt, chỉ khi lượt KHÔNG có inbox/ và MỌI mặt của lượt (tên X.png) có trong cột `file` của data/manifest.csv:
       * manifest có cột `source` (in-cabin): tập giá trị `source` của các mặt đó: 'yawdd', 'drivface' hoặc 'yawdd+drivface' (cả hai);
         giá trị lạ hoặc trống ở một mặt thì 'khong_ro';
-      * manifest không có cột `source` (WFLW cũ): 'wflw' như trước.
+      * manifest không có cột `source`: 'khong_ro' (không biết bộ nào; lượt cũ trước QĐ-001 cũng rơi vào đây).
     Còn lại (lượt Nạp ảnh, không có manifest, tên lạ, lượt rỗng) là 'khong_ro' = có thể là ảnh khách hàng."""
     if os.path.exists(os.path.join(run_dir, "inbox")):
         return "khong_ro"
@@ -442,7 +442,7 @@ def run_source(run_dir, project_root):
     if not all(n + ".png" in files for n in faces):
         return "khong_ro"
     if src is None:
-        return "wflw"
+        return "khong_ro"
     vals = {src.get(n + ".png", "") for n in faces}
     if not vals or not vals <= set(NGUON_IN_CABIN):
         return "khong_ro"
@@ -511,9 +511,9 @@ def jpg_name(luot, anh, used):
 
 
 # ---------- xuất gói họp ----------
-def build_package(runs_root, project_root, nguoi, luot_filter=None, kem_anh=True, kem_ngoai_wflw=False, now=None):
+def build_package(runs_root, project_root, nguoi, luot_filter=None, kem_anh=True, kem_khong_ro=False, now=None):
     """Ghi outputs/ca_kho/ca_kho_<người>_<ddmm>.zip gồm đúng ba loại mục: manifest.json, ca_kho.csv, anh/<lượt>__<stem>.jpg.
-    Ảnh chỉ kèm cho lượt có nguồn là một bộ dữ liệu đã biết (yawdd, drivface, cả hai, hoặc wflw cũ), không kèm lượt 'khong_ro' trừ khi `kem_ngoai_wflw`
+    Ảnh chỉ kèm cho lượt có nguồn là một bộ dữ liệu đã biết (yawdd, drivface hoặc cả hai), không kèm lượt 'khong_ro' trừ khi `kem_khong_ro`
     (tên tham số giữ như cũ vì có chỗ gọi: nghĩa là "kèm cả lượt không rõ nguồn"). Trả dict(path, rel, so_ca, so_anh, bytes, replaced, luot, bo_anh, nguon).
     0 ca -> RunError, không tạo file. Quá MAX_GOI sau khi thử ảnh nhỏ hơn -> RunError."""
     now = now or now_local()
@@ -533,7 +533,7 @@ def build_package(runs_root, project_root, nguoi, luot_filter=None, kem_anh=True
     for l in luots:
         if not kem_anh:
             bo_anh[l] = "không chọn kèm ảnh"
-        elif nguon[l] not in NGUON_BO_DU_LIEU and not kem_ngoai_wflw:
+        elif nguon[l] not in NGUON_BO_DU_LIEU and not kem_khong_ro:
             bo_anh[l] = "không rõ nguồn (có thể là ảnh khách hàng)"
     out_dir = serve_dir(project_root)
     path = os.path.join(out_dir, f"ca_kho_{nguoi}_{ddmm(now)}.zip")
@@ -980,7 +980,7 @@ class Meeting:
         return by
 
     def face_id(self, c):
-        """Cùng một mặt: ảnh của bộ dữ liệu (YawDD, DrivFace, WFLW cũ) lấy theo tên ảnh (mọi người dùng chung data/manifest.csv), còn lại theo (lượt, ảnh)."""
+        """Cùng một mặt: ảnh của bộ dữ liệu (YawDD, DrivFace) lấy theo tên ảnh (mọi người dùng chung data/manifest.csv), còn lại theo (lượt, ảnh)."""
         return ("bo_du_lieu", c["anh"]) if c.get("nguon") in NGUON_BO_DU_LIEU else (c["luot"], c["anh"])
 
     def same_face(self, key):

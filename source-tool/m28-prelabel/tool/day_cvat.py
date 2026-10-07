@@ -92,7 +92,7 @@ def _point_names(project_root):
 
 def plan_counts(run_dir, reviewer, project_root=None, pipe=None, images_dir=None):
     """Số Nhận / Gán tay (tách có nháp / ảnh trống) / Bỏ / xoá mềm sẽ đẩy, số job dự kiến, số mặt chưa rà, ảnh thiếu. Cùng hàm với steps.push.
-    images_dir (thư mục WFLW_images đã cài ở tab Cài đặt): ảnh gốc không còn ở đường dẫn ghi trong meta nhưng có ở <images_dir>/<rel> thì
+    images_dir (thư mục ảnh đã cài ở tab Cài đặt): ảnh gốc không còn ở đường dẫn ghi trong meta nhưng có ở <images_dir>/<rel> thì
     KHÔNG tính là thiếu, và `via_images` đếm số ảnh như vậy (lúc đó lệnh push phải kèm --images, xem push_model)."""
     pipe = pipe or dict(cvat_io.DEFAULT_PIPELINE)
     excluded = loai_tru.read_excluded(run_dir)
@@ -106,15 +106,16 @@ def plan_counts(run_dir, reviewer, project_root=None, pipe=None, images_dir=None
     mode = "auto"
     try:
         with open(os.path.join(run_dir, "crop", "box.txt"), encoding="utf-8") as f:
-            mode = f.read().strip() or "auto"
+            text = f.read().strip()
+        mode = "auto" if text in ("", "auto") else "crop"      # như steps.read_box_mode: giá trị khác auto = ảnh cắt
     except OSError:
         pass
     missing, via_images = [], 0
     for n in pl["nhan"] + pl["tay"]:
         m = meta.get(n) or {}
-        path = (os.path.join(run_dir, "crop", "images", n + ".png") if mode == "wflw" else m.get("src"))
+        path = (os.path.join(run_dir, "crop", "images", n + ".png") if mode == "crop" else m.get("src"))
         if not path or not os.path.exists(path):
-            alt = _under_images(images_dir, m.get("rel")) if mode != "wflw" else None
+            alt = _under_images(images_dir, m.get("rel")) if mode != "crop" else None
             if alt and os.path.exists(alt):
                 via_images += 1
             else:
@@ -128,7 +129,7 @@ def plan_counts(run_dir, reviewer, project_root=None, pipe=None, images_dir=None
 def push_model(run_dir, reviewer, project_root, *, remaining=None, environ=None, job_running=False, images_dir=None):
     """Mô hình của khung "Đẩy lên CVAT" cho một lượt.
     remaining: số mặt chưa rà theo trang (đợt đang rà); None thì tính từ triage_<người rà>.csv.
-    images_dir: thư mục WFLW_images; None thì lấy từ cài đặt (chỉ khi environ=None, tức chạy thật trên trang).
+    images_dir: thư mục ảnh; None thì lấy từ cài đặt (chỉ khi environ=None, tức chạy thật trên trang).
     Trả dict(kind: "done"|"button", enabled, reason, task, plan, env, push, pipe, images_dir) trong đó images_dir chỉ có giá trị khi lượt
     CẦN --images (ảnh gốc ở đường dẫn cũ không còn nhưng có trong thư mục đã cài)."""
     pipe = pipeline_of(project_root)
@@ -158,7 +159,7 @@ def push_model(run_dir, reviewer, project_root, *, remaining=None, environ=None,
         m["reason"] = "Không có mặt nào để đẩy (cả Nhận và Gán tay đều trống)."
     elif plan["missing"]:
         m["reason"] = (f"Không thấy {len(plan['missing'])} ảnh để tải lên (ví dụ {plan['missing'][0]}): ảnh gốc đã bị chuyển đi? "
-                       "Nếu là ảnh WFLW, chọn thư mục WFLW_images ở tab Cài đặt > Đường dẫn.")
+                       "Nếu ảnh gốc đã chuyển chỗ, chọn thư mục ảnh ở tab Cài đặt > Đường dẫn.")
     elif not env["ok"]:
         m["reason"] = env["reason"]
         m["env_help"] = True

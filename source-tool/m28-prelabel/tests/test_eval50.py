@@ -239,7 +239,7 @@ def test_labels_with_old_v2_point_names_are_reported_not_silently_empty(tmp_path
 
 
 def make_run(tmp_path, mode):
-    """Lượt giả: 2 mặt, ảnh gốc 640x480; toạ độ ảnh cắt 512. mode wflw: XML theo ảnh cắt; mode auto: theo ảnh gốc."""
+    """Lượt giả: 2 mặt, ảnh gốc 640x480; toạ độ ảnh cắt 512. mode crop: XML theo ảnh cắt; mode auto: theo ảnh gốc."""
     cfg = json.load(open(REAL_CFG, encoding='utf-8'))
     names = [p['name'] for p in cfg['points']]
     rd = tmp_path / 'runs' / 'R'
@@ -256,13 +256,13 @@ def make_run(tmp_path, mode):
 
 
 def test_run_prediction_matches_push_coordinates_and_file_names(tmp_path, monkeypatch):
-    for mode in ('wflw', 'auto'):
+    for mode in ('crop', 'auto'):
         d = tmp_path / mode
         d.mkdir()
         cfg, names, meta, mp50 = make_run(d, mode)
         monkeypatch.chdir(d)
         got = eval50.read_run_pred('R', cfg)
-        expect_keys = ['F_001', 'F_002'] if mode == 'wflw' else ['img_1', 'img_2']          # tên ảnh tải lên CVAT, bỏ đuôi
+        expect_keys = ['F_001', 'F_002'] if mode == 'crop' else ['img_1', 'img_2']          # tên ảnh tải lên CVAT, bỏ đuôi
         assert sorted(got) == expect_keys
         for n, key in zip(('F_001', 'F_002'), expect_keys):
             pts, _w, _h = steps._face_pts(mode, n, meta, mp50, names)                         # đúng logic của push (không chép lại)
@@ -277,12 +277,12 @@ def test_run_prediction_matches_push_coordinates_and_file_names(tmp_path, monkey
 
 
 def test_main_end_to_end_and_exit_codes(tmp_path, monkeypatch, capsys):
-    cfg, names, meta, mp50 = make_run(tmp_path, 'wflw')
+    cfg, names, meta, mp50 = make_run(tmp_path, 'crop')
     monkeypatch.chdir(tmp_path)
     shutil_cfg = tmp_path / 'config'
     shutil_cfg.mkdir()
     (shutil_cfg / 'm28_config.json').write_text(json.dumps(cfg), encoding='utf-8')
-    steps.build_xml('wflw', ['F_001', 'F_002'], meta, mp50, {n: [False] * 50 for n in meta}, cfg, str(tmp_path / 'gt.xml'))
+    steps.build_xml('crop', ['F_001', 'F_002'], meta, mp50, {n: [False] * 50 for n in meta}, cfg, str(tmp_path / 'gt.xml'))
     assert eval50.main(['--gt', 'gt.xml', '--run', 'R', '--condition', 'manual']) == 0
     out = capsys.readouterr().out
     assert '2 mặt chấm được' in out and 'nme_per_face.csv' in out

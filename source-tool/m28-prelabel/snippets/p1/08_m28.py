@@ -23,9 +23,9 @@ def run_step(name, args):
 p = argparse.ArgumentParser(prog="m28")
 p.add_argument("cmd", choices=["prepare", "review", "push", "collect", "all"])
 p.add_argument("--run")                                # tên lượt chạy, ví dụ R1610 (collect không cần)
-p.add_argument("--images")                             # thư mục ảnh (WFLW_images hoặc ảnh khách)
-p.add_argument("--list"); p.add_argument("--set", nargs="*")   # CSV có wflw_image, wflw_line; lọc tập
-p.add_argument("--box", choices=["wflw", "auto"], default="auto")
+p.add_argument("--images")                             # thư mục ảnh (data\\frames, data\\crops hoặc ảnh khách)
+p.add_argument("--list"); p.add_argument("--set", nargs="*")   # CSV có image, face_idx; lọc tập
+p.add_argument("--box", choices=["crop", "auto"], default="auto")
 p.add_argument("--config", default="config/m28_config.json")
 p.add_argument("--review", choices=["ui", "excel", "auto"], default="ui")
 p.add_argument("--reviewer", default="RA"); p.add_argument("--review-file")

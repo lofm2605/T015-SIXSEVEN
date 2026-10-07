@@ -1,6 +1,6 @@
 """Thử config version 3 (50 điểm DMS, QĐ-003, chọn đỉnh MediaPipe), hoán vị gương, apply_map và make_config bằng dữ liệu giả + file ĐÃ COMMIT (không dùng mặt thật).
 
-Phần của giai đoạn WFLW (ridge, MIRROR98, fit_map) nằm ở tests/test_legacy_wflw_map.py. Kiểm trên dữ liệu thật (check_flip.py, check_drivface.py) không nằm trong pytest.
+Kiểm trên dữ liệu thật (check_flip.py, check_drivface.py) không nằm trong pytest.
 """
 import copy
 import json
@@ -18,7 +18,7 @@ from m28core import mapping, mirror  # noqa: E402
 from synth_faces import synthetic_run  # noqa: E402
 
 COMMITTED = os.path.join(HERE, '..', 'config')
-LEGACY = os.path.join(HERE, '..', 'tool', 'legacy_wflw')
+OLD_V1_CFG = dict(version=1, points=[dict(name=f'p{i:02d}_eye_R', side='R', tmpl=[1.0, 2.0]) for i in range(1, 51)])      # config version 1 (định nghĩa 98 điểm cũ), chỉ để kiểm từ chối
 GROUPS = ['longmaytrai', 'longmayphai', 'songmui', 'mattrai', 'matphai', 'moingoai', 'moitrong']
 COUNTS = [5, 5, 4, 8, 8, 12, 8]
 M_NAMES = {'songmui_1', 'songmui_2', 'songmui_3', 'songmui_4', 'moingoai_4', 'moingoai_10', 'moitrong_3', 'moitrong_7'}
@@ -70,7 +70,7 @@ def test_build_config_v3_structure():
     assert [sum(p['group'] == g for p in pts) for g in GROUPS] == COUNTS
     assert names == [f'{g}_{k}' for g, n in zip(GROUPS, COUNTS) for k in range(1, n + 1)]
     assert all(p['name'] == f"{p['group']}_{i}" for g in GROUPS for i, p in enumerate([q for q in pts if q['group'] == g], 1))
-    assert not [p for p in pts if 'jaw' in p['region'] or 'jaw' in p['name'] or 'wflw' in p]         # không viền hàm/cằm, chỉ số WFLW đã bỏ
+    assert not [p for p in pts if 'jaw' in p['region'] or 'jaw' in p['name'] or 'mp_idx' not in p]   # không viền hàm/cằm, mọi điểm là một đỉnh MediaPipe
     assert {p['region'] for p in pts} == {'brow', 'nose', 'eye', 'lip'}                                # vùng thô, không còn jaw
     assert {p['group']: p['region'] for p in pts} == {'longmaytrai': 'brow', 'longmayphai': 'brow', 'songmui': 'nose', 'mattrai': 'eye', 'matphai': 'eye',
                                                        'moingoai': 'lip', 'moitrong': 'lip'}
@@ -147,7 +147,7 @@ def test_names_sort_by_config_order_not_by_string():
 def test_v3_replaces_v2_and_reverses_the_side_convention():
     """Định nghĩa mới thay hẳn 50 điểm cũ: không tên nào của config version 1 còn lại; đỉnh 33 (khoé ngoài mắt PHẢI của người, nửa trái ảnh khi ảnh không lật) trước là side R (theo người),
     nay là mattrai_1 side L (theo ảnh)."""
-    old, new = load(LEGACY, 'm28_config_wflw.json'), mc.build_config()
+    old, new = copy.deepcopy(OLD_V1_CFG), mc.build_config()
     assert old['version'] == 1 and new['version'] == 3
     assert not {p['name'] for p in old['points']} & {p['name'] for p in new['points']}
     assert [p for p in old['points'] if p['name'] == 'p33_eye_R'][0]['side'] == 'R'                    # v1/v2: R = nửa trái ảnh
@@ -248,7 +248,7 @@ def test_mirror_helpers():
     assert mirror.check_involution([1, 2, 0])                                     # vòng 3: không đối hợp
     assert mirror.check_involution([0, 0, 1])                                     # không phải hoán vị
     with pytest.raises(ValueError):
-        mirror.load_mirror(os.path.join(LEGACY, 'm28_config_wflw.json'))          # không phải file hoán vị gương
+        mirror.load_mirror(os.path.join(COMMITTED, 'm28_config.json'))          # không phải file hoán vị gương
 
 
 # ---------- apply_map ----------
@@ -331,20 +331,19 @@ def test_apply_map_accepts_subset_config_and_rejects_changed_definition(committe
     with pytest.raises(ValueError, match='khac'):
         mapping.apply_map(pts, mp, renamed)
     old_cfg = copy.deepcopy(cfg)
-    del old_cfg['points'][0]['mp_idx']                                              # config kiểu cũ (chỉ số wflw)
-    old_cfg['points'][0]['wflw'] = 0
+    del old_cfg['points'][0]['mp_idx']                                              # config kiểu cũ (không có chỉ số đỉnh MediaPipe)
     with pytest.raises(ValueError, match='mp_idx'):
         mapping.apply_map(pts, mp, old_cfg)
 
 
 def test_apply_map_rejects_old_ridge_map_v2_map_and_v2_config(committed):
     cfg, mp = committed['cfg'], committed['mp']
-    ridge = load(LEGACY, 'map_mp50_wflw.json')
-    with pytest.raises(ValueError, match='lỗi thời'):
+    ridge = dict(version=1, mean478=[[0.0, 0.0]] * 478, points={})                  # map ridge cũ (có mean478)
+    with pytest.raises(ValueError, match='không còn hỗ trợ'):
         mapping.apply_map(pts478(), ridge, cfg)
     fake_old = copy.deepcopy(mp)
     fake_old['mean478'] = [[0, 0]] * 478                                           # dù có tên điểm đúng, có mean478 thì vẫn là map cũ
-    with pytest.raises(ValueError, match='lỗi thời'):
+    with pytest.raises(ValueError, match='không còn hỗ trợ'):
         mapping.apply_map(pts478(), fake_old, cfg)
     # map version 2 (cùng cấu trúc, 50 điểm pNN_vùng_bên của QĐ-002) + config version 3: từ chối rõ, gợi ý chạy lại make_config
     v2_map = {'version': 2, 'kind': 'vertex', 'names': [f'p{i:02d}_eye_R' for i in range(1, 51)],
@@ -543,7 +542,7 @@ def test_rerunning_make_config_keeps_values_others_wrote_and_drops_old_version()
     assert fresh['t_flip'] == 0.07 and fresh['tolerance'] == {'eye': 3.0} and fresh['points'][0]['tmpl'] == [0.0, 1.0]
     forced = mc.keep_existing(mc.build_config(), old, t_flip_given=True)               # --t-flip mới thì không giữ số cũ
     assert 't_flip' not in forced
-    v1 = load(LEGACY, 'm28_config_wflw.json')                                          # tmpl của version 1 là hình học WFLW: không được mang sang
+    v1 = copy.deepcopy(OLD_V1_CFG)                                                     # tmpl của version 1 là hình học 98 điểm cũ: không được mang sang
     assert mc.keep_existing(mc.build_config(), v1, False) == []
     # version 2 -> 3: tên điểm và hình khuôn khác hẳn, t_flip 0,0464 của định nghĩa cũ không được mang sang
     v2 = dict(version=2, status='DONG BANG 12/10', t_flip=0.0464, tolerance={'jaw': 3.0},

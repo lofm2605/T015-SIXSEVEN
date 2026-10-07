@@ -151,12 +151,10 @@ def _read_csv(path):
 
 
 def _ident(row):
-    """Khoá một mặt trong CSV: (image, face_idx) với manifest in-cabin, (wflw_image, wflw_line) với manifest WFLW cũ."""
+    """Khoá một mặt trong CSV: (image, face_idx)."""
     if "image" in row and "face_idx" in row:
         return row["image"], int(row["face_idx"])
-    if "wflw_image" in row and "wflw_line" in row:
-        return row["wflw_image"], int(row["wflw_line"])
-    raise SystemExit("CSV cần cột image, face_idx (mới) hoặc wflw_image, wflw_line (cũ).")
+    raise SystemExit("CSV cần cột image, face_idx.")
 
 
 def _crop_only_box(m):
@@ -170,7 +168,7 @@ def load_items(args):
     """Danh sách mặt của lượt chạy: dict(name, path, rel, box|None). rel = đường dẫn ảnh gốc tính từ --images.
 
     Người trong đội chỉ có gói (ảnh cắt data/crops + manifest, không có khung gốc): khi <images>/<image> không có mà
-    <images>/<file> có, dùng chính ảnh cắt (rel = file) và với --box wflw đổi hộp sang toạ độ ảnh cắt."""
+    <images>/<file> có, dùng chính ảnh cắt (rel = file) và với --box crop đổi hộp sang toạ độ ảnh cắt."""
     manifest = {}
     if os.path.exists(args.manifest):
         for m in _read_csv(args.manifest):
@@ -182,8 +180,8 @@ def load_items(args):
             raise SystemExit(f"--set cần {args.manifest} (không thấy file)")
         wanted = list(manifest)
     elif args.images:
-        if args.box == "wflw":
-            raise SystemExit("--box wflw cần --list (hoặc --set) để lấy hộp mặt từ manifest.csv")
+        if args.box == "crop":
+            raise SystemExit("--box crop cần --list (hoặc --set) để lấy hộp mặt từ manifest.csv")
         files = sorted(g for ext in ("jpg", "jpeg", "png")
                        for g in glob.glob(os.path.join(args.images, "**", f"*.{ext}"), recursive=True))
         gone = _excluded(args)
@@ -199,8 +197,8 @@ def load_items(args):
         m = manifest.get(key)
         if args.set and (m is None or m["set"] not in args.set):
             continue
-        if args.box == "wflw" and m is None:
-            raise SystemExit(f"--box wflw cần {args.manifest} có dòng {key}")
+        if args.box == "crop" and m is None:
+            raise SystemExit(f"--box crop cần {args.manifest} có dòng {key}")
         name = m["file"][:-4] if m else os.path.splitext(os.path.basename(key[0]))[0]
         if name in gone:
             continue
@@ -246,7 +244,7 @@ def crop(args, out, landmarker_factory=None):
             if bgr is None:
                 no_face.append((it["name"], "khong_doc_duoc_anh"))
                 continue
-            box = it["box"] if args.box == "wflw" else detect_box(lm, cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+            box = it["box"] if args.box == "crop" else detect_box(lm, cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
             if box is None:
                 no_face.append((it["name"], "khong_thay_mat"))
                 continue
@@ -533,13 +531,22 @@ def image_xml(frame_id, name, point_names, pts, low, width, height):
     return "\n".join(out)
 
 
+def read_box_mode(box_file, default="auto"):
+    """Chế độ hộp đã ghi ở bước prepare (crop/box.txt): "auto" hoặc "crop". File thiếu thì lấy default; giá trị khác "auto"
+    (kể cả file do bản công cụ cũ ghi) được hiểu là "crop" (ảnh cắt 512), nên lượt cũ vẫn đọc được."""
+    if not os.path.exists(box_file):
+        return default
+    with open(box_file, encoding="utf-8") as f:
+        return "auto" if f.read().strip() == "auto" else "crop"
+
+
 def _file_name(name, m, mode):
     """Tên file ảnh tải lên CVAT = tên ảnh trong XML."""
-    return name + ".png" if mode == "wflw" else _base(m.get("rel") or m["src"])
+    return name + ".png" if mode == "crop" else _base(m.get("rel") or m["src"])
 
 
 def _upload_path(args, rd, name, m, mode):
-    if mode == "wflw":
+    if mode == "crop":
         return os.path.abspath(os.path.join(rd, "crop", "images", name + ".png"))
     if args.images and m.get("rel"):
         p = os.path.join(args.images, *m["rel"].split("/"))
@@ -549,9 +556,9 @@ def _upload_path(args, rd, name, m, mode):
 
 
 def _face_pts(mode, n, meta, mp50, names):
-    """(danh sách 50 điểm, rộng, cao) của mặt n theo hệ toạ độ ảnh tải lên CVAT. wflw: toạ độ ảnh cắt 512; auto: x/k + left, kẹp mép."""
+    """(danh sách 50 điểm, rộng, cao) của mặt n theo hệ toạ độ ảnh tải lên CVAT. crop: toạ độ ảnh cắt 512; auto: x/k + left, kẹp mép."""
     m = meta[n]
-    if mode == "wflw":
+    if mode == "crop":
         return [mp50[n]["orig"][p] for p in names], OUT, OUT
     w, h = m["w"], m["h"]
     return [(min(max(mp50[n]["orig"][p][0] / m["k"] + m["left"], 0), w - 1),
@@ -559,7 +566,7 @@ def _face_pts(mode, n, meta, mp50, names):
 
 
 def build_xml(mode, nhan, meta, mp50, fl, cfg, path, tay_nhap=()):
-    """mode wflw: toạ độ ảnh cắt 512, tên name.png. mode auto: toạ độ ảnh gốc (x_cắt / k + left, kẹp vào mép).
+    """mode crop: toạ độ ảnh cắt 512, tên name.png. mode auto: toạ độ ảnh gốc (x_cắt / k + left, kẹp vào mép).
     Mặt Nhận: id 0..len(nhan)-1, cờ low_conf thật (fl). Mặt Gán tay có nháp (tay_nhap): nối sau, id len(nhan)+i, MỌI điểm low_conf=true."""
     names = [p["name"] for p in cfg["points"]]
     parts = ['<?xml version="1.0" encoding="utf-8"?>', '<annotations>', '  <version>1.1</version>']
@@ -607,7 +614,7 @@ def push(args, out):
     mp50 = _alive(_jload(os.path.join(rd, "map50", "mp50.json")), args)
     fl = _alive(_jload(os.path.join(rd, "flags", "flags.json")), args)
     box_file = os.path.join(rd, "crop", "box.txt")
-    mode = open(box_file, encoding="utf-8").read().strip() if os.path.exists(box_file) else args.box
+    mode = read_box_mode(box_file, args.box)
     if len(args.task) > 1:
         raise SystemExit("push chỉ nhận một --task")
     no_face = _no_face(args)
@@ -630,7 +637,7 @@ def push(args, out):
     dup = {f: v for f, v in files.items() if len(v) > 1}
     if dup:
         raise SystemExit(f"Tên ảnh trùng, CVAT không nhận hai ảnh cùng tên: {dup}. Mỗi ảnh gốc chỉ được một mặt "
-                         "lên task (chuyển mặt kia sang Bỏ trong triage) hoặc dùng --box wflw (ảnh cắt, tên khác nhau).")
+                         "lên task (chuyển mặt kia sang Bỏ trong triage) hoặc dùng --box crop (ảnh cắt, tên khác nhau).")
     co_nhap = set(tay_nhap)
     with open(os.path.join(out, "manual_list.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(f"{_file_name(n, meta[n], mode)}\t{KIND_CO_NHAP if n in co_nhap else KIND_ANH_TRONG}" for n in tay))
