@@ -25,7 +25,7 @@ import numpy as np
 from m28core.mapping import similarity, to_mean
 
 N_VERT = 478
-IOD_VERTS = (33, 263)             # hai khoé mắt ngoài (người trong ảnh: 33 nửa trái ảnh)
+IOD_VERTS = (33, 263)             # hai khoé mắt ngoài; ảnh không lật: 33 ở nửa TRÁI ảnh (= mattrai_1 của DMS), 263 ở nửa PHẢI ảnh (= matphai_1)
 SURE_PAIRS = ((33, 263), (133, 362), (61, 291), (159, 386), (145, 374), (70, 300), (468, 473))
 SURE_FIXED = (1, 2, 0, 13, 14, 17, 152, 168)
 
@@ -279,6 +279,19 @@ def agreement(perm_a, perm_b):
     a, b = np.asarray(perm_a), np.asarray(perm_b)
     diff = [int(i) for i in np.nonzero(a != b)[0]]
     return len(diff), diff[:20]
+
+
+def check_against_data(perm, origs, flips, edges=None, width=512.0):
+    """Kiểm một hoán vị CÓ SẴN (config/mp_mirror478.json) trên dữ liệu thật mà KHÔNG ghi gì: học lại trong bộ nhớ bằng learn_mirror_flip rồi so.
+    Trả dict(n_faces, n_diff, diff (tối đa 20 đỉnh), resid_median_pct_iod, resid_max_pct_iod của CHÍNH hoán vị có sẵn, n_fixed_learned).
+    Hoán vị gương là tính chất hình học của 478 đỉnh, không phụ thuộc tên điểm, nên đổi định nghĩa 50 điểm không đòi học lại; hàm này là bằng chứng cho điều đó."""
+    perm = np.asarray(perm, int)
+    new = learn_mirror_flip(origs, flips, width, edges)
+    n_diff, diff = agreement(perm, new["perm"])
+    C = _flip_cost([np.asarray(o, float) for o in origs], [np.asarray(f, float) for f in flips], new["width"])
+    resid = np.array([C[i, perm[i]] for i in range(N_VERT)]) * 100
+    return dict(n_faces=len(origs), n_diff=n_diff, diff=diff, resid_median_pct_iod=float(np.median(resid)), resid_max_pct_iod=float(resid.max()),
+                n_fixed_learned=len(new["fixed"]))
 
 
 def suspicious(resid, perm, k=12):

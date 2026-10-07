@@ -4,14 +4,15 @@
     flipped=True: pts478 là kết quả MediaPipe trên ảnh lật ngang; điểm n (đã bỏ lật) = [w - x, y] của đỉnh mp_idx(flip(n)) trên ảnh lật,
                   với w = width nếu có, không thì map["flip_width"]. Kết quả nằm trên ảnh gốc, cùng tên điểm như bản không lật.
 
-Vì sao chọn đỉnh (QĐ-001, QĐ-002 dự thảo): bỏ WFLW thì không còn đáp án 50 điểm để học phép khớp ridge như trước (ridge học trên WFLW lệch ở
+Vì sao chọn đỉnh (QĐ-001, QĐ-002): bỏ WFLW thì không còn đáp án 50 điểm để học phép khớp ridge như trước (ridge học trên WFLW lệch ở
 hàm và lông mày khi gặp mặt tài xế). Mỗi điểm của config là MỘT đỉnh MediaPipe (config `mp_idx`), nên điểm nháp nằm đúng trên lưới mặt
 của model, không có số học nào cần nhóm kiểm lại, và đổi định nghĩa một điểm chỉ là đổi một chỉ số.
 
-Định dạng config/map_mp50.json (version 2, kind "vertex"), do tool/make_config.py sinh cùng m28_config.json:
-    {"version": 2, "kind": "vertex", "names": [tên điểm theo thứ tự config],
+Định dạng config/map_mp50.json (version 3, kind "vertex"), do tool/make_config.py sinh cùng m28_config.json (config version 3, định nghĩa 50 điểm DMS, QĐ-003):
+    {"version": 3, "kind": "vertex", "names": [tên điểm theo thứ tự config],
      "points": {tên: {"mp_idx": đỉnh 0-477, "flip": tên điểm đối xứng}}, "flip_width": w, "meta": {...}}
-Không có mean478, ridge hay ma trận nào. Map kiểu cũ (ridge, có `mean478`/`W`) bị từ chối bằng ValueError rõ ràng.
+Không có mean478, ridge hay ma trận nào. Map kiểu cũ bị từ chối bằng ValueError rõ ràng: map ridge (học trên WFLW) và map version 2 (cùng cấu trúc nhưng định nghĩa 50 điểm
+cũ `pNN_vùng_bên`, bên theo người trong ảnh). Config thiếu `side_convention: "image"` (config version 2) cũng bị từ chối: quy ước bên đã đổi sang theo bức ảnh.
 Config có thể là TẬP CON các điểm của map; `mp_idx` hoặc `flip` của một điểm trong config lệch với map thì báo lỗi (chạy lại make_config.py).
 
 Quy ước toạ độ: pts478 theo pixel kiểu MediaPipe (x = p.x * width, biên pixel). Ảnh lật đúng nghĩa là x' = width - x; `flip_width` là
@@ -48,13 +49,26 @@ def from_mean(q, s, R, t):                         # khung hình trung bình -> 
     return (q - t) @ R / s
 
 
+SIDE_CONVENTION = "image"          # config version 3: side theo bức ảnh (R = nửa phải ảnh); config version 2 không có trường này
+
+
+def check_side_convention(config):
+    """ValueError rõ ràng nếu config không khai quy ước bên theo ảnh (config version 2 cũ: R = nửa TRÁI ảnh theo người trong ảnh, ngược nhau)."""
+    if not isinstance(config, dict) or config.get("side_convention") != SIDE_CONVENTION:
+        raise ValueError('config không có side_convention = "image": đây là config cũ (version 2, side theo người trong ảnh, 50 điểm pNN_vùng_bên) '
+                         "trước QĐ-003; quy ước bên đã đổi sang theo bức ảnh (nhóm *phai nằm nửa phải ảnh). Chạy lại tool\\make_config.py để sinh config version 3")
+
+
 def _check_map(mp_map):
     if not isinstance(mp_map, dict):
         raise ValueError("map_mp50.json không phải đối tượng JSON")
     if "mean478" in mp_map or any(isinstance(v, dict) and "W" in v for v in (mp_map.get("points") or {}).values()) \
-            or mp_map.get("version") != 2 or mp_map.get("kind") != "vertex":
+            or mp_map.get("version") not in (2, 3) or mp_map.get("kind") != "vertex":
         raise ValueError("map_mp50.json là bản cũ (ánh xạ ridge học trên WFLW, đã lỗi thời theo QĐ-001): "
-                         "chạy lại tool\\make_config.py để sinh map version 2 (chọn đỉnh)")
+                         "chạy lại tool\\make_config.py để sinh map version 3 (chọn đỉnh, 50 điểm DMS)")
+    if mp_map.get("version") == 2:
+        raise ValueError("map_mp50.json là version 2 (50 điểm pNN_vùng_bên của QĐ-002, bên theo người trong ảnh), đã thay bằng version 3 (50 điểm DMS, QĐ-003): "
+                         "chạy lại tool\\make_config.py để sinh config và map version 3")
     if not isinstance(mp_map.get("points"), dict) or not isinstance(mp_map.get("names"), list):
         raise ValueError("map_mp50.json thiếu 'names' hoặc 'points': chạy lại tool\\make_config.py")
 
@@ -62,6 +76,7 @@ def _check_map(mp_map):
 def vertex_table(mp_map, config):
     """[(tên, mp_idx, tên đối xứng)] cho các điểm của config, đã kiểm khớp với map. ValueError nếu lệch."""
     _check_map(mp_map)
+    check_side_convention(config)
     out = []
     for p in config["points"]:
         n = p["name"]

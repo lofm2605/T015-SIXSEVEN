@@ -1,8 +1,15 @@
-"""Sinh config/face50_label.json: danh sách label (một skeleton face50, 50 điểm) để tạo project m28 trên CVAT.
+"""Sinh config/face50_label.json: danh sách label (MỘT skeleton face50, 50 điểm DMS) để tạo project m28 trên CVAT.
 
     python tool\\make_label.py [--config config\\m28_config.json] [--out config\\face50_label.json]
 
 Nguồn duy nhất là config/m28_config.json (points[].name/side/line/tmpl, lines{tên: {closed}}). Chạy hai lần ra cùng byte.
+
+Phương án CVAT của config version 3 (QĐ-003): GIỮ MỘT skeleton `face50` đủ 50 sublabel mang tên mới (`longmaytrai_1` ... `moitrong_8`), không tách 7 skeleton theo nhóm.
+Lý do: push, collect, cvat_io, eval50, cvat_smoke và QC đều giả định MỖI ẢNH đúng một skeleton `face50` đủ 50 điểm và `low_conf` từng điểm; tách 7 skeleton phải đổi mọi chỗ đó,
+thêm 7 shape mỗi ảnh và cách ghép nhãn theo nhóm mà không được gì thêm (nhóm vẫn đọc được từ tên điểm, `group` trong config và cạnh nối). Nhóm thể hiện bằng CẠNH của khuôn
+(`line` = tên nhóm, nhóm không nối với nhau, mắt và môi nối kín). MÀU sublabel theo BÊN của bức ảnh (SIDE_COLOR: L = nửa trái ảnh xanh dương, R = nửa phải ảnh đỏ, M = trên trục
+xanh lá) chứ không theo nhóm: nỗi đau cần giải là gán nhầm trái/phải theo người, nên bên phải nhìn thấy ngay trên ảnh; nhóm đã có tên và cạnh phân biệt.
+Config thiếu `side_convention: "image"` (config version 2, side theo người trong ảnh) bị từ chối: label sinh từ nó sẽ gán màu ngược bên.
 Định dạng bám mã nguồn CVAT v2.77.0 (đã đọc, xem README mục Rủi ro), CHƯA thử trên server CVAT thật:
   * Label: type "skeleton", svg, sublabels (type "points"); không có khoá "id" ở đâu cả (server tự cấp).
   * svg: khung vẽ viewBox 0 0 100 100 (cvat-ui skeleton-configurator). Mỗi điểm một <circle> có data-type="element node",
@@ -20,7 +27,7 @@ import sys
 
 LABEL_NAME = "face50"
 N_POINTS = 50
-SIDE_COLOR = {"R": "#e03131", "L": "#1971c2", "M": "#2f9e44"}     # bên phải / bên trái của người trong ảnh / giữa
+SIDE_COLOR = {"R": "#e03131", "L": "#1971c2", "M": "#2f9e44"}     # nửa PHẢI của bức ảnh (nhóm *phai) / nửa TRÁI của bức ảnh (nhóm *trai) / trên trục (quy ước theo ảnh, QĐ-003)
 CANVAS = 100.0                                                    # viewBox 0 0 100 100 của cvat-ui
 MARGIN = 6.0
 NODE_R = 0.75                                                     # bán kính nút như cvat-ui vẽ (r: 0.75)
@@ -33,6 +40,9 @@ def check_config(cfg):
     if not isinstance(pts, list) or len(pts) != N_POINTS:
         raise SystemExit(f"Config phải có đúng {N_POINTS} điểm trong 'points' (đang có "
                          f"{len(pts) if isinstance(pts, list) else 'không có'}).")
+    if cfg.get("side_convention") != "image":
+        raise SystemExit('Config không có side_convention = "image": đây là config cũ (version 2, side theo người trong ảnh, 50 điểm pNN_vùng_bên) trước QĐ-003; '
+                         "chạy lại python tool\\make_config.py để sinh config version 3 (50 điểm DMS) rồi mới sinh label.")
     seen = set()
     lines = cfg.get("lines") or {}
     for i, p in enumerate(pts, 1):
