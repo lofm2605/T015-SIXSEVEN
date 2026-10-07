@@ -1,677 +1,20 @@
 {
- "version": 2,
+ "version": 3,
  "status": "NHAP - cho P3 chot, dong bang 12/10",
+ "side_convention": "image",
+ "side_note": "side theo BUC ANH (khong soi guong): R = nua PHAI anh (nhom *phai), L = nua TRAI anh (nhom *trai), M = tren truc. Nguoc voi config version 2 (side theo nguoi trong anh).",
  "n_points": 50,
  "points": [
   {
-   "name": "p01_jaw_R",
-   "region": "jaw",
-   "side": "R",
-   "flip": "p17_jaw_L",
-   "mp_idx": 127,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 1,
-   "coincide": null,
-   "tmpl": [
-    105.49,
-    200.91
-   ]
-  },
-  {
-   "name": "p02_jaw_R",
-   "region": "jaw",
-   "side": "R",
-   "flip": "p16_jaw_L",
-   "mp_idx": 93,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    109.29,
-    264.03
-   ]
-  },
-  {
-   "name": "p03_jaw_R",
-   "region": "jaw",
-   "side": "R",
-   "flip": "p15_jaw_L",
-   "mp_idx": 132,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    114.97,
-    298.43
-   ]
-  },
-  {
-   "name": "p04_jaw_R",
-   "region": "jaw",
-   "side": "R",
-   "flip": "p14_jaw_L",
-   "mp_idx": 58,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    125.44,
-    335.38
-   ]
-  },
-  {
-   "name": "p05_jaw_R",
-   "region": "jaw",
-   "side": "R",
-   "flip": "p13_jaw_L",
-   "mp_idx": 172,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    139.95,
-    364.45
-   ]
-  },
-  {
-   "name": "p06_jaw_R",
-   "region": "jaw",
-   "side": "R",
-   "flip": "p12_jaw_L",
-   "mp_idx": 136,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    155.76,
-    385.35
-   ]
-  },
-  {
-   "name": "p07_jaw_R",
-   "region": "jaw",
-   "side": "R",
-   "flip": "p11_jaw_L",
-   "mp_idx": 150,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    175.68,
-    404.0
-   ]
-  },
-  {
-   "name": "p08_jaw_R",
-   "region": "jaw",
-   "side": "R",
-   "flip": "p10_jaw_L",
-   "mp_idx": 176,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    212.43,
-    428.71
-   ]
-  },
-  {
-   "name": "p09_jaw_M",
-   "region": "jaw",
-   "side": "M",
-   "flip": "p09_jaw_M",
-   "mp_idx": 152,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 1,
-   "coincide": null,
-   "tmpl": [
-    264.73,
-    438.97
-   ]
-  },
-  {
-   "name": "p10_jaw_L",
-   "region": "jaw",
-   "side": "L",
-   "flip": "p08_jaw_R",
-   "mp_idx": 400,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    315.03,
-    425.2
-   ]
-  },
-  {
-   "name": "p11_jaw_L",
-   "region": "jaw",
-   "side": "L",
-   "flip": "p07_jaw_R",
-   "mp_idx": 379,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    348.25,
-    398.21
-   ]
-  },
-  {
-   "name": "p12_jaw_L",
-   "region": "jaw",
-   "side": "L",
-   "flip": "p06_jaw_R",
-   "mp_idx": 365,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    365.98,
-    378.57
-   ]
-  },
-  {
-   "name": "p13_jaw_L",
-   "region": "jaw",
-   "side": "L",
-   "flip": "p05_jaw_R",
-   "mp_idx": 397,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    379.61,
-    357.02
-   ]
-  },
-  {
-   "name": "p14_jaw_L",
-   "region": "jaw",
-   "side": "L",
-   "flip": "p04_jaw_R",
-   "mp_idx": 288,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    391.68,
-    327.19
-   ]
-  },
-  {
-   "name": "p15_jaw_L",
-   "region": "jaw",
-   "side": "L",
-   "flip": "p03_jaw_R",
-   "mp_idx": 361,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    399.99,
-    290.31
-   ]
-  },
-  {
-   "name": "p16_jaw_L",
-   "region": "jaw",
-   "side": "L",
-   "flip": "p02_jaw_R",
-   "mp_idx": 323,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    403.62,
-    255.91
-   ]
-  },
-  {
-   "name": "p17_jaw_L",
-   "region": "jaw",
-   "side": "L",
-   "flip": "p01_jaw_R",
-   "mp_idx": 356,
-   "type": "C",
-   "curve": [
-    "p01_jaw_R",
-    "p02_jaw_R",
-    "p03_jaw_R",
-    "p04_jaw_R",
-    "p05_jaw_R",
-    "p06_jaw_R",
-    "p07_jaw_R",
-    "p08_jaw_R",
-    "p09_jaw_M",
-    "p10_jaw_L",
-    "p11_jaw_L",
-    "p12_jaw_L",
-    "p13_jaw_L",
-    "p14_jaw_L",
-    "p15_jaw_L",
-    "p16_jaw_L",
-    "p17_jaw_L"
-   ],
-   "line": "jaw",
-   "anchor": 1,
-   "coincide": null,
-   "tmpl": [
-    404.51,
-    192.75
-   ]
-  },
-  {
-   "name": "p18_brow_R",
+   "name": "longmaytrai_1",
+   "group": "longmaytrai",
    "region": "brow",
-   "side": "R",
-   "flip": "p27_brow_L",
-   "mp_idx": 70,
-   "type": "E",
-   "curve": null,
-   "line": "brow_R",
-   "anchor": 1,
-   "coincide": null,
-   "tmpl": [
-    131.72,
-    154.99
-   ]
-  },
-  {
-   "name": "p19_brow_R",
-   "region": "brow",
-   "side": "R",
-   "flip": "p26_brow_L",
-   "mp_idx": 63,
-   "type": "C",
-   "curve": [
-    "p18_brow_R",
-    "p19_brow_R",
-    "p20_brow_R",
-    "p21_brow_R",
-    "p22_brow_R"
-   ],
-   "line": "brow_R",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    144.29,
-    141.58
-   ]
-  },
-  {
-   "name": "p20_brow_R",
-   "region": "brow",
-   "side": "R",
-   "flip": "p25_brow_L",
-   "mp_idx": 105,
-   "type": "C",
-   "curve": [
-    "p18_brow_R",
-    "p19_brow_R",
-    "p20_brow_R",
-    "p21_brow_R",
-    "p22_brow_R"
-   ],
-   "line": "brow_R",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    164.47,
-    133.63
-   ]
-  },
-  {
-   "name": "p21_brow_R",
-   "region": "brow",
-   "side": "R",
-   "flip": "p24_brow_L",
-   "mp_idx": 66,
-   "type": "C",
-   "curve": [
-    "p18_brow_R",
-    "p19_brow_R",
-    "p20_brow_R",
-    "p21_brow_R",
-    "p22_brow_R"
-   ],
-   "line": "brow_R",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    192.41,
-    133.13
-   ]
-  },
-  {
-   "name": "p22_brow_R",
-   "region": "brow",
-   "side": "R",
-   "flip": "p23_brow_L",
+   "side": "L",
+   "flip": "longmayphai_1",
    "mp_idx": 107,
    "type": "E",
    "curve": null,
-   "line": "brow_R",
+   "line": "longmaytrai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -680,14 +23,101 @@
    ]
   },
   {
-   "name": "p23_brow_L",
+   "name": "longmaytrai_2",
+   "group": "longmaytrai",
    "region": "brow",
    "side": "L",
-   "flip": "p22_brow_R",
+   "flip": "longmayphai_2",
+   "mp_idx": 66,
+   "type": "C",
+   "curve": [
+    "longmaytrai_1",
+    "longmaytrai_2",
+    "longmaytrai_3",
+    "longmaytrai_4",
+    "longmaytrai_5"
+   ],
+   "line": "longmaytrai",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    192.41,
+    133.13
+   ]
+  },
+  {
+   "name": "longmaytrai_3",
+   "group": "longmaytrai",
+   "region": "brow",
+   "side": "L",
+   "flip": "longmayphai_3",
+   "mp_idx": 105,
+   "type": "C",
+   "curve": [
+    "longmaytrai_1",
+    "longmaytrai_2",
+    "longmaytrai_3",
+    "longmaytrai_4",
+    "longmaytrai_5"
+   ],
+   "line": "longmaytrai",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    164.47,
+    133.62
+   ]
+  },
+  {
+   "name": "longmaytrai_4",
+   "group": "longmaytrai",
+   "region": "brow",
+   "side": "L",
+   "flip": "longmayphai_4",
+   "mp_idx": 63,
+   "type": "C",
+   "curve": [
+    "longmaytrai_1",
+    "longmaytrai_2",
+    "longmaytrai_3",
+    "longmaytrai_4",
+    "longmaytrai_5"
+   ],
+   "line": "longmaytrai",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    144.29,
+    141.58
+   ]
+  },
+  {
+   "name": "longmaytrai_5",
+   "group": "longmaytrai",
+   "region": "brow",
+   "side": "L",
+   "flip": "longmayphai_5",
+   "mp_idx": 70,
+   "type": "E",
+   "curve": null,
+   "line": "longmaytrai",
+   "anchor": 1,
+   "coincide": null,
+   "tmpl": [
+    131.72,
+    154.99
+   ]
+  },
+  {
+   "name": "longmayphai_1",
+   "group": "longmayphai",
+   "region": "brow",
+   "side": "R",
+   "flip": "longmaytrai_1",
    "mp_idx": 336,
    "type": "E",
    "curve": null,
-   "line": "brow_L",
+   "line": "longmayphai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -696,20 +126,21 @@
    ]
   },
   {
-   "name": "p24_brow_L",
+   "name": "longmayphai_2",
+   "group": "longmayphai",
    "region": "brow",
-   "side": "L",
-   "flip": "p21_brow_R",
+   "side": "R",
+   "flip": "longmaytrai_2",
    "mp_idx": 296,
    "type": "C",
    "curve": [
-    "p23_brow_L",
-    "p24_brow_L",
-    "p25_brow_L",
-    "p26_brow_L",
-    "p27_brow_L"
+    "longmayphai_1",
+    "longmayphai_2",
+    "longmayphai_3",
+    "longmayphai_4",
+    "longmayphai_5"
    ],
-   "line": "brow_L",
+   "line": "longmayphai",
    "anchor": 0,
    "coincide": null,
    "tmpl": [
@@ -718,20 +149,21 @@
    ]
   },
   {
-   "name": "p25_brow_L",
+   "name": "longmayphai_3",
+   "group": "longmayphai",
    "region": "brow",
-   "side": "L",
-   "flip": "p20_brow_R",
+   "side": "R",
+   "flip": "longmaytrai_3",
    "mp_idx": 334,
    "type": "C",
    "curve": [
-    "p23_brow_L",
-    "p24_brow_L",
-    "p25_brow_L",
-    "p26_brow_L",
-    "p27_brow_L"
+    "longmayphai_1",
+    "longmayphai_2",
+    "longmayphai_3",
+    "longmayphai_4",
+    "longmayphai_5"
    ],
-   "line": "brow_L",
+   "line": "longmayphai",
    "anchor": 0,
    "coincide": null,
    "tmpl": [
@@ -740,20 +172,21 @@
    ]
   },
   {
-   "name": "p26_brow_L",
+   "name": "longmayphai_4",
+   "group": "longmayphai",
    "region": "brow",
-   "side": "L",
-   "flip": "p19_brow_R",
+   "side": "R",
+   "flip": "longmaytrai_4",
    "mp_idx": 293,
    "type": "C",
    "curve": [
-    "p23_brow_L",
-    "p24_brow_L",
-    "p25_brow_L",
-    "p26_brow_L",
-    "p27_brow_L"
+    "longmayphai_1",
+    "longmayphai_2",
+    "longmayphai_3",
+    "longmayphai_4",
+    "longmayphai_5"
    ],
-   "line": "brow_L",
+   "line": "longmayphai",
    "anchor": 0,
    "coincide": null,
    "tmpl": [
@@ -762,33 +195,32 @@
    ]
   },
   {
-   "name": "p27_brow_L",
+   "name": "longmayphai_5",
+   "group": "longmayphai",
    "region": "brow",
-   "side": "L",
-   "flip": "p18_brow_R",
+   "side": "R",
+   "flip": "longmaytrai_5",
    "mp_idx": 300,
    "type": "E",
    "curve": null,
-   "line": "brow_L",
+   "line": "longmayphai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
-    381.68,
+    381.69,
     148.58
    ]
   },
   {
-   "name": "p28_nose_M",
+   "name": "songmui_1",
+   "group": "songmui",
    "region": "nose",
    "side": "M",
-   "flip": "p28_nose_M",
+   "flip": "songmui_1",
    "mp_idx": 168,
-   "type": "C",
-   "curve": [
-    "p28_nose_M",
-    "p29_nose_M"
-   ],
-   "line": "nose_bridge",
+   "type": "E",
+   "curve": null,
+   "line": "songmui",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -797,82 +229,76 @@
    ]
   },
   {
-   "name": "p29_nose_M",
+   "name": "songmui_2",
+   "group": "songmui",
    "region": "nose",
    "side": "M",
-   "flip": "p29_nose_M",
+   "flip": "songmui_2",
+   "mp_idx": 197,
+   "type": "C",
+   "curve": [
+    "songmui_1",
+    "songmui_2",
+    "songmui_3",
+    "songmui_4"
+   ],
+   "line": "songmui",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    260.34,
+    208.47
+   ]
+  },
+  {
+   "name": "songmui_3",
+   "group": "songmui",
+   "region": "nose",
+   "side": "M",
+   "flip": "songmui_3",
+   "mp_idx": 5,
+   "type": "C",
+   "curve": [
+    "songmui_1",
+    "songmui_2",
+    "songmui_3",
+    "songmui_4"
+   ],
+   "line": "songmui",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    261.24,
+    236.0
+   ]
+  },
+  {
+   "name": "songmui_4",
+   "group": "songmui",
+   "region": "nose",
+   "side": "M",
+   "flip": "songmui_4",
    "mp_idx": 1,
    "type": "E",
    "curve": null,
-   "line": "nose_bridge",
+   "line": "songmui",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
-    262.07,
+    262.08,
     267.44
    ]
   },
   {
-   "name": "p30_nose_R",
-   "region": "nose",
-   "side": "R",
-   "flip": "p32_nose_L",
-   "mp_idx": 98,
-   "type": "E",
-   "curve": null,
-   "line": "nose_base",
-   "anchor": 1,
-   "coincide": null,
-   "tmpl": [
-    222.59,
-    277.08
-   ]
-  },
-  {
-   "name": "p31_nose_M",
-   "region": "nose",
-   "side": "M",
-   "flip": "p31_nose_M",
-   "mp_idx": 2,
-   "type": "C",
-   "curve": [
-    "p30_nose_R",
-    "p31_nose_M",
-    "p32_nose_L"
-   ],
-   "line": "nose_base",
-   "anchor": 0,
-   "coincide": null,
-   "tmpl": [
-    261.75,
-    281.91
-   ]
-  },
-  {
-   "name": "p32_nose_L",
-   "region": "nose",
-   "side": "L",
-   "flip": "p30_nose_R",
-   "mp_idx": 327,
-   "type": "E",
-   "curve": null,
-   "line": "nose_base",
-   "anchor": 1,
-   "coincide": null,
-   "tmpl": [
-    299.27,
-    275.07
-   ]
-  },
-  {
-   "name": "p33_eye_R",
+   "name": "mattrai_1",
+   "group": "mattrai",
    "region": "eye",
-   "side": "R",
-   "flip": "p39_eye_L",
+   "side": "L",
+   "flip": "matphai_1",
    "mp_idx": 33,
    "type": "E",
    "curve": null,
-   "line": "eye_R",
+   "line": "mattrai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -881,34 +307,84 @@
    ]
   },
   {
-   "name": "p34_eye_R",
+   "name": "mattrai_2",
+   "group": "mattrai",
    "region": "eye",
-   "side": "R",
-   "flip": "p38_eye_L",
-   "mp_idx": 159,
+   "side": "L",
+   "flip": "matphai_2",
+   "mp_idx": 160,
    "type": "C",
    "curve": [
-    "p33_eye_R",
-    "p34_eye_R",
-    "p35_eye_R"
+    "mattrai_1",
+    "mattrai_2",
+    "mattrai_3",
+    "mattrai_4",
+    "mattrai_5"
    ],
-   "line": "eye_R",
+   "line": "mattrai",
    "anchor": 0,
-   "coincide": "p36_eye_R",
+   "coincide": "mattrai_8",
    "tmpl": [
-    185.55,
-    176.22
+    174.86,
+    178.33
    ]
   },
   {
-   "name": "p35_eye_R",
+   "name": "mattrai_3",
+   "group": "mattrai",
    "region": "eye",
-   "side": "R",
-   "flip": "p37_eye_L",
+   "side": "L",
+   "flip": "matphai_3",
+   "mp_idx": 159,
+   "type": "C",
+   "curve": [
+    "mattrai_1",
+    "mattrai_2",
+    "mattrai_3",
+    "mattrai_4",
+    "mattrai_5"
+   ],
+   "line": "mattrai",
+   "anchor": 0,
+   "coincide": "mattrai_7",
+   "tmpl": [
+    185.55,
+    176.21
+   ]
+  },
+  {
+   "name": "mattrai_4",
+   "group": "mattrai",
+   "region": "eye",
+   "side": "L",
+   "flip": "matphai_4",
+   "mp_idx": 158,
+   "type": "C",
+   "curve": [
+    "mattrai_1",
+    "mattrai_2",
+    "mattrai_3",
+    "mattrai_4",
+    "mattrai_5"
+   ],
+   "line": "mattrai",
+   "anchor": 0,
+   "coincide": "mattrai_6",
+   "tmpl": [
+    196.47,
+    176.59
+   ]
+  },
+  {
+   "name": "mattrai_5",
+   "group": "mattrai",
+   "region": "eye",
+   "side": "L",
+   "flip": "matphai_5",
    "mp_idx": 133,
    "type": "E",
    "curve": null,
-   "line": "eye_R",
+   "line": "mattrai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -917,106 +393,256 @@
    ]
   },
   {
-   "name": "p36_eye_R",
+   "name": "mattrai_6",
+   "group": "mattrai",
    "region": "eye",
-   "side": "R",
-   "flip": "p40_eye_L",
+   "side": "L",
+   "flip": "matphai_6",
+   "mp_idx": 153,
+   "type": "C",
+   "curve": [
+    "mattrai_5",
+    "mattrai_6",
+    "mattrai_7",
+    "mattrai_8",
+    "mattrai_1"
+   ],
+   "line": "mattrai",
+   "anchor": 0,
+   "coincide": "mattrai_4",
+   "tmpl": [
+    200.61,
+    190.67
+   ]
+  },
+  {
+   "name": "mattrai_7",
+   "group": "mattrai",
+   "region": "eye",
+   "side": "L",
+   "flip": "matphai_7",
    "mp_idx": 145,
    "type": "C",
    "curve": [
-    "p35_eye_R",
-    "p36_eye_R",
-    "p33_eye_R"
+    "mattrai_5",
+    "mattrai_6",
+    "mattrai_7",
+    "mattrai_8",
+    "mattrai_1"
    ],
-   "line": "eye_R",
+   "line": "mattrai",
    "anchor": 0,
-   "coincide": "p34_eye_R",
+   "coincide": "mattrai_3",
    "tmpl": [
     189.97,
     192.19
    ]
   },
   {
-   "name": "p37_eye_L",
+   "name": "mattrai_8",
+   "group": "mattrai",
    "region": "eye",
    "side": "L",
-   "flip": "p35_eye_R",
-   "mp_idx": 362,
-   "type": "E",
-   "curve": null,
-   "line": "eye_L",
-   "anchor": 1,
-   "coincide": null,
+   "flip": "matphai_8",
+   "mp_idx": 144,
+   "type": "C",
+   "curve": [
+    "mattrai_5",
+    "mattrai_6",
+    "mattrai_7",
+    "mattrai_8",
+    "mattrai_1"
+   ],
+   "line": "mattrai",
+   "anchor": 0,
+   "coincide": "mattrai_2",
    "tmpl": [
-    295.6,
-    185.95
+    179.07,
+    192.47
    ]
   },
   {
-   "name": "p38_eye_L",
+   "name": "matphai_1",
+   "group": "matphai",
    "region": "eye",
-   "side": "L",
-   "flip": "p34_eye_R",
+   "side": "R",
+   "flip": "mattrai_1",
+   "mp_idx": 263,
+   "type": "E",
+   "curve": null,
+   "line": "matphai",
+   "anchor": 1,
+   "coincide": null,
+   "tmpl": [
+    353.94,
+    182.77
+   ]
+  },
+  {
+   "name": "matphai_2",
+   "group": "matphai",
+   "region": "eye",
+   "side": "R",
+   "flip": "mattrai_2",
+   "mp_idx": 387,
+   "type": "C",
+   "curve": [
+    "matphai_1",
+    "matphai_2",
+    "matphai_3",
+    "matphai_4",
+    "matphai_5"
+   ],
+   "line": "matphai",
+   "anchor": 0,
+   "coincide": "matphai_8",
+   "tmpl": [
+    339.81,
+    174.64
+   ]
+  },
+  {
+   "name": "matphai_3",
+   "group": "matphai",
+   "region": "eye",
+   "side": "R",
+   "flip": "mattrai_3",
    "mp_idx": 386,
    "type": "C",
    "curve": [
-    "p37_eye_L",
-    "p38_eye_L",
-    "p39_eye_L"
+    "matphai_1",
+    "matphai_2",
+    "matphai_3",
+    "matphai_4",
+    "matphai_5"
    ],
-   "line": "eye_L",
+   "line": "matphai",
    "anchor": 0,
-   "coincide": "p40_eye_L",
+   "coincide": "matphai_7",
    "tmpl": [
     329.59,
     172.84
    ]
   },
   {
-   "name": "p39_eye_L",
+   "name": "matphai_4",
+   "group": "matphai",
    "region": "eye",
-   "side": "L",
-   "flip": "p33_eye_R",
-   "mp_idx": 263,
-   "type": "E",
-   "curve": null,
-   "line": "eye_L",
-   "anchor": 1,
-   "coincide": null,
+   "side": "R",
+   "flip": "mattrai_4",
+   "mp_idx": 385,
+   "type": "C",
+   "curve": [
+    "matphai_1",
+    "matphai_2",
+    "matphai_3",
+    "matphai_4",
+    "matphai_5"
+   ],
+   "line": "matphai",
+   "anchor": 0,
+   "coincide": "matphai_6",
    "tmpl": [
-    353.93,
-    182.77
+    318.4,
+    173.51
    ]
   },
   {
-   "name": "p40_eye_L",
+   "name": "matphai_5",
+   "group": "matphai",
    "region": "eye",
-   "side": "L",
-   "flip": "p36_eye_R",
+   "side": "R",
+   "flip": "mattrai_5",
+   "mp_idx": 362,
+   "type": "E",
+   "curve": null,
+   "line": "matphai",
+   "anchor": 1,
+   "coincide": null,
+   "tmpl": [
+    295.61,
+    185.95
+   ]
+  },
+  {
+   "name": "matphai_6",
+   "group": "matphai",
+   "region": "eye",
+   "side": "R",
+   "flip": "mattrai_6",
+   "mp_idx": 380,
+   "type": "C",
+   "curve": [
+    "matphai_5",
+    "matphai_6",
+    "matphai_7",
+    "matphai_8",
+    "matphai_1"
+   ],
+   "line": "matphai",
+   "anchor": 0,
+   "coincide": "matphai_4",
+   "tmpl": [
+    315.31,
+    188.43
+   ]
+  },
+  {
+   "name": "matphai_7",
+   "group": "matphai",
+   "region": "eye",
+   "side": "R",
+   "flip": "mattrai_7",
    "mp_idx": 374,
    "type": "C",
    "curve": [
-    "p39_eye_L",
-    "p40_eye_L",
-    "p37_eye_L"
+    "matphai_5",
+    "matphai_6",
+    "matphai_7",
+    "matphai_8",
+    "matphai_1"
    ],
-   "line": "eye_L",
+   "line": "matphai",
    "anchor": 0,
-   "coincide": "p38_eye_L",
+   "coincide": "matphai_3",
    "tmpl": [
     326.32,
     189.33
    ]
   },
   {
-   "name": "p41_lip_R",
-   "region": "lip",
+   "name": "matphai_8",
+   "group": "matphai",
+   "region": "eye",
    "side": "R",
-   "flip": "p45_lip_L",
+   "flip": "mattrai_8",
+   "mp_idx": 373,
+   "type": "C",
+   "curve": [
+    "matphai_5",
+    "matphai_6",
+    "matphai_7",
+    "matphai_8",
+    "matphai_1"
+   ],
+   "line": "matphai",
+   "anchor": 0,
+   "coincide": "matphai_2",
+   "tmpl": [
+    336.72,
+    189.01
+   ]
+  },
+  {
+   "name": "moingoai_1",
+   "group": "moingoai",
+   "region": "lip",
+   "side": "L",
+   "flip": "moingoai_7",
    "mp_idx": 61,
    "type": "E",
    "curve": null,
-   "line": "lip_outer",
+   "line": "moingoai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -1025,20 +651,23 @@
    ]
   },
   {
-   "name": "p42_lip_R",
+   "name": "moingoai_2",
+   "group": "moingoai",
    "region": "lip",
-   "side": "R",
-   "flip": "p44_lip_L",
+   "side": "L",
+   "flip": "moingoai_6",
    "mp_idx": 40,
    "type": "C",
    "curve": [
-    "p41_lip_R",
-    "p42_lip_R",
-    "p43_lip_M",
-    "p44_lip_L",
-    "p45_lip_L"
+    "moingoai_1",
+    "moingoai_2",
+    "moingoai_3",
+    "moingoai_4",
+    "moingoai_5",
+    "moingoai_6",
+    "moingoai_7"
    ],
-   "line": "lip_outer",
+   "line": "moingoai",
    "anchor": 0,
    "coincide": null,
    "tmpl": [
@@ -1047,20 +676,48 @@
    ]
   },
   {
-   "name": "p43_lip_M",
+   "name": "moingoai_3",
+   "group": "moingoai",
+   "region": "lip",
+   "side": "L",
+   "flip": "moingoai_5",
+   "mp_idx": 37,
+   "type": "C",
+   "curve": [
+    "moingoai_1",
+    "moingoai_2",
+    "moingoai_3",
+    "moingoai_4",
+    "moingoai_5",
+    "moingoai_6",
+    "moingoai_7"
+   ],
+   "line": "moingoai",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    242.73,
+    310.9
+   ]
+  },
+  {
+   "name": "moingoai_4",
+   "group": "moingoai",
    "region": "lip",
    "side": "M",
-   "flip": "p43_lip_M",
+   "flip": "moingoai_4",
    "mp_idx": 0,
    "type": "C",
    "curve": [
-    "p41_lip_R",
-    "p42_lip_R",
-    "p43_lip_M",
-    "p44_lip_L",
-    "p45_lip_L"
+    "moingoai_1",
+    "moingoai_2",
+    "moingoai_3",
+    "moingoai_4",
+    "moingoai_5",
+    "moingoai_6",
+    "moingoai_7"
    ],
-   "line": "lip_outer",
+   "line": "moingoai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -1069,20 +726,48 @@
    ]
   },
   {
-   "name": "p44_lip_L",
+   "name": "moingoai_5",
+   "group": "moingoai",
    "region": "lip",
-   "side": "L",
-   "flip": "p42_lip_R",
+   "side": "R",
+   "flip": "moingoai_3",
+   "mp_idx": 267,
+   "type": "C",
+   "curve": [
+    "moingoai_1",
+    "moingoai_2",
+    "moingoai_3",
+    "moingoai_4",
+    "moingoai_5",
+    "moingoai_6",
+    "moingoai_7"
+   ],
+   "line": "moingoai",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    281.05,
+    309.47
+   ]
+  },
+  {
+   "name": "moingoai_6",
+   "group": "moingoai",
+   "region": "lip",
+   "side": "R",
+   "flip": "moingoai_2",
    "mp_idx": 270,
    "type": "C",
    "curve": [
-    "p41_lip_R",
-    "p42_lip_R",
-    "p43_lip_M",
-    "p44_lip_L",
-    "p45_lip_L"
+    "moingoai_1",
+    "moingoai_2",
+    "moingoai_3",
+    "moingoai_4",
+    "moingoai_5",
+    "moingoai_6",
+    "moingoai_7"
    ],
-   "line": "lip_outer",
+   "line": "moingoai",
    "anchor": 0,
    "coincide": null,
    "tmpl": [
@@ -1091,14 +776,15 @@
    ]
   },
   {
-   "name": "p45_lip_L",
+   "name": "moingoai_7",
+   "group": "moingoai",
    "region": "lip",
-   "side": "L",
-   "flip": "p41_lip_R",
+   "side": "R",
+   "flip": "moingoai_1",
    "mp_idx": 291,
    "type": "E",
    "curve": null,
-   "line": "lip_outer",
+   "line": "moingoai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -1107,42 +793,73 @@
    ]
   },
   {
-   "name": "p46_lip_L",
+   "name": "moingoai_8",
+   "group": "moingoai",
    "region": "lip",
-   "side": "L",
-   "flip": "p48_lip_R",
-   "mp_idx": 405,
+   "side": "R",
+   "flip": "moingoai_12",
+   "mp_idx": 321,
    "type": "C",
    "curve": [
-    "p45_lip_L",
-    "p46_lip_L",
-    "p47_lip_M",
-    "p48_lip_R",
-    "p41_lip_R"
+    "moingoai_7",
+    "moingoai_8",
+    "moingoai_9",
+    "moingoai_10",
+    "moingoai_11",
+    "moingoai_12",
+    "moingoai_1"
    ],
-   "line": "lip_outer",
+   "line": "moingoai",
    "anchor": 0,
    "coincide": null,
    "tmpl": [
-    299.69,
-    361.05
+    311.59,
+    349.77
    ]
   },
   {
-   "name": "p47_lip_M",
+   "name": "moingoai_9",
+   "group": "moingoai",
+   "region": "lip",
+   "side": "R",
+   "flip": "moingoai_11",
+   "mp_idx": 314,
+   "type": "C",
+   "curve": [
+    "moingoai_7",
+    "moingoai_8",
+    "moingoai_9",
+    "moingoai_10",
+    "moingoai_11",
+    "moingoai_12",
+    "moingoai_1"
+   ],
+   "line": "moingoai",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    283.24,
+    368.91
+   ]
+  },
+  {
+   "name": "moingoai_10",
+   "group": "moingoai",
    "region": "lip",
    "side": "M",
-   "flip": "p47_lip_M",
+   "flip": "moingoai_10",
    "mp_idx": 17,
    "type": "C",
    "curve": [
-    "p45_lip_L",
-    "p46_lip_L",
-    "p47_lip_M",
-    "p48_lip_R",
-    "p41_lip_R"
+    "moingoai_7",
+    "moingoai_8",
+    "moingoai_9",
+    "moingoai_10",
+    "moingoai_11",
+    "moingoai_12",
+    "moingoai_1"
    ],
-   "line": "lip_outer",
+   "line": "moingoai",
    "anchor": 1,
    "coincide": null,
    "tmpl": [
@@ -1151,100 +868,254 @@
    ]
   },
   {
-   "name": "p48_lip_R",
+   "name": "moingoai_11",
+   "group": "moingoai",
    "region": "lip",
-   "side": "R",
-   "flip": "p46_lip_L",
-   "mp_idx": 181,
+   "side": "L",
+   "flip": "moingoai_9",
+   "mp_idx": 84,
    "type": "C",
    "curve": [
-    "p45_lip_L",
-    "p46_lip_L",
-    "p47_lip_M",
-    "p48_lip_R",
-    "p41_lip_R"
+    "moingoai_7",
+    "moingoai_8",
+    "moingoai_9",
+    "moingoai_10",
+    "moingoai_11",
+    "moingoai_12",
+    "moingoai_1"
    ],
-   "line": "lip_outer",
+   "line": "moingoai",
    "anchor": 0,
    "coincide": null,
    "tmpl": [
-    225.46,
-    364.13
+    242.77,
+    370.57
    ]
   },
   {
-   "name": "p49_lip_M",
+   "name": "moingoai_12",
+   "group": "moingoai",
+   "region": "lip",
+   "side": "L",
+   "flip": "moingoai_8",
+   "mp_idx": 91,
+   "type": "C",
+   "curve": [
+    "moingoai_7",
+    "moingoai_8",
+    "moingoai_9",
+    "moingoai_10",
+    "moingoai_11",
+    "moingoai_12",
+    "moingoai_1"
+   ],
+   "line": "moingoai",
+   "anchor": 0,
+   "coincide": null,
+   "tmpl": [
+    212.42,
+    353.55
+   ]
+  },
+  {
+   "name": "moitrong_1",
+   "group": "moitrong",
+   "region": "lip",
+   "side": "L",
+   "flip": "moitrong_5",
+   "mp_idx": 78,
+   "type": "E",
+   "curve": null,
+   "line": "moitrong",
+   "anchor": 1,
+   "coincide": null,
+   "tmpl": [
+    203.38,
+    332.06
+   ]
+  },
+  {
+   "name": "moitrong_2",
+   "group": "moitrong",
+   "region": "lip",
+   "side": "L",
+   "flip": "moitrong_4",
+   "mp_idx": 81,
+   "type": "C",
+   "curve": [
+    "moitrong_1",
+    "moitrong_2",
+    "moitrong_3",
+    "moitrong_4",
+    "moitrong_5"
+   ],
+   "line": "moitrong",
+   "anchor": 0,
+   "coincide": "moitrong_8",
+   "tmpl": [
+    231.63,
+    324.65
+   ]
+  },
+  {
+   "name": "moitrong_3",
+   "group": "moitrong",
    "region": "lip",
    "side": "M",
-   "flip": "p49_lip_M",
+   "flip": "moitrong_3",
    "mp_idx": 13,
    "type": "C",
    "curve": [
-    "p41_lip_R",
-    "p49_lip_M",
-    "p45_lip_L"
+    "moitrong_1",
+    "moitrong_2",
+    "moitrong_3",
+    "moitrong_4",
+    "moitrong_5"
    ],
-   "line": "lip_inner",
+   "line": "moitrong",
    "anchor": 1,
-   "coincide": "p50_lip_M",
+   "coincide": "moitrong_7",
    "tmpl": [
     262.04,
     324.33
    ]
   },
   {
-   "name": "p50_lip_M",
+   "name": "moitrong_4",
+   "group": "moitrong",
+   "region": "lip",
+   "side": "R",
+   "flip": "moitrong_2",
+   "mp_idx": 311,
+   "type": "C",
+   "curve": [
+    "moitrong_1",
+    "moitrong_2",
+    "moitrong_3",
+    "moitrong_4",
+    "moitrong_5"
+   ],
+   "line": "moitrong",
+   "anchor": 0,
+   "coincide": "moitrong_6",
+   "tmpl": [
+    291.59,
+    322.48
+   ]
+  },
+  {
+   "name": "moitrong_5",
+   "group": "moitrong",
+   "region": "lip",
+   "side": "R",
+   "flip": "moitrong_1",
+   "mp_idx": 308,
+   "type": "E",
+   "curve": null,
+   "line": "moitrong",
+   "anchor": 1,
+   "coincide": null,
+   "tmpl": [
+    318.52,
+    328.0
+   ]
+  },
+  {
+   "name": "moitrong_6",
+   "group": "moitrong",
+   "region": "lip",
+   "side": "R",
+   "flip": "moitrong_8",
+   "mp_idx": 402,
+   "type": "C",
+   "curve": [
+    "moitrong_5",
+    "moitrong_6",
+    "moitrong_7",
+    "moitrong_8",
+    "moitrong_1"
+   ],
+   "line": "moitrong",
+   "anchor": 0,
+   "coincide": "moitrong_4",
+   "tmpl": [
+    292.41,
+    345.89
+   ]
+  },
+  {
+   "name": "moitrong_7",
+   "group": "moitrong",
    "region": "lip",
    "side": "M",
-   "flip": "p50_lip_M",
+   "flip": "moitrong_7",
    "mp_idx": 14,
    "type": "C",
    "curve": [
-    "p45_lip_L",
-    "p50_lip_M",
-    "p41_lip_R"
+    "moitrong_5",
+    "moitrong_6",
+    "moitrong_7",
+    "moitrong_8",
+    "moitrong_1"
    ],
-   "line": "lip_inner",
+   "line": "moitrong",
    "anchor": 1,
-   "coincide": "p49_lip_M",
+   "coincide": "moitrong_3",
    "tmpl": [
     262.78,
     351.79
    ]
+  },
+  {
+   "name": "moitrong_8",
+   "group": "moitrong",
+   "region": "lip",
+   "side": "L",
+   "flip": "moitrong_6",
+   "mp_idx": 178,
+   "type": "C",
+   "curve": [
+    "moitrong_5",
+    "moitrong_6",
+    "moitrong_7",
+    "moitrong_8",
+    "moitrong_1"
+   ],
+   "line": "moitrong",
+   "anchor": 0,
+   "coincide": "moitrong_2",
+   "tmpl": [
+    232.28,
+    348.41
+   ]
   }
  ],
  "lines": {
-  "jaw": {
+  "longmaytrai": {
    "closed": false
   },
-  "brow_R": {
+  "longmayphai": {
    "closed": false
   },
-  "brow_L": {
+  "songmui": {
    "closed": false
   },
-  "nose_bridge": {
-   "closed": false
-  },
-  "nose_base": {
-   "closed": false
-  },
-  "eye_R": {
+  "mattrai": {
    "closed": true
   },
-  "eye_L": {
+  "matphai": {
    "closed": true
   },
-  "lip_outer": {
+  "moingoai": {
    "closed": true
   },
-  "lip_inner": {
-   "closed": false
+  "moitrong": {
+   "closed": true
   }
  },
  "iod_points": [
-  "p33_eye_R",
-  "p39_eye_L"
+  "mattrai_1",
+  "matphai_1"
  ],
  "t_flip": null,
  "tolerance": null

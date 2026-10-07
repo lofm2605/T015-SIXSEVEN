@@ -5,7 +5,87 @@
   "attributes": [],
   "sublabels": [
    {
-    "name": "p01_jaw_R",
+    "name": "longmaytrai_1",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "longmaytrai_2",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "longmaytrai_3",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "longmaytrai_4",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "longmaytrai_5",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "longmayphai_1",
     "type": "points",
     "color": "#e03131",
     "attributes": [
@@ -21,7 +101,7 @@
     ]
    },
    {
-    "name": "p02_jaw_R",
+    "name": "longmayphai_2",
     "type": "points",
     "color": "#e03131",
     "attributes": [
@@ -37,7 +117,7 @@
     ]
    },
    {
-    "name": "p03_jaw_R",
+    "name": "longmayphai_3",
     "type": "points",
     "color": "#e03131",
     "attributes": [
@@ -53,7 +133,7 @@
     ]
    },
    {
-    "name": "p04_jaw_R",
+    "name": "longmayphai_4",
     "type": "points",
     "color": "#e03131",
     "attributes": [
@@ -69,7 +149,7 @@
     ]
    },
    {
-    "name": "p05_jaw_R",
+    "name": "longmayphai_5",
     "type": "points",
     "color": "#e03131",
     "attributes": [
@@ -85,55 +165,7 @@
     ]
    },
    {
-    "name": "p06_jaw_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p07_jaw_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p08_jaw_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p09_jaw_M",
+    "name": "songmui_1",
     "type": "points",
     "color": "#2f9e44",
     "attributes": [
@@ -149,295 +181,7 @@
     ]
    },
    {
-    "name": "p10_jaw_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p11_jaw_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p12_jaw_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p13_jaw_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p14_jaw_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p15_jaw_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p16_jaw_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p17_jaw_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p18_brow_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p19_brow_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p20_brow_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p21_brow_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p22_brow_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p23_brow_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p24_brow_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p25_brow_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p26_brow_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p27_brow_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p28_nose_M",
+    "name": "songmui_2",
     "type": "points",
     "color": "#2f9e44",
     "attributes": [
@@ -453,7 +197,7 @@
     ]
    },
    {
-    "name": "p29_nose_M",
+    "name": "songmui_3",
     "type": "points",
     "color": "#2f9e44",
     "attributes": [
@@ -469,23 +213,7 @@
     ]
    },
    {
-    "name": "p30_nose_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p31_nose_M",
+    "name": "songmui_4",
     "type": "points",
     "color": "#2f9e44",
     "attributes": [
@@ -501,7 +229,7 @@
     ]
    },
    {
-    "name": "p32_nose_L",
+    "name": "mattrai_1",
     "type": "points",
     "color": "#1971c2",
     "attributes": [
@@ -517,71 +245,7 @@
     ]
    },
    {
-    "name": "p33_eye_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p34_eye_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p35_eye_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p36_eye_R",
-    "type": "points",
-    "color": "#e03131",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p37_eye_L",
+    "name": "mattrai_2",
     "type": "points",
     "color": "#1971c2",
     "attributes": [
@@ -597,7 +261,7 @@
     ]
    },
    {
-    "name": "p38_eye_L",
+    "name": "mattrai_3",
     "type": "points",
     "color": "#1971c2",
     "attributes": [
@@ -613,7 +277,7 @@
     ]
    },
    {
-    "name": "p39_eye_L",
+    "name": "mattrai_4",
     "type": "points",
     "color": "#1971c2",
     "attributes": [
@@ -629,7 +293,7 @@
     ]
    },
    {
-    "name": "p40_eye_L",
+    "name": "mattrai_5",
     "type": "points",
     "color": "#1971c2",
     "attributes": [
@@ -645,7 +309,55 @@
     ]
    },
    {
-    "name": "p41_lip_R",
+    "name": "mattrai_6",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "mattrai_7",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "mattrai_8",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "matphai_1",
     "type": "points",
     "color": "#e03131",
     "attributes": [
@@ -661,7 +373,7 @@
     ]
    },
    {
-    "name": "p42_lip_R",
+    "name": "matphai_2",
     "type": "points",
     "color": "#e03131",
     "attributes": [
@@ -677,7 +389,151 @@
     ]
    },
    {
-    "name": "p43_lip_M",
+    "name": "matphai_3",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "matphai_4",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "matphai_5",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "matphai_6",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "matphai_7",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "matphai_8",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_1",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_2",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_3",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_4",
     "type": "points",
     "color": "#2f9e44",
     "attributes": [
@@ -693,71 +549,7 @@
     ]
    },
    {
-    "name": "p44_lip_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p45_lip_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p46_lip_L",
-    "type": "points",
-    "color": "#1971c2",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p47_lip_M",
-    "type": "points",
-    "color": "#2f9e44",
-    "attributes": [
-     {
-      "name": "low_conf",
-      "mutable": true,
-      "input_type": "checkbox",
-      "default_value": "false",
-      "values": [
-       "false"
-      ]
-     }
-    ]
-   },
-   {
-    "name": "p48_lip_R",
+    "name": "moingoai_5",
     "type": "points",
     "color": "#e03131",
     "attributes": [
@@ -773,7 +565,71 @@
     ]
    },
    {
-    "name": "p49_lip_M",
+    "name": "moingoai_6",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_7",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_8",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_9",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_10",
     "type": "points",
     "color": "#2f9e44",
     "attributes": [
@@ -789,9 +645,153 @@
     ]
    },
    {
-    "name": "p50_lip_M",
+    "name": "moingoai_11",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moingoai_12",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moitrong_1",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moitrong_2",
+    "type": "points",
+    "color": "#1971c2",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moitrong_3",
     "type": "points",
     "color": "#2f9e44",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moitrong_4",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moitrong_5",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moitrong_6",
+    "type": "points",
+    "color": "#e03131",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moitrong_7",
+    "type": "points",
+    "color": "#2f9e44",
+    "attributes": [
+     {
+      "name": "low_conf",
+      "mutable": true,
+      "input_type": "checkbox",
+      "default_value": "false",
+      "values": [
+       "false"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "moitrong_8",
+    "type": "points",
+    "color": "#1971c2",
     "attributes": [
      {
       "name": "low_conf",
@@ -805,6 +805,6 @@
     ]
    }
   ],
-  "svg": "<line x1=\"7.51\" y1=\"26.34\" x2=\"8.59\" y2=\"44.28\" data-type=\"edge\" data-node-from=\"1\" data-node-to=\"2\"></line>\n<line x1=\"8.59\" y1=\"44.28\" x2=\"10.2\" y2=\"54.06\" data-type=\"edge\" data-node-from=\"2\" data-node-to=\"3\"></line>\n<line x1=\"10.2\" y1=\"54.06\" x2=\"13.18\" y2=\"64.56\" data-type=\"edge\" data-node-from=\"3\" data-node-to=\"4\"></line>\n<line x1=\"13.18\" y1=\"64.56\" x2=\"17.3\" y2=\"72.82\" data-type=\"edge\" data-node-from=\"4\" data-node-to=\"5\"></line>\n<line x1=\"17.3\" y1=\"72.82\" x2=\"21.79\" y2=\"78.76\" data-type=\"edge\" data-node-from=\"5\" data-node-to=\"6\"></line>\n<line x1=\"21.79\" y1=\"78.76\" x2=\"27.46\" y2=\"84.06\" data-type=\"edge\" data-node-from=\"6\" data-node-to=\"7\"></line>\n<line x1=\"27.46\" y1=\"84.06\" x2=\"37.9\" y2=\"91.08\" data-type=\"edge\" data-node-from=\"7\" data-node-to=\"8\"></line>\n<line x1=\"37.9\" y1=\"91.08\" x2=\"52.77\" y2=\"94\" data-type=\"edge\" data-node-from=\"8\" data-node-to=\"9\"></line>\n<line x1=\"52.77\" y1=\"94\" x2=\"67.06\" y2=\"90.09\" data-type=\"edge\" data-node-from=\"9\" data-node-to=\"10\"></line>\n<line x1=\"67.06\" y1=\"90.09\" x2=\"76.5\" y2=\"82.42\" data-type=\"edge\" data-node-from=\"10\" data-node-to=\"11\"></line>\n<line x1=\"76.5\" y1=\"82.42\" x2=\"81.54\" y2=\"76.83\" data-type=\"edge\" data-node-from=\"11\" data-node-to=\"12\"></line>\n<line x1=\"81.54\" y1=\"76.83\" x2=\"85.42\" y2=\"70.71\" data-type=\"edge\" data-node-from=\"12\" data-node-to=\"13\"></line>\n<line x1=\"85.42\" y1=\"70.71\" x2=\"88.85\" y2=\"62.23\" data-type=\"edge\" data-node-from=\"13\" data-node-to=\"14\"></line>\n<line x1=\"88.85\" y1=\"62.23\" x2=\"91.21\" y2=\"51.75\" data-type=\"edge\" data-node-from=\"14\" data-node-to=\"15\"></line>\n<line x1=\"91.21\" y1=\"51.75\" x2=\"92.24\" y2=\"41.97\" data-type=\"edge\" data-node-from=\"15\" data-node-to=\"16\"></line>\n<line x1=\"92.24\" y1=\"41.97\" x2=\"92.49\" y2=\"24.02\" data-type=\"edge\" data-node-from=\"16\" data-node-to=\"17\"></line>\n<line x1=\"14.96\" y1=\"13.29\" x2=\"18.54\" y2=\"9.48\" data-type=\"edge\" data-node-from=\"18\" data-node-to=\"19\"></line>\n<line x1=\"18.54\" y1=\"9.48\" x2=\"24.27\" y2=\"7.22\" data-type=\"edge\" data-node-from=\"19\" data-node-to=\"20\"></line>\n<line x1=\"24.27\" y1=\"7.22\" x2=\"32.21\" y2=\"7.08\" data-type=\"edge\" data-node-from=\"20\" data-node-to=\"21\"></line>\n<line x1=\"32.21\" y1=\"7.08\" x2=\"41.52\" y2=\"7.98\" data-type=\"edge\" data-node-from=\"21\" data-node-to=\"22\"></line>\n<line x1=\"60.48\" y1=\"7.52\" x2=\"69.54\" y2=\"6.21\" data-type=\"edge\" data-node-from=\"23\" data-node-to=\"24\"></line>\n<line x1=\"69.54\" y1=\"6.21\" x2=\"77.13\" y2=\"6\" data-type=\"edge\" data-node-from=\"24\" data-node-to=\"25\"></line>\n<line x1=\"77.13\" y1=\"6\" x2=\"82.62\" y2=\"7.95\" data-type=\"edge\" data-node-from=\"25\" data-node-to=\"26\"></line>\n<line x1=\"82.62\" y1=\"7.95\" x2=\"86\" y2=\"11.47\" data-type=\"edge\" data-node-from=\"26\" data-node-to=\"27\"></line>\n<line x1=\"51.26\" y1=\"19.37\" x2=\"52.01\" y2=\"45.25\" data-type=\"edge\" data-node-from=\"28\" data-node-to=\"29\"></line>\n<line x1=\"40.79\" y1=\"47.99\" x2=\"51.92\" y2=\"49.36\" data-type=\"edge\" data-node-from=\"30\" data-node-to=\"31\"></line>\n<line x1=\"51.92\" y1=\"49.36\" x2=\"62.58\" y2=\"47.42\" data-type=\"edge\" data-node-from=\"31\" data-node-to=\"32\"></line>\n<line x1=\"23.24\" y1=\"22.46\" x2=\"30.26\" y2=\"19.32\" data-type=\"edge\" data-node-from=\"33\" data-node-to=\"34\"></line>\n<line x1=\"30.26\" y1=\"19.32\" x2=\"40.29\" y2=\"22.49\" data-type=\"edge\" data-node-from=\"34\" data-node-to=\"35\"></line>\n<line x1=\"40.29\" y1=\"22.49\" x2=\"31.52\" y2=\"23.86\" data-type=\"edge\" data-node-from=\"35\" data-node-to=\"36\"></line>\n<line x1=\"31.52\" y1=\"23.86\" x2=\"23.24\" y2=\"22.46\" data-type=\"edge\" data-node-from=\"36\" data-node-to=\"33\"></line>\n<line x1=\"61.54\" y1=\"22.09\" x2=\"71.2\" y2=\"18.36\" data-type=\"edge\" data-node-from=\"37\" data-node-to=\"38\"></line>\n<line x1=\"71.2\" y1=\"18.36\" x2=\"78.12\" y2=\"21.19\" data-type=\"edge\" data-node-from=\"38\" data-node-to=\"39\"></line>\n<line x1=\"78.12\" y1=\"21.19\" x2=\"70.27\" y2=\"23.05\" data-type=\"edge\" data-node-from=\"39\" data-node-to=\"40\"></line>\n<line x1=\"70.27\" y1=\"23.05\" x2=\"61.54\" y2=\"22.09\" data-type=\"edge\" data-node-from=\"40\" data-node-to=\"37\"></line>\n<line x1=\"33.73\" y1=\"63.48\" x2=\"37.86\" y2=\"60.31\" data-type=\"edge\" data-node-from=\"41\" data-node-to=\"42\"></line>\n<line x1=\"37.86\" y1=\"60.31\" x2=\"52.03\" y2=\"58.23\" data-type=\"edge\" data-node-from=\"42\" data-node-to=\"43\"></line>\n<line x1=\"52.03\" y1=\"58.23\" x2=\"65.67\" y2=\"59.27\" data-type=\"edge\" data-node-from=\"43\" data-node-to=\"44\"></line>\n<line x1=\"65.67\" y1=\"59.27\" x2=\"69.55\" y2=\"62.2\" data-type=\"edge\" data-node-from=\"44\" data-node-to=\"45\"></line>\n<line x1=\"69.55\" y1=\"62.2\" x2=\"62.7\" y2=\"71.85\" data-type=\"edge\" data-node-from=\"45\" data-node-to=\"46\"></line>\n<line x1=\"62.7\" y1=\"71.85\" x2=\"52.3\" y2=\"75\" data-type=\"edge\" data-node-from=\"46\" data-node-to=\"47\"></line>\n<line x1=\"52.3\" y1=\"75\" x2=\"41.6\" y2=\"72.73\" data-type=\"edge\" data-node-from=\"47\" data-node-to=\"48\"></line>\n<line x1=\"41.6\" y1=\"72.73\" x2=\"33.73\" y2=\"63.48\" data-type=\"edge\" data-node-from=\"48\" data-node-to=\"41\"></line>\n<line x1=\"52\" y1=\"61.42\" x2=\"52.21\" y2=\"69.22\" data-type=\"edge\" data-node-from=\"49\" data-node-to=\"50\"></line>\n<circle r=\"0.75\" cx=\"7.51\" cy=\"26.34\" data-type=\"element node\" data-element-id=\"1\" data-node-id=\"1\" data-label-name=\"p01_jaw_R\"></circle>\n<circle r=\"0.75\" cx=\"8.59\" cy=\"44.28\" data-type=\"element node\" data-element-id=\"2\" data-node-id=\"2\" data-label-name=\"p02_jaw_R\"></circle>\n<circle r=\"0.75\" cx=\"10.2\" cy=\"54.06\" data-type=\"element node\" data-element-id=\"3\" data-node-id=\"3\" data-label-name=\"p03_jaw_R\"></circle>\n<circle r=\"0.75\" cx=\"13.18\" cy=\"64.56\" data-type=\"element node\" data-element-id=\"4\" data-node-id=\"4\" data-label-name=\"p04_jaw_R\"></circle>\n<circle r=\"0.75\" cx=\"17.3\" cy=\"72.82\" data-type=\"element node\" data-element-id=\"5\" data-node-id=\"5\" data-label-name=\"p05_jaw_R\"></circle>\n<circle r=\"0.75\" cx=\"21.79\" cy=\"78.76\" data-type=\"element node\" data-element-id=\"6\" data-node-id=\"6\" data-label-name=\"p06_jaw_R\"></circle>\n<circle r=\"0.75\" cx=\"27.46\" cy=\"84.06\" data-type=\"element node\" data-element-id=\"7\" data-node-id=\"7\" data-label-name=\"p07_jaw_R\"></circle>\n<circle r=\"0.75\" cx=\"37.9\" cy=\"91.08\" data-type=\"element node\" data-element-id=\"8\" data-node-id=\"8\" data-label-name=\"p08_jaw_R\"></circle>\n<circle r=\"0.75\" cx=\"52.77\" cy=\"94\" data-type=\"element node\" data-element-id=\"9\" data-node-id=\"9\" data-label-name=\"p09_jaw_M\"></circle>\n<circle r=\"0.75\" cx=\"67.06\" cy=\"90.09\" data-type=\"element node\" data-element-id=\"10\" data-node-id=\"10\" data-label-name=\"p10_jaw_L\"></circle>\n<circle r=\"0.75\" cx=\"76.5\" cy=\"82.42\" data-type=\"element node\" data-element-id=\"11\" data-node-id=\"11\" data-label-name=\"p11_jaw_L\"></circle>\n<circle r=\"0.75\" cx=\"81.54\" cy=\"76.83\" data-type=\"element node\" data-element-id=\"12\" data-node-id=\"12\" data-label-name=\"p12_jaw_L\"></circle>\n<circle r=\"0.75\" cx=\"85.42\" cy=\"70.71\" data-type=\"element node\" data-element-id=\"13\" data-node-id=\"13\" data-label-name=\"p13_jaw_L\"></circle>\n<circle r=\"0.75\" cx=\"88.85\" cy=\"62.23\" data-type=\"element node\" data-element-id=\"14\" data-node-id=\"14\" data-label-name=\"p14_jaw_L\"></circle>\n<circle r=\"0.75\" cx=\"91.21\" cy=\"51.75\" data-type=\"element node\" data-element-id=\"15\" data-node-id=\"15\" data-label-name=\"p15_jaw_L\"></circle>\n<circle r=\"0.75\" cx=\"92.24\" cy=\"41.97\" data-type=\"element node\" data-element-id=\"16\" data-node-id=\"16\" data-label-name=\"p16_jaw_L\"></circle>\n<circle r=\"0.75\" cx=\"92.49\" cy=\"24.02\" data-type=\"element node\" data-element-id=\"17\" data-node-id=\"17\" data-label-name=\"p17_jaw_L\"></circle>\n<circle r=\"0.75\" cx=\"14.96\" cy=\"13.29\" data-type=\"element node\" data-element-id=\"18\" data-node-id=\"18\" data-label-name=\"p18_brow_R\"></circle>\n<circle r=\"0.75\" cx=\"18.54\" cy=\"9.48\" data-type=\"element node\" data-element-id=\"19\" data-node-id=\"19\" data-label-name=\"p19_brow_R\"></circle>\n<circle r=\"0.75\" cx=\"24.27\" cy=\"7.22\" data-type=\"element node\" data-element-id=\"20\" data-node-id=\"20\" data-label-name=\"p20_brow_R\"></circle>\n<circle r=\"0.75\" cx=\"32.21\" cy=\"7.08\" data-type=\"element node\" data-element-id=\"21\" data-node-id=\"21\" data-label-name=\"p21_brow_R\"></circle>\n<circle r=\"0.75\" cx=\"41.52\" cy=\"7.98\" data-type=\"element node\" data-element-id=\"22\" data-node-id=\"22\" data-label-name=\"p22_brow_R\"></circle>\n<circle r=\"0.75\" cx=\"60.48\" cy=\"7.52\" data-type=\"element node\" data-element-id=\"23\" data-node-id=\"23\" data-label-name=\"p23_brow_L\"></circle>\n<circle r=\"0.75\" cx=\"69.54\" cy=\"6.21\" data-type=\"element node\" data-element-id=\"24\" data-node-id=\"24\" data-label-name=\"p24_brow_L\"></circle>\n<circle r=\"0.75\" cx=\"77.13\" cy=\"6\" data-type=\"element node\" data-element-id=\"25\" data-node-id=\"25\" data-label-name=\"p25_brow_L\"></circle>\n<circle r=\"0.75\" cx=\"82.62\" cy=\"7.95\" data-type=\"element node\" data-element-id=\"26\" data-node-id=\"26\" data-label-name=\"p26_brow_L\"></circle>\n<circle r=\"0.75\" cx=\"86\" cy=\"11.47\" data-type=\"element node\" data-element-id=\"27\" data-node-id=\"27\" data-label-name=\"p27_brow_L\"></circle>\n<circle r=\"0.75\" cx=\"51.26\" cy=\"19.37\" data-type=\"element node\" data-element-id=\"28\" data-node-id=\"28\" data-label-name=\"p28_nose_M\"></circle>\n<circle r=\"0.75\" cx=\"52.01\" cy=\"45.25\" data-type=\"element node\" data-element-id=\"29\" data-node-id=\"29\" data-label-name=\"p29_nose_M\"></circle>\n<circle r=\"0.75\" cx=\"40.79\" cy=\"47.99\" data-type=\"element node\" data-element-id=\"30\" data-node-id=\"30\" data-label-name=\"p30_nose_R\"></circle>\n<circle r=\"0.75\" cx=\"51.92\" cy=\"49.36\" data-type=\"element node\" data-element-id=\"31\" data-node-id=\"31\" data-label-name=\"p31_nose_M\"></circle>\n<circle r=\"0.75\" cx=\"62.58\" cy=\"47.42\" data-type=\"element node\" data-element-id=\"32\" data-node-id=\"32\" data-label-name=\"p32_nose_L\"></circle>\n<circle r=\"0.75\" cx=\"23.24\" cy=\"22.46\" data-type=\"element node\" data-element-id=\"33\" data-node-id=\"33\" data-label-name=\"p33_eye_R\"></circle>\n<circle r=\"0.75\" cx=\"30.26\" cy=\"19.32\" data-type=\"element node\" data-element-id=\"34\" data-node-id=\"34\" data-label-name=\"p34_eye_R\"></circle>\n<circle r=\"0.75\" cx=\"40.29\" cy=\"22.49\" data-type=\"element node\" data-element-id=\"35\" data-node-id=\"35\" data-label-name=\"p35_eye_R\"></circle>\n<circle r=\"0.75\" cx=\"31.52\" cy=\"23.86\" data-type=\"element node\" data-element-id=\"36\" data-node-id=\"36\" data-label-name=\"p36_eye_R\"></circle>\n<circle r=\"0.75\" cx=\"61.54\" cy=\"22.09\" data-type=\"element node\" data-element-id=\"37\" data-node-id=\"37\" data-label-name=\"p37_eye_L\"></circle>\n<circle r=\"0.75\" cx=\"71.2\" cy=\"18.36\" data-type=\"element node\" data-element-id=\"38\" data-node-id=\"38\" data-label-name=\"p38_eye_L\"></circle>\n<circle r=\"0.75\" cx=\"78.12\" cy=\"21.19\" data-type=\"element node\" data-element-id=\"39\" data-node-id=\"39\" data-label-name=\"p39_eye_L\"></circle>\n<circle r=\"0.75\" cx=\"70.27\" cy=\"23.05\" data-type=\"element node\" data-element-id=\"40\" data-node-id=\"40\" data-label-name=\"p40_eye_L\"></circle>\n<circle r=\"0.75\" cx=\"33.73\" cy=\"63.48\" data-type=\"element node\" data-element-id=\"41\" data-node-id=\"41\" data-label-name=\"p41_lip_R\"></circle>\n<circle r=\"0.75\" cx=\"37.86\" cy=\"60.31\" data-type=\"element node\" data-element-id=\"42\" data-node-id=\"42\" data-label-name=\"p42_lip_R\"></circle>\n<circle r=\"0.75\" cx=\"52.03\" cy=\"58.23\" data-type=\"element node\" data-element-id=\"43\" data-node-id=\"43\" data-label-name=\"p43_lip_M\"></circle>\n<circle r=\"0.75\" cx=\"65.67\" cy=\"59.27\" data-type=\"element node\" data-element-id=\"44\" data-node-id=\"44\" data-label-name=\"p44_lip_L\"></circle>\n<circle r=\"0.75\" cx=\"69.55\" cy=\"62.2\" data-type=\"element node\" data-element-id=\"45\" data-node-id=\"45\" data-label-name=\"p45_lip_L\"></circle>\n<circle r=\"0.75\" cx=\"62.7\" cy=\"71.85\" data-type=\"element node\" data-element-id=\"46\" data-node-id=\"46\" data-label-name=\"p46_lip_L\"></circle>\n<circle r=\"0.75\" cx=\"52.3\" cy=\"75\" data-type=\"element node\" data-element-id=\"47\" data-node-id=\"47\" data-label-name=\"p47_lip_M\"></circle>\n<circle r=\"0.75\" cx=\"41.6\" cy=\"72.73\" data-type=\"element node\" data-element-id=\"48\" data-node-id=\"48\" data-label-name=\"p48_lip_R\"></circle>\n<circle r=\"0.75\" cx=\"52\" cy=\"61.42\" data-type=\"element node\" data-element-id=\"49\" data-node-id=\"49\" data-label-name=\"p49_lip_M\"></circle>\n<circle r=\"0.75\" cx=\"52.21\" cy=\"69.22\" data-type=\"element node\" data-element-id=\"50\" data-node-id=\"50\" data-label-name=\"p50_lip_M\"></circle>"
+  "svg": "<line x1=\"38.89\" y1=\"9.72\" x2=\"27.37\" y2=\"8.6\" data-type=\"edge\" data-node-from=\"1\" data-node-to=\"2\"></line>\n<line x1=\"27.37\" y1=\"8.6\" x2=\"17.53\" y2=\"8.77\" data-type=\"edge\" data-node-from=\"2\" data-node-to=\"3\"></line>\n<line x1=\"17.53\" y1=\"8.77\" x2=\"10.43\" y2=\"11.57\" data-type=\"edge\" data-node-from=\"3\" data-node-to=\"4\"></line>\n<line x1=\"10.43\" y1=\"11.57\" x2=\"6\" y2=\"16.29\" data-type=\"edge\" data-node-from=\"4\" data-node-to=\"5\"></line>\n<line x1=\"62.38\" y1=\"9.14\" x2=\"73.6\" y2=\"7.53\" data-type=\"edge\" data-node-from=\"6\" data-node-to=\"7\"></line>\n<line x1=\"73.6\" y1=\"7.53\" x2=\"83.01\" y2=\"7.26\" data-type=\"edge\" data-node-from=\"7\" data-node-to=\"8\"></line>\n<line x1=\"83.01\" y1=\"7.26\" x2=\"89.81\" y2=\"9.68\" data-type=\"edge\" data-node-from=\"8\" data-node-to=\"9\"></line>\n<line x1=\"89.81\" y1=\"9.68\" x2=\"94\" y2=\"14.04\" data-type=\"edge\" data-node-from=\"9\" data-node-to=\"10\"></line>\n<line x1=\"50.96\" y1=\"23.83\" x2=\"51.28\" y2=\"35.12\" data-type=\"edge\" data-node-from=\"11\" data-node-to=\"12\"></line>\n<line x1=\"51.28\" y1=\"35.12\" x2=\"51.6\" y2=\"44.81\" data-type=\"edge\" data-node-from=\"12\" data-node-to=\"13\"></line>\n<line x1=\"51.6\" y1=\"44.81\" x2=\"51.89\" y2=\"55.88\" data-type=\"edge\" data-node-from=\"13\" data-node-to=\"14\"></line>\n<line x1=\"16.25\" y1=\"27.65\" x2=\"21.19\" y2=\"24.51\" data-type=\"edge\" data-node-from=\"15\" data-node-to=\"16\"></line>\n<line x1=\"21.19\" y1=\"24.51\" x2=\"24.95\" y2=\"23.76\" data-type=\"edge\" data-node-from=\"16\" data-node-to=\"17\"></line>\n<line x1=\"24.95\" y1=\"23.76\" x2=\"28.79\" y2=\"23.9\" data-type=\"edge\" data-node-from=\"17\" data-node-to=\"18\"></line>\n<line x1=\"28.79\" y1=\"23.9\" x2=\"37.37\" y2=\"27.69\" data-type=\"edge\" data-node-from=\"18\" data-node-to=\"19\"></line>\n<line x1=\"37.37\" y1=\"27.69\" x2=\"30.25\" y2=\"28.85\" data-type=\"edge\" data-node-from=\"19\" data-node-to=\"20\"></line>\n<line x1=\"30.25\" y1=\"28.85\" x2=\"26.51\" y2=\"29.39\" data-type=\"edge\" data-node-from=\"20\" data-node-to=\"21\"></line>\n<line x1=\"26.51\" y1=\"29.39\" x2=\"22.67\" y2=\"29.49\" data-type=\"edge\" data-node-from=\"21\" data-node-to=\"22\"></line>\n<line x1=\"22.67\" y1=\"29.49\" x2=\"16.25\" y2=\"27.65\" data-type=\"edge\" data-node-from=\"22\" data-node-to=\"15\"></line>\n<line x1=\"84.23\" y1=\"26.07\" x2=\"79.26\" y2=\"23.21\" data-type=\"edge\" data-node-from=\"23\" data-node-to=\"24\"></line>\n<line x1=\"79.26\" y1=\"23.21\" x2=\"75.66\" y2=\"22.58\" data-type=\"edge\" data-node-from=\"24\" data-node-to=\"25\"></line>\n<line x1=\"75.66\" y1=\"22.58\" x2=\"71.72\" y2=\"22.81\" data-type=\"edge\" data-node-from=\"25\" data-node-to=\"26\"></line>\n<line x1=\"71.72\" y1=\"22.81\" x2=\"63.7\" y2=\"27.19\" data-type=\"edge\" data-node-from=\"26\" data-node-to=\"27\"></line>\n<line x1=\"63.7\" y1=\"27.19\" x2=\"70.63\" y2=\"28.07\" data-type=\"edge\" data-node-from=\"27\" data-node-to=\"28\"></line>\n<line x1=\"70.63\" y1=\"28.07\" x2=\"74.51\" y2=\"28.38\" data-type=\"edge\" data-node-from=\"28\" data-node-to=\"29\"></line>\n<line x1=\"74.51\" y1=\"28.38\" x2=\"78.17\" y2=\"28.27\" data-type=\"edge\" data-node-from=\"29\" data-node-to=\"30\"></line>\n<line x1=\"78.17\" y1=\"28.27\" x2=\"84.23\" y2=\"26.07\" data-type=\"edge\" data-node-from=\"30\" data-node-to=\"23\"></line>\n<line x1=\"29.25\" y1=\"78.46\" x2=\"34.36\" y2=\"74.54\" data-type=\"edge\" data-node-from=\"31\" data-node-to=\"32\"></line>\n<line x1=\"34.36\" y1=\"74.54\" x2=\"45.08\" y2=\"71.18\" data-type=\"edge\" data-node-from=\"32\" data-node-to=\"33\"></line>\n<line x1=\"45.08\" y1=\"71.18\" x2=\"51.91\" y2=\"71.96\" data-type=\"edge\" data-node-from=\"33\" data-node-to=\"34\"></line>\n<line x1=\"51.91\" y1=\"71.96\" x2=\"58.57\" y2=\"70.68\" data-type=\"edge\" data-node-from=\"34\" data-node-to=\"35\"></line>\n<line x1=\"58.57\" y1=\"70.68\" x2=\"68.8\" y2=\"73.25\" data-type=\"edge\" data-node-from=\"35\" data-node-to=\"36\"></line>\n<line x1=\"68.8\" y1=\"73.25\" x2=\"73.61\" y2=\"76.88\" data-type=\"edge\" data-node-from=\"36\" data-node-to=\"37\"></line>\n<line x1=\"73.61\" y1=\"76.88\" x2=\"69.32\" y2=\"84.86\" data-type=\"edge\" data-node-from=\"37\" data-node-to=\"38\"></line>\n<line x1=\"69.32\" y1=\"84.86\" x2=\"59.34\" y2=\"91.6\" data-type=\"edge\" data-node-from=\"38\" data-node-to=\"39\"></line>\n<line x1=\"59.34\" y1=\"91.6\" x2=\"52.24\" y2=\"92.74\" data-type=\"edge\" data-node-from=\"39\" data-node-to=\"40\"></line>\n<line x1=\"52.24\" y1=\"92.74\" x2=\"45.09\" y2=\"92.19\" data-type=\"edge\" data-node-from=\"40\" data-node-to=\"41\"></line>\n<line x1=\"45.09\" y1=\"92.19\" x2=\"34.41\" y2=\"86.2\" data-type=\"edge\" data-node-from=\"41\" data-node-to=\"42\"></line>\n<line x1=\"34.41\" y1=\"86.2\" x2=\"29.25\" y2=\"78.46\" data-type=\"edge\" data-node-from=\"42\" data-node-to=\"31\"></line>\n<line x1=\"31.23\" y1=\"78.63\" x2=\"41.17\" y2=\"76.02\" data-type=\"edge\" data-node-from=\"43\" data-node-to=\"44\"></line>\n<line x1=\"41.17\" y1=\"76.02\" x2=\"51.88\" y2=\"75.91\" data-type=\"edge\" data-node-from=\"44\" data-node-to=\"45\"></line>\n<line x1=\"51.88\" y1=\"75.91\" x2=\"62.28\" y2=\"75.26\" data-type=\"edge\" data-node-from=\"45\" data-node-to=\"46\"></line>\n<line x1=\"62.28\" y1=\"75.26\" x2=\"71.76\" y2=\"77.2\" data-type=\"edge\" data-node-from=\"46\" data-node-to=\"47\"></line>\n<line x1=\"71.76\" y1=\"77.2\" x2=\"62.57\" y2=\"83.5\" data-type=\"edge\" data-node-from=\"47\" data-node-to=\"48\"></line>\n<line x1=\"62.57\" y1=\"83.5\" x2=\"52.14\" y2=\"85.58\" data-type=\"edge\" data-node-from=\"48\" data-node-to=\"49\"></line>\n<line x1=\"52.14\" y1=\"85.58\" x2=\"41.4\" y2=\"84.39\" data-type=\"edge\" data-node-from=\"49\" data-node-to=\"50\"></line>\n<line x1=\"41.4\" y1=\"84.39\" x2=\"31.23\" y2=\"78.63\" data-type=\"edge\" data-node-from=\"50\" data-node-to=\"43\"></line>\n<circle r=\"0.75\" cx=\"38.89\" cy=\"9.72\" data-type=\"element node\" data-element-id=\"1\" data-node-id=\"1\" data-label-name=\"longmaytrai_1\"></circle>\n<circle r=\"0.75\" cx=\"27.37\" cy=\"8.6\" data-type=\"element node\" data-element-id=\"2\" data-node-id=\"2\" data-label-name=\"longmaytrai_2\"></circle>\n<circle r=\"0.75\" cx=\"17.53\" cy=\"8.77\" data-type=\"element node\" data-element-id=\"3\" data-node-id=\"3\" data-label-name=\"longmaytrai_3\"></circle>\n<circle r=\"0.75\" cx=\"10.43\" cy=\"11.57\" data-type=\"element node\" data-element-id=\"4\" data-node-id=\"4\" data-label-name=\"longmaytrai_4\"></circle>\n<circle r=\"0.75\" cx=\"6\" cy=\"16.29\" data-type=\"element node\" data-element-id=\"5\" data-node-id=\"5\" data-label-name=\"longmaytrai_5\"></circle>\n<circle r=\"0.75\" cx=\"62.38\" cy=\"9.14\" data-type=\"element node\" data-element-id=\"6\" data-node-id=\"6\" data-label-name=\"longmayphai_1\"></circle>\n<circle r=\"0.75\" cx=\"73.6\" cy=\"7.53\" data-type=\"element node\" data-element-id=\"7\" data-node-id=\"7\" data-label-name=\"longmayphai_2\"></circle>\n<circle r=\"0.75\" cx=\"83.01\" cy=\"7.26\" data-type=\"element node\" data-element-id=\"8\" data-node-id=\"8\" data-label-name=\"longmayphai_3\"></circle>\n<circle r=\"0.75\" cx=\"89.81\" cy=\"9.68\" data-type=\"element node\" data-element-id=\"9\" data-node-id=\"9\" data-label-name=\"longmayphai_4\"></circle>\n<circle r=\"0.75\" cx=\"94\" cy=\"14.04\" data-type=\"element node\" data-element-id=\"10\" data-node-id=\"10\" data-label-name=\"longmayphai_5\"></circle>\n<circle r=\"0.75\" cx=\"50.96\" cy=\"23.83\" data-type=\"element node\" data-element-id=\"11\" data-node-id=\"11\" data-label-name=\"songmui_1\"></circle>\n<circle r=\"0.75\" cx=\"51.28\" cy=\"35.12\" data-type=\"element node\" data-element-id=\"12\" data-node-id=\"12\" data-label-name=\"songmui_2\"></circle>\n<circle r=\"0.75\" cx=\"51.6\" cy=\"44.81\" data-type=\"element node\" data-element-id=\"13\" data-node-id=\"13\" data-label-name=\"songmui_3\"></circle>\n<circle r=\"0.75\" cx=\"51.89\" cy=\"55.88\" data-type=\"element node\" data-element-id=\"14\" data-node-id=\"14\" data-label-name=\"songmui_4\"></circle>\n<circle r=\"0.75\" cx=\"16.25\" cy=\"27.65\" data-type=\"element node\" data-element-id=\"15\" data-node-id=\"15\" data-label-name=\"mattrai_1\"></circle>\n<circle r=\"0.75\" cx=\"21.19\" cy=\"24.51\" data-type=\"element node\" data-element-id=\"16\" data-node-id=\"16\" data-label-name=\"mattrai_2\"></circle>\n<circle r=\"0.75\" cx=\"24.95\" cy=\"23.76\" data-type=\"element node\" data-element-id=\"17\" data-node-id=\"17\" data-label-name=\"mattrai_3\"></circle>\n<circle r=\"0.75\" cx=\"28.79\" cy=\"23.9\" data-type=\"element node\" data-element-id=\"18\" data-node-id=\"18\" data-label-name=\"mattrai_4\"></circle>\n<circle r=\"0.75\" cx=\"37.37\" cy=\"27.69\" data-type=\"element node\" data-element-id=\"19\" data-node-id=\"19\" data-label-name=\"mattrai_5\"></circle>\n<circle r=\"0.75\" cx=\"30.25\" cy=\"28.85\" data-type=\"element node\" data-element-id=\"20\" data-node-id=\"20\" data-label-name=\"mattrai_6\"></circle>\n<circle r=\"0.75\" cx=\"26.51\" cy=\"29.39\" data-type=\"element node\" data-element-id=\"21\" data-node-id=\"21\" data-label-name=\"mattrai_7\"></circle>\n<circle r=\"0.75\" cx=\"22.67\" cy=\"29.49\" data-type=\"element node\" data-element-id=\"22\" data-node-id=\"22\" data-label-name=\"mattrai_8\"></circle>\n<circle r=\"0.75\" cx=\"84.23\" cy=\"26.07\" data-type=\"element node\" data-element-id=\"23\" data-node-id=\"23\" data-label-name=\"matphai_1\"></circle>\n<circle r=\"0.75\" cx=\"79.26\" cy=\"23.21\" data-type=\"element node\" data-element-id=\"24\" data-node-id=\"24\" data-label-name=\"matphai_2\"></circle>\n<circle r=\"0.75\" cx=\"75.66\" cy=\"22.58\" data-type=\"element node\" data-element-id=\"25\" data-node-id=\"25\" data-label-name=\"matphai_3\"></circle>\n<circle r=\"0.75\" cx=\"71.72\" cy=\"22.81\" data-type=\"element node\" data-element-id=\"26\" data-node-id=\"26\" data-label-name=\"matphai_4\"></circle>\n<circle r=\"0.75\" cx=\"63.7\" cy=\"27.19\" data-type=\"element node\" data-element-id=\"27\" data-node-id=\"27\" data-label-name=\"matphai_5\"></circle>\n<circle r=\"0.75\" cx=\"70.63\" cy=\"28.07\" data-type=\"element node\" data-element-id=\"28\" data-node-id=\"28\" data-label-name=\"matphai_6\"></circle>\n<circle r=\"0.75\" cx=\"74.51\" cy=\"28.38\" data-type=\"element node\" data-element-id=\"29\" data-node-id=\"29\" data-label-name=\"matphai_7\"></circle>\n<circle r=\"0.75\" cx=\"78.17\" cy=\"28.27\" data-type=\"element node\" data-element-id=\"30\" data-node-id=\"30\" data-label-name=\"matphai_8\"></circle>\n<circle r=\"0.75\" cx=\"29.25\" cy=\"78.46\" data-type=\"element node\" data-element-id=\"31\" data-node-id=\"31\" data-label-name=\"moingoai_1\"></circle>\n<circle r=\"0.75\" cx=\"34.36\" cy=\"74.54\" data-type=\"element node\" data-element-id=\"32\" data-node-id=\"32\" data-label-name=\"moingoai_2\"></circle>\n<circle r=\"0.75\" cx=\"45.08\" cy=\"71.18\" data-type=\"element node\" data-element-id=\"33\" data-node-id=\"33\" data-label-name=\"moingoai_3\"></circle>\n<circle r=\"0.75\" cx=\"51.91\" cy=\"71.96\" data-type=\"element node\" data-element-id=\"34\" data-node-id=\"34\" data-label-name=\"moingoai_4\"></circle>\n<circle r=\"0.75\" cx=\"58.57\" cy=\"70.68\" data-type=\"element node\" data-element-id=\"35\" data-node-id=\"35\" data-label-name=\"moingoai_5\"></circle>\n<circle r=\"0.75\" cx=\"68.8\" cy=\"73.25\" data-type=\"element node\" data-element-id=\"36\" data-node-id=\"36\" data-label-name=\"moingoai_6\"></circle>\n<circle r=\"0.75\" cx=\"73.61\" cy=\"76.88\" data-type=\"element node\" data-element-id=\"37\" data-node-id=\"37\" data-label-name=\"moingoai_7\"></circle>\n<circle r=\"0.75\" cx=\"69.32\" cy=\"84.86\" data-type=\"element node\" data-element-id=\"38\" data-node-id=\"38\" data-label-name=\"moingoai_8\"></circle>\n<circle r=\"0.75\" cx=\"59.34\" cy=\"91.6\" data-type=\"element node\" data-element-id=\"39\" data-node-id=\"39\" data-label-name=\"moingoai_9\"></circle>\n<circle r=\"0.75\" cx=\"52.24\" cy=\"92.74\" data-type=\"element node\" data-element-id=\"40\" data-node-id=\"40\" data-label-name=\"moingoai_10\"></circle>\n<circle r=\"0.75\" cx=\"45.09\" cy=\"92.19\" data-type=\"element node\" data-element-id=\"41\" data-node-id=\"41\" data-label-name=\"moingoai_11\"></circle>\n<circle r=\"0.75\" cx=\"34.41\" cy=\"86.2\" data-type=\"element node\" data-element-id=\"42\" data-node-id=\"42\" data-label-name=\"moingoai_12\"></circle>\n<circle r=\"0.75\" cx=\"31.23\" cy=\"78.63\" data-type=\"element node\" data-element-id=\"43\" data-node-id=\"43\" data-label-name=\"moitrong_1\"></circle>\n<circle r=\"0.75\" cx=\"41.17\" cy=\"76.02\" data-type=\"element node\" data-element-id=\"44\" data-node-id=\"44\" data-label-name=\"moitrong_2\"></circle>\n<circle r=\"0.75\" cx=\"51.88\" cy=\"75.91\" data-type=\"element node\" data-element-id=\"45\" data-node-id=\"45\" data-label-name=\"moitrong_3\"></circle>\n<circle r=\"0.75\" cx=\"62.28\" cy=\"75.26\" data-type=\"element node\" data-element-id=\"46\" data-node-id=\"46\" data-label-name=\"moitrong_4\"></circle>\n<circle r=\"0.75\" cx=\"71.76\" cy=\"77.2\" data-type=\"element node\" data-element-id=\"47\" data-node-id=\"47\" data-label-name=\"moitrong_5\"></circle>\n<circle r=\"0.75\" cx=\"62.57\" cy=\"83.5\" data-type=\"element node\" data-element-id=\"48\" data-node-id=\"48\" data-label-name=\"moitrong_6\"></circle>\n<circle r=\"0.75\" cx=\"52.14\" cy=\"85.58\" data-type=\"element node\" data-element-id=\"49\" data-node-id=\"49\" data-label-name=\"moitrong_7\"></circle>\n<circle r=\"0.75\" cx=\"41.4\" cy=\"84.39\" data-type=\"element node\" data-element-id=\"50\" data-node-id=\"50\" data-label-name=\"moitrong_8\"></circle>"
  }
 ]

@@ -177,18 +177,65 @@ def test_nme_per_face_csv_columns_and_append(tmp_path):
     assert float(rows[1][3]) == pytest.approx(2.5)
 
 
-def test_eye_openness_uses_coincide_pairs():
+def test_eye_openness_uses_the_three_coincide_pairs_of_each_eye():
     cfg = json.load(open(REAL_CFG, encoding='utf-8'))
     pts = {p['name']: [float(p['tmpl'][0]), float(p['tmpl'][1])] for p in cfg['points']}
-    pts['p36_eye_R'][0] = pts['p34_eye_R'][0]                                           # mí trên và mí dưới cùng cột: dễ tính tay
+    for g in ('mattrai', 'matphai'):
+        pts[f'{g}_8'][0], pts[f'{g}_7'][0], pts[f'{g}_6'][0] = pts[f'{g}_2'][0], pts[f'{g}_3'][0], pts[f'{g}_4'][0]       # mí dưới cùng cột với mí trên: dễ tính tay
     d = eval50.iod(pts, cfg)
     o = eval50.eye_openness(pts, cfg, d)
-    assert set(o) == {'p34_eye_R', 'p38_eye_L'} and all(v > 0 for v in o.values())
-    wide = dict(pts, p34_eye_R=[pts['p34_eye_R'][0], pts['p34_eye_R'][1] - 10])         # mí trên nhấc lên 10 px: mở hơn đúng 10 / IOD
-    assert eval50.eye_openness(wide, cfg, d)['p34_eye_R'] - o['p34_eye_R'] == pytest.approx(10 / d * 100)
+    assert set(o) == {f'{g}_{k}' for g in ('mattrai', 'matphai') for k in (2, 3, 4)} and all(v > 0 for v in o.values())          # 3 cặp mỗi mắt, 6 cặp hai mắt
+    wide = dict(pts, mattrai_3=[pts['mattrai_3'][0], pts['mattrai_3'][1] - 10])         # mí trên nhấc lên 10 px: mở hơn đúng 10 / IOD
+    assert eval50.eye_openness(wide, cfg, d)['mattrai_3'] - o['mattrai_3'] == pytest.approx(10 / d * 100)
     s = eval50.face_scores(wide, pts, cfg)
-    assert s['ok'] and s['eye_open_err'] == pytest.approx((10 / d * 100 + 0) / 2) and s['n_missing'] == 0
+    assert s['ok'] and s['eye_open_err'] == pytest.approx((10 / d * 100) / 6) and s['n_missing'] == 0           # trung bình 6 cặp, chỉ một cặp lệch
     assert s['nme'] <= s['nme_p2p'] + 1e-9
+
+
+def test_nme_eye_uses_all_16_eye_points_and_regions_have_no_jaw():
+    cfg = json.load(open(REAL_CFG, encoding='utf-8'))
+    pts = {p['name']: [float(p['tmpl'][0]), float(p['tmpl'][1])] for p in cfg['points']}
+    eye = [p['name'] for p in cfg['points'] if p['region'] == 'eye']
+    assert len(eye) == 16 and {n.split('_')[0] for n in eye} == {'mattrai', 'matphai'}
+    d = eval50.iod(pts, cfg)
+    pred = dict(pts)
+    pred['matphai_1'] = [pts['matphai_1'][0] + 0.1 * d, pts['matphai_1'][1]]               # một điểm E của mắt lệch 10% IOD: trung bình 16 điểm mắt = 10 / 16
+    s = eval50.face_scores(pred, pts, cfg)
+    assert s['nme_eye'] == pytest.approx(10 / 16) and s['region']['eye'] == pytest.approx(10 / 16) and s['nme'] == pytest.approx(10 / 50)
+    assert set(s['region']) == {'brow', 'nose', 'eye', 'lip'} and 'jaw' not in s['region']
+    only_one_eye_point_missing = {k: v for k, v in pts.items() if k != 'mattrai_3'}
+    s2 = eval50.face_scores(pred, only_one_eye_point_missing, cfg)
+    assert s2['n_missing'] == 1 and s2['nme_eye'] == pytest.approx(10 / 15)                 # thiếu một điểm mắt: chia cho 15 điểm đo được
+
+
+def test_csv_has_no_reg_jaw_column_with_the_real_config(tmp_path):
+    cfg = json.load(open(REAL_CFG, encoding='utf-8'))
+    pts = {p['name']: [float(p['tmpl'][0]), float(p['tmpl'][1])] for p in cfg['points']}
+    res = eval50.evaluate({'f1': pts}, {'f1': pts}, cfg, 'assisted')
+    out = tmp_path / 'n.csv'
+    eval50.write_csv(str(out), res['rows'], cfg)
+    head = next(csv.reader(open(out, encoding='utf-8')))
+    assert head == ['face_id', 'condition', 'nme', 'nme_eye', 'nme_p2p', 'reg_brow', 'reg_eye', 'reg_lip', 'reg_nose', 'eye_open_err', 'n_missing']
+
+
+def test_pair_order_follows_config_not_string_order():
+    """moingoai_10 đứng trước moingoai_2 theo chữ cái nhưng sau theo config: cặp coincide chỉ được tính MỘT lần, ở điểm đứng trước theo config."""
+    cfg = dict(points=[dict(name='e_2', region='eye', type='E', curve=None, coincide='e_10'), dict(name='e_10', region='eye', type='E', curve=None, coincide='e_2')],
+               iod_points=['e_2', 'e_10'])
+    o = eval50.eye_openness({'e_2': [0, 0], 'e_10': [0, 30]}, cfg, 100.0)
+    assert o == {'e_2': pytest.approx(30.0)}                                          # theo chữ cái ('e_10' < 'e_2') sẽ lấy sai điểm đầu cặp
+
+
+def test_labels_with_old_v2_point_names_are_reported_not_silently_empty(tmp_path):
+    cfg = mini_cfg()
+    old_cfg = dict(points=[dict(name=f'p{i:02d}_eye_R', region='eye', type='E', curve=None, coincide=None) for i in range(1, 5)], iod_points=['p01_eye_R', 'p02_eye_R'])
+    p = tmp_path / 'old.xml'
+    p.write_bytes(xml_of(old_cfg, {'x.png': {'p01_eye_R': [0, 0], 'p02_eye_R': [100, 0], 'p03_eye_R': [1, 1], 'p04_eye_R': [2, 2]}}))
+    warned = []
+    got = eval50.read_labels(str(p), cfg, warn=warned.append)
+    assert got == {'x': {}} and len(warned) == 1 and 'CŨ' in warned[0] and 'version 2' in warned[0] and 'QĐ-003' in warned[0]
+    res = eval50.evaluate(got, got, cfg)
+    assert res['rows'] == [] and res['skipped']                                         # không chấm bậy: mặt bị bỏ vì thiếu khoé mắt
 
 
 def make_run(tmp_path, mode):

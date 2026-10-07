@@ -9,18 +9,21 @@
   (b) --run <run>: đọc dự đoán từ runs rồi đổi sang hệ toạ độ và tên ảnh tải lên CVAT bằng ĐÚNG logic steps._file_name/_face_pts của push.
 
 Chỉ số (theo kế hoạch P3, mục 3, sửa cho đáp án 50 điểm):
-  * IOD = khoảng cách hai điểm `iod_points` (hai khoé mắt ngoài p33, p39) của ĐÁP ÁN 50 điểm; thiếu một trong hai thì mặt không chấm được (báo).
+  * IOD = khoảng cách hai điểm `iod_points` (hai khoé mắt ngoài `mattrai_1`, `matphai_1`) của ĐÁP ÁN 50 điểm; thiếu một trong hai thì mặt không chấm được (báo).
   * chỉ số CHÍNH: điểm E đo điểm-điểm; điểm C đo khoảng cách tới ĐƯỜNG GẤP KHÚC nối các điểm đáp án theo `curve` (danh sách tên trong config). Điểm đáp án
     thiếu (không có hoặc outside="1") bị bỏ khỏi đường gấp khúc và khỏi phép đo (đếm riêng); đường chỉ còn một điểm thì đo tới điểm đó.
   * chỉ số PHỤ: điểm-điểm cả 50 điểm.
-  * LƯU Ý đường gấp khúc thưa: với điểm C ở giữa (ví dụ giữa mí trên p34, curve [p33, p34, p35]) lỗi dọc đường gần như bằng 0 khi dự đoán trượt dọc theo
-    mí, và đường nối chỉ ba điểm đáp án nên lỗi chỉ thật sự nhỏ quanh điểm đáp án; với môi trong p49/p50 (curve đi qua hai khoé miệng ngoài) lỗi trượt ngang
-    nhỏ được tha còn lỗi dọc vẫn tính. Đó là chủ ý (người gán tay không đặt "đúng giữa" tới từng pixel), nhưng nghĩa là NME chính <= NME phụ.
-  * NME mặt = trung bình chỉ số chính trên các điểm đo được, % IOD. Mặt hỏng: NME >= 10%. nme_eye: cùng chỉ số trên vùng mắt (region eye).
-  * độ mở mắt = khoảng cách mí trên-dưới (p34-p36, p38-p40) / IOD; so dự đoán với đáp án (lệch tuyệt đối trung bình hai mắt, % IOD).
+  * LƯU Ý đường gấp khúc thưa: curve của điểm C nằm TRONG nhóm của nó (config version 3, QĐ-003: không còn viền hàm, không còn ngoại lệ môi trong). Với điểm C ở giữa
+    (ví dụ giữa mí trên `mattrai_3`, curve [mattrai_1 .. mattrai_5]) lỗi dọc đường gần như bằng 0 khi dự đoán trượt dọc theo mí, và đường nối chỉ vài điểm đáp án nên lỗi
+    chỉ thật sự nhỏ quanh điểm đáp án; ở môi (`moingoai_*`, `moitrong_*`) lỗi trượt ngang dọc mép được tha còn lỗi vuông góc với mép vẫn tính. Đó là chủ ý (người gán tay
+    không đặt "đúng giữa" tới từng pixel), nhưng nghĩa là NME chính <= NME phụ.
+  * NME mặt = trung bình chỉ số chính trên các điểm đo được, % IOD. Mặt hỏng: NME >= 10%. nme_eye: cùng chỉ số trên vùng mắt (region eye = đủ 16 điểm của `mattrai`, `matphai`).
+  * độ mở mắt = khoảng cách mí trên-dưới / IOD theo ba cặp `coincide` của mỗi mắt (`_2`-`_8`, `_3`-`_7`, `_4`-`_6`; sáu cặp hai mắt); so dự đoán với đáp án
+    (lệch tuyệt đối trung bình các cặp, % IOD).
 
-nme_per_face.csv (cột P5 đã hẹn): face_id, condition, nme, nme_eye; sau đó nme_p2p, các cột theo vùng (reg_brow, reg_eye, reg_jaw, reg_lip, reg_nose = trung bình
-chỉ số chính của vùng; reg_eye trùng nme_eye về số), eye_open_err, n_missing. Số liệu tổng hợp in ra màn hình: trung bình, trung vị, % mặt hỏng, theo vùng.
+nme_per_face.csv (cột P5 đã hẹn): face_id, condition, nme, nme_eye; sau đó nme_p2p, các cột theo vùng thô (reg_brow, reg_eye, reg_lip, reg_nose = trung bình chỉ số chính
+của vùng; reg_eye trùng nme_eye về số; version 3 KHÔNG còn reg_jaw vì không còn viền hàm, các cột còn lại giữ nghĩa), eye_open_err, n_missing. Số liệu tổng hợp in ra màn hình:
+trung bình, trung vị, % mặt hỏng, theo vùng.
 """
 import argparse
 import csv
@@ -92,10 +95,12 @@ def p2p_errors(pred, gt, cfg):
 
 
 def eye_openness(pts, cfg, d):
-    """Độ mở hai mắt (khoảng mí trên-dưới / IOD, %) theo cặp coincide của vùng mắt; {} nếu thiếu."""
+    """Độ mở hai mắt (khoảng mí trên-dưới / IOD, %) theo cặp coincide của vùng mắt (ba cặp mỗi mắt); {} nếu thiếu.
+    Mỗi cặp lấy một lần, ở điểm đứng TRƯỚC trong config (so theo thứ tự config chứ không theo chữ cái: `moingoai_10` < `moingoai_2` theo chữ)."""
     out = {}
+    order = {p["name"]: i for i, p in enumerate(cfg["points"])}
     for p in cfg["points"]:
-        if p["region"] == "eye" and p.get("coincide") and p["name"] < p["coincide"]:
+        if p["region"] == "eye" and p.get("coincide") and order[p["name"]] < order.get(p["coincide"], -1):
             a, b = p["name"], p["coincide"]
             if _have(pts, a) and _have(pts, b) and d:
                 out[a] = float(np.linalg.norm(np.asarray(pts[a], float) - np.asarray(pts[b], float))) / d * 100
@@ -140,7 +145,7 @@ def read_labels(path, cfg, warn=print):
             data = f.read()
     ann = cvat_io.parse_annotations(data)
     names = {p["name"] for p in cfg["points"]}
-    out = {}
+    out, stale_warned = {}, False
     for name, im in ann.items():
         sk = [s for s in im["skeletons"] if s["label"] == "face50"]
         if not sk:
@@ -152,6 +157,10 @@ def read_labels(path, cfg, warn=print):
         for n, p in sk[0]["points"].items():
             if n in names and p["x"] is not None and str(p.get("outside")) != "1":
                 pts[n] = [p["x"], p["y"]]
+        if sk[0]["points"] and not any(n in names for n in sk[0]["points"]) and not stale_warned:
+            stale_warned = True
+            warn(f"Cảnh báo: tên điểm trong nhãn (ví dụ {next(iter(sk[0]['points']))!r}) không có trong config: nhãn dùng định nghĩa 50 điểm CŨ (version 2, "
+                 "pNN_vùng_bên, trước QĐ-003) hoặc config không đúng version. Nhãn cũ không đo được bằng config version 3.")
         key = stem(name)
         if key in out:
             warn(f"Cảnh báo: tên ảnh {key} xuất hiện hai lần trong {path}: giữ ảnh đầu.")

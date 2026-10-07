@@ -1,4 +1,4 @@
-"""Thử tool/make_label.py: label skeleton face50 sinh từ config/m28_config.json (đúng 50 điểm, cạnh, màu, không có id).
+"""Thử tool/make_label.py: label skeleton face50 sinh từ config/m28_config.json version 3 (50 điểm DMS: đúng 50 điểm, cạnh theo nhóm, màu theo bên của ảnh, không có id).
 
 Định dạng bám mã nguồn CVAT v2.77.0 nhưng CHƯA thử trên server CVAT thật (xem README, mục Rủi ro).
 """
@@ -59,10 +59,16 @@ def test_no_id_keys_anywhere_and_no_label_id_in_svg(label):
     assert 'data-label-id' not in label['svg']
 
 
-def test_colors_follow_side(cfg, label):
+def test_colors_follow_side_of_the_image(cfg, label):
     for p, s in zip(cfg['points'], label['sublabels']):
         assert s['color'] == make_label.SIDE_COLOR[p['side']]
     assert len({s['color'] for s in label['sublabels']}) == 3
+    col = {s['name']: s['color'] for s in label['sublabels']}
+    # quy ước theo ảnh: nhóm *trai (nửa trái ảnh, side L) một màu, *phai (nửa phải ảnh, side R) màu khác, sống mũi (M) màu thứ ba
+    assert {col[f'mattrai_{k}'] for k in range(1, 9)} == {col['longmaytrai_1']} == {make_label.SIDE_COLOR['L']}
+    assert {col[f'matphai_{k}'] for k in range(1, 9)} == {col['longmayphai_1']} == {make_label.SIDE_COLOR['R']}
+    assert {col[f'songmui_{k}'] for k in range(1, 5)} == {col['moingoai_4']} == {col['moitrong_3']} == {make_label.SIDE_COLOR['M']}
+    assert col['moingoai_1'] == make_label.SIDE_COLOR['L'] and col['moingoai_7'] == make_label.SIDE_COLOR['R']
 
 
 def svg_items(svg):
@@ -95,7 +101,8 @@ def test_edge_count_matches_lines_and_closed(cfg, label):
         if p.get('line'):
             groups[p['line']] = groups.get(p['line'], 0) + 1
     want = sum(n - 1 for n in groups.values()) + sum(1 for k in groups if cfg['lines'][k]['closed'])
-    assert len(lines) == want == 44
+    assert len(lines) == want == 47                                  # mày 4 + 4, sống mũi 3, mắt 8 + 8, môi ngoài 12, môi trong 8 (vòng kín)
+    assert {g: n for g, n in groups.items()} == {'longmaytrai': 5, 'longmayphai': 5, 'songmui': 4, 'mattrai': 8, 'matphai': 8, 'moingoai': 12, 'moitrong': 8}
     for e in lines:
         assert 1 <= int(e['data-node-from']) <= 50 and 1 <= int(e['data-node-to']) <= 50
         assert e['data-type'] == 'edge'
@@ -109,8 +116,20 @@ def test_edges_connect_only_same_line_neighbours(cfg, label):
     for e in lines:
         a, b = int(e['data-node-from']), int(e['data-node-to'])
         assert pts[a - 1]['line'] == pts[b - 1]['line'] and pts[a - 1]['line']
-    closed_eye = [(int(e['data-node-from']), int(e['data-node-to'])) for e in lines if pts[int(e['data-node-from']) - 1]['line'] == 'eye_R']
-    assert (36, 33) in closed_eye                                    # eye_R đóng: điểm cuối nối về điểm đầu
+    first = {g: 1 + [p['name'] for p in pts].index(f'{g}_1') for g in make_label_groups(cfg)}          # số nút của điểm đầu mỗi nhóm
+    size = {g: sum(1 for p in pts if p['line'] == g) for g in first}
+    ids = {(int(e['data-node-from']), int(e['data-node-to'])) for e in lines}
+    for g, closed in (('mattrai', True), ('matphai', True), ('moingoai', True), ('moitrong', True), ('longmaytrai', False), ('longmayphai', False), ('songmui', False)):
+        a, b = first[g], first[g] + size[g] - 1
+        assert ((b, a) in ids) == closed, g                          # nhóm đóng: điểm cuối nối về điểm đầu (mắt, môi); mày và sống mũi hở
+        assert all((k, k + 1) in ids for k in range(a, b)), g        # mọi nhóm: nối điểm liền nhau theo thứ tự
+    for e in lines:                                                  # nhóm không nối với nhau (kể cả hai mắt, hai mày, môi ngoài với môi trong)
+        a, b = int(e['data-node-from']), int(e['data-node-to'])
+        assert pts[a - 1]['group'] == pts[b - 1]['group']
+
+
+def make_label_groups(cfg):
+    return list(dict.fromkeys(p['line'] for p in cfg['points']))
 
 
 def test_two_runs_give_identical_bytes(tmp_path):
@@ -125,6 +144,17 @@ def test_committed_label_file_matches_config(cfg):
     path = os.path.join(HERE, '..', 'config', 'face50_label.json')
     if os.path.exists(path):
         assert json.load(open(path, encoding='utf-8')) == make_label.build_labels(cfg)
+
+
+def test_old_v2_config_is_rejected_with_a_clear_message(cfg):
+    v2 = copy.deepcopy(cfg)
+    del v2['side_convention']                                        # config version 2 không có trường này (side theo người trong ảnh)
+    with pytest.raises(SystemExit, match='side_convention.*version 2.*QĐ-003'):
+        make_label.build_labels(v2)
+    wrong = copy.deepcopy(cfg)
+    wrong['side_convention'] = 'person'
+    with pytest.raises(SystemExit, match='side_convention'):
+        make_label.build_labels(wrong)
 
 
 def test_bad_configs_are_rejected(cfg):

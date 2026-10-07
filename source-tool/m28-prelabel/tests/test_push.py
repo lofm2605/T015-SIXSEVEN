@@ -357,6 +357,23 @@ def test_project_missing_sublabels_stops(cvat, monkeypatch):
     assert calls(cvat, 'tasks.create_from_data') == []
 
 
+def test_project_with_old_v2_label_stops_and_tells_p4_to_rebuild(cvat):
+    """Project dựng từ face50_label.json CŨ (50 điểm pNN_vùng_bên, trước QĐ-003): dừng với lời nhắc dựng lại project bằng label DMS mới, chưa tạo task nào."""
+    w = make_run()
+    old = [f'p{i:02d}_{r}_{s}' for i, (r, s) in enumerate([('jaw', 'R')] * 17 + [('brow', 'R')] * 10 + [('nose', 'M')] * 5 + [('eye', 'R')] * 8 + [('lip', 'L')] * 10, 1)]
+    state(cvat)['projects'].append(dict(id=1, name='m28', labels=[dict(name='face50', type='skeleton', sublabels=[dict(name=n, type='points') for n in old])]))
+    state(cvat)['next_project'] = 2
+    with pytest.raises(SystemExit) as e:
+        do_push(w)
+    msg = str(e.value)
+    assert 'label face50 CŨ' in msg and 'p01_jaw_R' in msg and 'QĐ-003' in msg and 'longmaytrai_1' in msg and 'P4' in msg and 'face50_label.json' in msg
+    assert calls(cvat, 'tasks.create_from_data') == [] and not os.path.exists(os.path.join(w['rd'], 'push.json'))
+    # project có label face50 thiếu tên nhưng KHÔNG phải tên v2: vẫn dùng thông báo cũ (thiếu N tên)
+    state(cvat)['projects'][0]['labels'][0]['sublabels'] = [dict(name=f'x{i}', type='points') for i in range(50)]
+    with pytest.raises(SystemExit, match='thiếu 50 tên'):
+        do_push(w)
+
+
 def test_project_without_face50_stops(cvat):
     w = make_run()
     state(cvat)['projects'].append(dict(id=1, name='m28', labels=[dict(name='car', type='rectangle')]))

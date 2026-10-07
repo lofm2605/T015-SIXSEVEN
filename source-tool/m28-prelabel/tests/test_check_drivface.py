@@ -1,4 +1,4 @@
-"""Thử tool/check_drivface.py bằng dữ liệu GIẢ: file drivPoints giả (CRLF, tên có dấu cách cuối), ảnh xám, landmarker giả. Không ảnh người thật."""
+"""Thử tool/check_drivface.py (50 điểm DMS, ghép bên THEO VỊ TRÍ TRONG ẢNH) bằng dữ liệu GIẢ: file drivPoints giả (CRLF, tên có dấu cách cuối), ảnh xám, landmarker giả. Không ảnh người thật."""
 import json
 import os
 import sys
@@ -63,42 +63,75 @@ def pts50_from_tmpl():
     return {p['name']: [float(p['tmpl'][0]), float(p['tmpl'][1])] for p in CFG['points']}
 
 
-def test_ours_five_means_of_eye_points_and_named_vertices():
+EYE_L = [f'mattrai_{k}' for k in range(1, 9)]             # nửa trái ảnh (người: mắt phải)
+EYE_R = [f'matphai_{k}' for k in range(1, 9)]
+
+
+def test_ours_five_means_of_8_eye_points_nose_tip_and_lip_corners():
     p50 = pts50_from_tmpl()
     p478 = np.zeros((478, 2))
-    p478[468], p478[473] = [1, 2], [3, 4]
+    p478[468], p478[473], p478[2], p478[4] = [1, 2], [3, 4], [5, 6], [7, 8]
     five = cd.ours_five(p50, CFG, p478)
-    eye_r = np.mean([p50[n] for n in ('p33_eye_R', 'p34_eye_R', 'p35_eye_R', 'p36_eye_R')], axis=0)
-    eye_l = np.mean([p50[n] for n in ('p37_eye_L', 'p38_eye_L', 'p39_eye_L', 'p40_eye_L')], axis=0)
-    assert np.allclose(five['eye_R'], eye_r) and np.allclose(five['eye_L'], eye_l)
-    assert np.allclose(five['nose_tip_p29'], p50['p29_nose_M']) and np.allclose(five['nose_base_p31'], p50['p31_nose_M'])
-    assert np.allclose(five['mouth_R'], p50['p41_lip_R']) and np.allclose(five['mouth_L'], p50['p45_lip_L'])
-    assert np.allclose(five['iris_R'], [1, 2]) and np.allclose(five['iris_L'], [3, 4]) and 'iris_R' not in cd.ours_five(p50, CFG)
+    assert np.allclose(five['eye_trai'], np.mean([p50[n] for n in EYE_L], axis=0)) and np.allclose(five['eye_phai'], np.mean([p50[n] for n in EYE_R], axis=0))      # 8 điểm mỗi mắt
+    assert np.allclose(five['nose_tip'], p50['songmui_4'])                                     # chóp mũi; không còn chân mũi p31 trong 50 điểm
+    assert np.allclose(five['mouth_trai'], p50['moingoai_1']) and np.allclose(five['mouth_phai'], p50['moingoai_7'])      # hai khoé môi ngoài, trái ảnh trước
+    assert np.allclose(five['iris_trai'], [1, 2]) and np.allclose(five['iris_phai'], [3, 4])
+    assert np.allclose(five['nose_v2'], [5, 6]) and np.allclose(five['nose_v4'], [7, 8])       # tham chiếu NGOÀI 50 điểm lấy thẳng từ 478 đỉnh
+    plain = cd.ours_five(p50, CFG)
+    assert not {'iris_trai', 'iris_phai', 'nose_v2', 'nose_v4'} & set(plain) and set(plain) == {'eye_trai', 'eye_phai', 'nose_tip', 'mouth_trai', 'mouth_phai'}
+    assert [n for n, _ in cd.COMPARE] == ['eye_trai', 'eye_phai', 'iris_trai', 'iris_phai', 'nose_tip', 'nose_v2', 'nose_v4', 'mouth_trai', 'mouth_phai']
+
+
+def v2_config():
+    """Cấu hình tối thiểu của định nghĩa 50 điểm CŨ (version 2): chỉ các điểm check_drivface cần; side R = nửa trái ảnh."""
+    pts = [dict(name=n, line=ln, mp_idx=i) for i, (n, ln) in enumerate(
+        [(f'p{k}_eye_R', 'eye_R') for k in (33, 34, 35, 36)] + [(f'p{k}_eye_L', 'eye_L') for k in (37, 38, 39, 40)]
+        + [('p29_nose_M', 'nose_bridge'), ('p31_nose_M', 'nose_base'), ('p41_lip_R', 'lip_outer'), ('p45_lip_L', 'lip_outer')])]
+    return dict(version=2, points=pts)
+
+
+def test_old_v2_definition_still_computable_to_compare_with_v3():
+    v2 = v2_config()
+    p50 = {p['name']: [float(i), float(2 * i)] for i, p in enumerate(v2['points'])}
+    five = cd.ours_five(p50, v2)
+    assert np.allclose(five['eye_trai'], np.mean([p50[f'p{k}_eye_R'] for k in (33, 34, 35, 36)], axis=0))      # 4 điểm mắt, R = nửa trái ảnh
+    assert np.allclose(five['nose_tip'], p50['p29_nose_M']) and np.allclose(five['mouth_trai'], p50['p41_lip_R']) and np.allclose(five['mouth_phai'], p50['p45_lip_L'])
+    assert 'nose_v2' not in five                                                              # chân mũi của v2 (p31) nay là đỉnh 2 lấy từ 478 điểm, giống bản mới
+    five478 = cd.ours_five(p50, v2, np.arange(956.0).reshape(478, 2))
+    assert np.allclose(five478['nose_v2'], [4.0, 5.0]) and np.allclose(five478['iris_trai'], [936.0, 937.0])
+
+
+def test_image_side_ref_matches_by_position_in_the_image_not_by_letter():
+    pts = {'RE': (323, 100), 'LE': (367, 100), 'N': (345, 130), 'RM': (333, 160), 'LM': (357, 160)}
+    left = cd.image_side_ref(pts, re_left=True)                                              # RE ở nửa trái ảnh: EL = RE
+    assert left == {'EL': (323, 100), 'ER': (367, 100), 'N': (345, 130), 'ML': (333, 160), 'MR': (357, 160)}
+    swapped = cd.image_side_ref(dict(pts, RE=(367, 100), LE=(323, 100), RM=(357, 160), LM=(333, 160)), re_left=False)     # RE nằm nửa phải ảnh
+    assert swapped == left                                                                    # cùng kết quả: bên của ảnh không phụ thuộc chữ R/L
 
 
 def test_point_errors_hand_checked_with_drivface_iod():
-    ref = {'RE': (100, 100), 'LE': (200, 100), 'N': (150, 140), 'RM': (110, 180), 'LM': (190, 180)}      # IOD DrivFace = 100
-    ours = {'eye_R': np.array([103, 104]), 'eye_L': np.array([200, 100]), 'iris_R': np.array([100, 110]), 'iris_L': np.array([200, 100]),
-            'nose_tip_p29': np.array([150, 140]), 'nose_base_p31': np.array([150, 160]), 'mouth_R': np.array([110, 180]), 'mouth_L': np.array([190, 190])}
+    ref = cd.image_side_ref({'RE': (100, 100), 'LE': (200, 100), 'N': (150, 140), 'RM': (110, 180), 'LM': (190, 180)})      # IOD DrivFace = 100
+    ours = {'eye_trai': np.array([103, 104]), 'eye_phai': np.array([200, 100]), 'iris_trai': np.array([100, 110]), 'iris_phai': np.array([200, 100]),
+            'nose_tip': np.array([150, 140]), 'nose_v2': np.array([150, 160]), 'nose_v4': np.array([150, 150]), 'mouth_trai': np.array([110, 180]), 'mouth_phai': np.array([190, 190])}
     err = cd.point_errors(ours, ref)
-    assert err['eye_R'] == pytest.approx(5.0) and err['eye_L'] == 0 and err['iris_R'] == pytest.approx(10.0)
-    assert err['nose_tip_p29'] == 0 and err['nose_base_p31'] == pytest.approx(20.0) and err['mouth_R'] == 0 and err['mouth_L'] == pytest.approx(10.0)
+    assert err['eye_trai'] == pytest.approx(5.0) and err['eye_phai'] == 0 and err['iris_trai'] == pytest.approx(10.0)
+    assert err['nose_tip'] == 0 and err['nose_v2'] == pytest.approx(20.0) and err['nose_v4'] == pytest.approx(10.0) and err['mouth_trai'] == 0 and err['mouth_phai'] == pytest.approx(10.0)
     off = cd.point_offsets(ours, ref)
-    assert off['eye_R'] == pytest.approx((3.0, 4.0)) and off['nose_base_p31'] == pytest.approx((0.0, 20.0))        # có dấu: x sang phải, y xuống
-    assert cd.point_errors(ours, dict(ref, LE=(100, 100))) is None                                               # hai tâm mắt trùng: không chuẩn hoá được
+    assert off['eye_trai'] == pytest.approx((3.0, 4.0)) and off['nose_v2'] == pytest.approx((0.0, 20.0))        # có dấu: x sang phải, y xuống
+    assert cd.point_errors(ours, dict(ref, ER=(100, 100))) is None                                               # hai tâm mắt trùng: không chuẩn hoá được
 
 
 def test_stats_and_group_tables():
     s = cd.stats([1, 2, 3, 4, 100])
     assert s['median'] == 3 and s['mean'] == pytest.approx(22.0) and s['n'] == 5 and s['p90'] == pytest.approx(np.percentile([1, 2, 3, 4, 100], 90))
     assert cd.stats([]) == {'n': 0}
-    per = [dict(label=1, subject=1, err={'eye_R': 2.0}), dict(label=2, subject=1, err={'eye_R': 4.0}), dict(label=2, subject=2, err={'eye_R': 6.0})]
-    by_label = cd.group_table(per, 'label', ['eye_R'])
-    assert by_label[1]['eye_R']['median'] == 2.0 and by_label[2]['eye_R']['median'] == 5.0 and by_label[2]['eye_R']['n'] == 2
-    assert cd.group_table(per, 'subject', ['eye_R'])[1]['eye_R']['n'] == 2
+    per = [dict(label=1, subject=1, err={'eye_trai': 2.0}), dict(label=2, subject=1, err={'eye_trai': 4.0}), dict(label=2, subject=2, err={'eye_trai': 6.0})]
+    by_label = cd.group_table(per, 'label', ['eye_trai'])
+    assert by_label[1]['eye_trai']['median'] == 2.0 and by_label[2]['eye_trai']['median'] == 5.0 and by_label[2]['eye_trai']['n'] == 2
+    assert cd.group_table(per, 'subject', ['eye_trai'])[1]['eye_trai']['n'] == 2
     lines = []
-    cd.format_table('T', cd.summarize(per, ['eye_R']), None, ['eye_R'], out=lines.append)
-    assert lines[0] == 'T' and 'eye_R' in lines[2] and '4.0' in lines[2]
+    cd.format_table('T', cd.summarize(per, ['eye_trai']), None, ['eye_trai'], out=lines.append)
+    assert lines[0] == 'T' and 'eye_trai' in lines[2] and '4.0' in lines[2]
 
 
 class FakeLandmarker:
@@ -120,12 +153,12 @@ def test_process_maps_back_to_frame_coordinates_and_reports_missing(tmp_path, mo
     pts = np.full((478, 2), 256.0)
     for n, v in pts50_from_tmpl().items():
         pts[idx[n]] = v                                                                   # 50 điểm = khuôn tmpl trong ảnh cắt
-    pts[468] = np.mean([pts[idx[n]] for n in ('p33_eye_R', 'p34_eye_R', 'p35_eye_R', 'p36_eye_R')], axis=0)
-    pts[473] = np.mean([pts[idx[n]] for n in ('p37_eye_L', 'p38_eye_L', 'p39_eye_L', 'p40_eye_L')], axis=0)
+    pts[468] = np.mean([pts[idx[n]] for n in EYE_L], axis=0)                               # iris = tâm 8 điểm mắt
+    pts[473] = np.mean([pts[idx[n]] for n in EYE_R], axis=0)
     to_frame = lambda v: np.asarray(v) / k + [left, top]                                  # noqa: E731
     five_crop = cd.ours_five(pts50_from_tmpl(), CFG, pts)
-    ref = {'RE': tuple(to_frame(five_crop['eye_R'])), 'LE': tuple(to_frame(five_crop['eye_L'])), 'N': tuple(to_frame(five_crop['nose_tip_p29'])),
-           'RM': tuple(to_frame(five_crop['mouth_R'])), 'LM': tuple(to_frame(five_crop['mouth_L']))}
+    ref = {'RE': tuple(to_frame(five_crop['eye_trai'])), 'LE': tuple(to_frame(five_crop['eye_phai'])), 'N': tuple(to_frame(five_crop['nose_tip'])),
+           'RM': tuple(to_frame(five_crop['mouth_trai'])), 'LM': tuple(to_frame(five_crop['mouth_phai']))}      # RE/RM nằm nửa trái ảnh (như DrivFace thật)
     rows = [dict(name='a_001 ', subject=1, label=2, ang=0, box=(0, 0, 1, 1), pts=ref),
             dict(name='ko_co_anh ', subject=1, label=2, ang=0, box=(0, 0, 1, 1), pts=ref),
             dict(name='a_001 ', subject=2, label=1, ang=0, box=(0, 0, 1, 1), pts=ref)]
@@ -135,19 +168,34 @@ def test_process_maps_back_to_frame_coordinates_and_reports_missing(tmp_path, mo
     new, old, no_face, no_img = cd.process(rows, str(img_dir), 'm.task', CFG, MAP)
     assert old is None and no_face == [] and no_img == ['ko_co_anh '] and len(new) == 2 and FakeLandmarker.closed
     e = new[0]['err']
-    for n in ('eye_R', 'eye_L', 'iris_R', 'iris_L', 'nose_tip_p29', 'mouth_R', 'mouth_L'):
+    for n in ('eye_trai', 'eye_phai', 'iris_trai', 'iris_phai', 'nose_tip', 'mouth_trai', 'mouth_phai'):
         assert e[n] == pytest.approx(0.0, abs=1e-6), n                                      # đúng toạ độ khung: x / k + left, y / k + top
     iod_frame = np.hypot(*(np.array(ref['RE']) - np.array(ref['LE'])))
-    p31 = np.array(pts50_from_tmpl()['p31_nose_M'])
-    p29 = np.array(pts50_from_tmpl()['p29_nose_M'])
-    assert e['nose_base_p31'] == pytest.approx(np.linalg.norm(p31 - p29) / k / iod_frame * 100)       # p31 cách p29 một đoạn: lỗi chân giữa so với mũi DrivFace
+    tip = np.array(pts50_from_tmpl()['songmui_4'])
+    assert e['nose_v2'] == pytest.approx(np.linalg.norm(pts[2] - tip) / k / iod_frame * 100)      # đỉnh 2 (chân mũi, ngoài 50 điểm) cách chóp một đoạn: lỗi so với mũi DrivFace
+    assert e['nose_v4'] == pytest.approx(np.linalg.norm(pts[4] - tip) / k / iod_frame * 100)
     assert new[1]['label'] == 1 and new[1]['subject'] == 2
-    # thêm ánh xạ cũ: ridge WFLW chạy được trên cùng 478 điểm
+    # RE/RM nằm nửa PHẢI ảnh (re_left=False): ghép theo vị trí trong ảnh, nên sai số vẫn 0 khi RE đổi sang bên phải
+    ref_flipped = dict(ref, RE=ref['LE'], LE=ref['RE'], RM=ref['LM'], LM=ref['RM'])
+    new_r, _, _, _ = cd.process([dict(rows[0], pts=ref_flipped)], str(img_dir), 'm.task', CFG, MAP, re_left=False)
+    assert new_r[0]['err']['eye_trai'] == pytest.approx(0.0, abs=1e-6) and new_r[0]['err']['mouth_phai'] == pytest.approx(0.0, abs=1e-6)
+    new_w, _, _, _ = cd.process([dict(rows[0], pts=ref_flipped)], str(img_dir), 'm.task', CFG, MAP, re_left=True)       # ghép theo chữ R/L sẽ sai lớn
+    assert new_w[0]['err']['eye_trai'] > 50
+    # so với định nghĩa cũ (version 2, bản chép config + map vertex): chạy được trên cùng 478 điểm, khác ở tâm mắt (4 điểm thay vì 8)
+    v2 = v2_config()
+    v2_map = dict(version=2, kind='vertex', points={})
+    pick = {'p29_nose_M': 'songmui_4', 'p31_nose_M': 'songmui_3', 'p41_lip_R': 'moingoai_1', 'p45_lip_L': 'moingoai_7'}
+    for q in v2['points']:
+        q['mp_idx'] = idx[pick.get(q['name'], 'mattrai_1' if 'eye_R' in q['name'] else 'matphai_1')]
+    new2, old2, _, _ = cd.process(rows[:1], str(img_dir), 'm.task', CFG, MAP, v2_map, v2)
+    assert len(new2) == 1 and len(old2) == 1 and set(old2[0]['err']) == set(new2[0]['err']) and old2[0]['err']['nose_tip'] == pytest.approx(0.0, abs=1e-6)
+    assert old2[0]['err']['eye_trai'] > new2[0]['err']['eye_trai']                           # v2 ở đây chỉ lấy một đỉnh làm "tâm mắt": lệch hơn trung bình 8 điểm
+    # ridge WFLW cũ (legacy_wflw) vẫn so được: chạy được trên cùng 478 điểm
     old_map = json.load(open(os.path.join(HERE, '..', 'tool', 'legacy_wflw', 'map_mp50_wflw.json'), encoding='utf-8'))
     old_cfg = json.load(open(os.path.join(HERE, '..', 'tool', 'legacy_wflw', 'm28_config_wflw.json'), encoding='utf-8'))
     pts[:] = np.array(old_map['mean478']) + np.random.default_rng(0).normal(scale=0.5, size=(478, 2))      # hình gần trung bình để ridge cho số hợp lý
-    new2, old2, _, _ = cd.process(rows[:1], str(img_dir), 'm.task', CFG, MAP, old_map, old_cfg)
-    assert len(new2) == 1 and old2 is not None and len(old2) == 1 and set(old2[0]['err']) >= {'eye_R', 'eye_L', 'nose_tip_p29', 'mouth_R', 'mouth_L'}
+    new3, old3, _, _ = cd.process(rows[:1], str(img_dir), 'm.task', CFG, MAP, old_map, old_cfg)
+    assert len(new3) == 1 and old3 is not None and len(old3) == 1 and set(old3[0]['err']) >= {'eye_trai', 'eye_phai', 'nose_tip', 'mouth_trai', 'mouth_phai'}
 
 
 def test_process_counts_no_face(tmp_path, monkeypatch):
@@ -161,30 +209,56 @@ def test_process_counts_no_face(tmp_path, monkeypatch):
     assert new == [] and no_face == ['a '] and no_img == []
 
 
-def test_main_stops_when_side_convention_differs_or_folder_is_missing(tmp_path, capsys):
-    root = write_drivface(tmp_path / 'df1', ['f1 ,1,1,2,0,0,0,10,10,367,100,323,100,345,130,377,160,313,160'] * 3)       # RE ở bên phải ảnh: lạ
+CFG_ARGS = ['--config', os.path.join(CONFIG, 'm28_config.json'), '--map', os.path.join(CONFIG, 'map_mp50.json')]
+
+
+def test_main_matches_sides_by_image_position_and_stops_when_inconclusive_or_folder_is_missing(tmp_path, capsys, monkeypatch):
+    seen = {}
+
+    def fake_process(*a, **k):
+        seen.update(k)
+        names = [n for n, _ in cd.COMPARE]
+        return [dict(name='f1 ', label=2, subject=1, err={n: 1.0 for n in names}, off={n: (0.0, 0.0) for n in names})], None, [], []
+    monkeypatch.setattr(cd, 'process', fake_process)
+    # RE ở bên PHẢI ảnh (lạ so với DrivFace thật): vẫn chạy, nhưng đổi chiều ghép (re_left=False) và nói rõ
+    right = write_drivface(tmp_path / 'df1', ['f1 ,1,1,2,0,0,0,10,10,367,100,323,100,345,130,377,160,313,160'] * 3)
+    assert cd.main(['--drivface', str(right)] + CFG_ARGS) == 0
+    out = capsys.readouterr().out
+    assert 'VỊ TRÍ TRONG ẢNH' in out and 'nửa PHẢI ảnh' in out and 'ghép với nhóm *phai' in out and seen['re_left'] is False
+    # bên lẫn lộn trong dữ liệu: dừng, mã 1
+    mixed = write_drivface(tmp_path / 'df2', ['f1 ,1,1,2,0,0,0,10,10,323,100,367,100,345,130,333,160,357,160', 'f2 ,1,2,2,0,0,0,10,10,367,100,323,100,345,130,377,160,313,160'])
     with pytest.raises(SystemExit) as e:
-        cd.main(['--drivface', str(root), '--config', os.path.join(CONFIG, 'm28_config.json'), '--map', os.path.join(CONFIG, 'map_mp50.json')])
+        cd.main(['--drivface', str(mixed)] + CFG_ARGS)
     assert e.value.code == 1 and 'KHÔNG như dự kiến' in capsys.readouterr().out
     with pytest.raises(SystemExit, match='drivPoints.txt'):
         cd.main(['--drivface', str(tmp_path / 'khong_co')])
 
 
+def test_main_rejects_old_config_and_incomplete_old_args(tmp_path):
+    root = write_drivface(tmp_path / 'df3', ['f1 ,1,1,2,0,0,0,10,10,323,100,367,100,345,130,333,160,357,160'])
+    v2 = dict(CFG)
+    v2.pop('side_convention')
+    (tmp_path / 'v2.json').write_text(json.dumps(v2), encoding='utf-8')
+    with pytest.raises(SystemExit, match='side_convention'):
+        cd.main(['--drivface', str(root), '--config', str(tmp_path / 'v2.json'), '--map', os.path.join(CONFIG, 'map_mp50.json')])
+    with pytest.raises(SystemExit, match='--old-map'):
+        cd.main(['--drivface', str(root)] + CFG_ARGS + ['--old-map', str(tmp_path / 'khong_co.json')])
+
+
 def test_main_prints_tables_and_writes_csv(tmp_path, monkeypatch, capsys):
-    root = write_drivface(tmp_path / 'df2', ['f1 ,1,1,2,0,0,0,10,10,323,100,367,100,345,130,333,160,357,160',
+    root = write_drivface(tmp_path / 'df4', ['f1 ,1,1,2,0,0,0,10,10,323,100,367,100,345,130,333,160,357,160',
                                               'f2 ,2,2,1,-30,0,0,10,10,323,100,367,100,345,130,333,160,357,160'])
     names = [n for n, _ in cd.COMPARE]
     new = [dict(name='f1 ', label=2, subject=1, err={n: 4.0 for n in names}, off={n: (1.0, -1.0) for n in names}),
            dict(name='f2 ', label=1, subject=2, err={n: 6.0 for n in names}, off={n: (2.0, 0.0) for n in names})]
-    old = [dict(name='f1 ', label=2, subject=1, err={n: 5.0 for n in names if n not in cd.OLD_ONLY_SKIP}, off={}),
-           dict(name='f2 ', label=1, subject=2, err={n: 7.0 for n in names if n not in cd.OLD_ONLY_SKIP}, off={})]
+    old = [dict(name='f1 ', label=2, subject=1, err={n: 5.0 for n in names}, off={}),
+           dict(name='f2 ', label=1, subject=2, err={n: 7.0 for n in names}, off={})]
     monkeypatch.setattr(cd, 'process', lambda *a, **k: (new, old, [], []))
     out = tmp_path / 'sub' / 'e.csv'
-    assert cd.main(['--drivface', str(root), '--config', os.path.join(CONFIG, 'm28_config.json'), '--map', os.path.join(CONFIG, 'map_mp50.json'),
-                    '--out', str(out)]) == 0
+    assert cd.main(['--drivface', str(root), '--out', str(out)] + CFG_ARGS) == 0
     text = capsys.readouterr().out
     assert 'Chấm được 2 ảnh' in text and 'THEO ĐIỂM' in text and 'label 1 nhìn phải' in text and 'tài xế 2' in text and 'Chỉ để tham khảo' in text
-    assert 'Lệch có dấu trung vị' in text
+    assert 'Lệch có dấu trung vị' in text and 'nửa TRÁI ảnh' in text and 'ghép với nhóm *trai' in text and 'eye_trai' in text
     import csv
     rows = list(csv.reader(open(out, encoding='utf-8')))
     assert rows[0][:3] == ['name', 'label', 'subject'] and rows[1][0] == 'f1' and float(rows[1][3]) == 4.0 and len(rows) == 3

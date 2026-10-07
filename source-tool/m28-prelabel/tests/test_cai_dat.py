@@ -752,7 +752,7 @@ def test_rerunning_make_config_keeps_t_flip_written_by_the_page(tmp_path):
 def test_read_t_flip_states(tmp_path):
     p = copy_config(tmp_path)
     r = cai_dat.read_t_flip(p)
-    assert r['ok'] and r['t_flip'] is None and not r['frozen'] and r['iod_points'] == ['p33_eye_R', 'p39_eye_L'] and r['n_points'] == 50
+    assert r['ok'] and r['t_flip'] is None and not r['frozen'] and r['iod_points'] == ['mattrai_1', 'matphai_1'] and r['n_points'] == 50
     d = json.load(open(p, encoding='utf-8'))
     d['status'], d['t_flip'] = 'DONG BANG 12/10', 0.0672
     json.dump(d, open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
@@ -1073,9 +1073,9 @@ def test_html_escapes_untrusted_values(S, tmp_path):
 
 
 def test_tflip_html_and_confirm_text():
-    info = dict(ok=True, error='', t_flip=None, status='NHAP - cho P3 chot, dong bang 12/10', frozen=False, iod_points=['p33_eye_R', 'p39_eye_L'], n_points=50)
+    info = dict(ok=True, error='', t_flip=None, status='NHAP - cho P3 chot, dong bang 12/10', frozen=False, iod_points=['mattrai_1', 'matphai_1'], n_points=50)
     h = cai_dat_ui.tflip_info_html(info)
-    assert 'chưa đặt (null): mọi cờ = false' in h and 'p33_eye_R' in h and '0,0672' in h and '15%' in h and 'bản nháp' in h
+    assert 'chưa đặt (null): mọi cờ = false' in h and 'mattrai_1' in h and '0,0672' in h and '15%' in h and 'bản nháp' in h
     info.update(t_flip=0.0672, frozen=True, status='DONG BANG 12/10')
     h = cai_dat_ui.tflip_info_html(info)
     assert '0,0672' in h and 'ĐÃ ĐÓNG BĂNG' in h

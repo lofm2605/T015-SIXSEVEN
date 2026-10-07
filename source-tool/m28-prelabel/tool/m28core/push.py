@@ -21,6 +21,7 @@ check.zip; lỗi là SystemExit("<lý do tiếng Việt>"). In các dòng "[k/6]
 """
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -233,6 +234,11 @@ def check_project_labels(project, point_names):
         raise SystemExit(f"Project {project.name} đã có nhưng chưa có label {LABEL} (skeleton): xoá project rỗng đó để tool tạo lại "
                          "từ config\\face50_label.json, hoặc import label này vào project. Chưa tạo task nào.")
     miss = [n for n in point_names if n not in set(got)]
+    old = [n for n in got if re.match(r"p\d\d_(jaw|brow|nose|eye|lip)_[RLM]$", n or "")]
+    if old and miss:
+        raise SystemExit(f"Project {project.name} dùng label {LABEL} CŨ ({len(old)} sublabel tên kiểu {old[0]}: định nghĩa 50 điểm version 2, trước QĐ-003), "
+                         f"không khớp 50 điểm DMS của config version 3 (ví dụ {miss[0]}). Nhờ P4 dựng lại project bằng config\\face50_label.json mới "
+                         "(xoá project cũ rỗng hoặc tạo project mới tên khác rồi đặt tên trong config\\pipeline.json); chưa tạo task nào.")
     if miss or len(got) != len(point_names):
         raise SystemExit(f"Label {LABEL} trong project {project.name} có {len(got)} sublabel, thiếu {len(miss)} tên so với config "
                          f"(ví dụ {miss[:3]}). Sửa label cho đủ 50 điểm đúng tên hoặc tạo project mới; chưa tạo task nào.")

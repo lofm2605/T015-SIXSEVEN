@@ -40,7 +40,7 @@ from m28core import steps  # noqa: E402
 CFG = json.load(open(os.path.join(os.path.dirname(__file__), '..', 'config', 'm28_config.json'), encoding='utf-8'))
 NAMES = [p['name'] for p in CFG['points']]
 TMPL = {p['name']: [float(p['tmpl'][0]), float(p['tmpl'][1])] for p in CFG['points']}
-IOD = float(np.hypot(*(np.array(TMPL['p33_eye_R']) - np.array(TMPL['p39_eye_L']))))
+IOD = float(np.hypot(*(np.array(TMPL['mattrai_1']) - np.array(TMPL['matphai_1']))))
 
 
 def known_scores_mp50(n_faces=4, shift=None):
@@ -59,7 +59,9 @@ def test_flip_scores_are_offset_over_predicted_iod():
     sc = flag_eval.flip_scores(f['F_001'], CFG)
     assert [round(v, 6) for _, v in sc] == [round(k / 100, 6) for k in range(50)]
     assert [r for r, _ in sc] == [p['region'] for p in CFG['points']]
-    assert flag_eval.flip_scores(f['F_999'], CFG) is None
+    assert flag_eval.flip_scores(f['F_999'], CFG) is None and flag_eval.flip_scores_g(f['F_999'], CFG) is None
+    scg = flag_eval.flip_scores_g(f['F_001'], CFG)
+    assert [(r, v) for r, v, _ in scg] == sc and [g for _, _, g in scg] == [p['group'] for p in CFG['points']]       # thêm nhóm của từng điểm
 
 
 def test_unlabelled_mode_suggests_85th_percentile_with_known_value():
@@ -74,7 +76,12 @@ def test_unlabelled_mode_suggests_85th_percentile_with_known_value():
     text = '\n'.join(lines)
     assert 'ĐỀ XUẤT t_flip = 0.4165' in text and 'không tính được AUROC' in text and 'chưa ghi vào config' in text
     assert any(l.startswith('   0.85') for l in lines)
-    assert set(res['by_region']) == {'jaw', 'brow', 'nose', 'eye', 'lip'}
+    assert set(res['by_region']) == {'brow', 'nose', 'eye', 'lip'}                           # không còn vùng jaw
+    assert list(res['by_group']) == ['longmaytrai', 'longmayphai', 'songmui', 'mattrai', 'matphai', 'moingoai', 'moitrong']      # báo theo 7 nhóm, thứ tự config
+    assert 'điểm số theo nhóm' in text and 'theo nhóm: longmaytrai' in text and 'jaw' not in text
+    assert '0.0464' in text and 'không còn hiệu lực sau QĐ-003' in text                      # so với đề xuất của định nghĩa 50 điểm cũ
+    # điểm thứ k (từ 0) có điểm số k/100, nên cờ (> 0,4165) rơi vào k >= 42 = đúng 8 điểm của nhóm cuối config (moitrong): 100% nhóm đó, 0% các nhóm khác
+    assert res['by_group']['moitrong'] == pytest.approx(100.0) and sum(v for g, v in res['by_group'].items() if g != 'moitrong') == 0
     # cùng ngưỡng đưa vào steps.flags thì cờ/mặt đúng bằng số đề xuất báo
     assert [len(t) for t in res['table']] == [4] * 6 and abs(res['table'][3][1] - expect) < 1e-9
 
@@ -122,7 +129,7 @@ def test_main_unlabelled_filters_by_set_and_refuses_ttest(tmp_path, monkeypatch,
 
 
 # ---------- chế độ (b): có đáp án ----------
-BAD5 = [p['name'] for p in CFG['points'] if p['type'] == 'E' and p['name'] not in CFG['iod_points']][:5]       # 5 điểm E (p18, p22, p23, p27, p29)
+BAD5 = [p['name'] for p in CFG['points'] if p['type'] == 'E' and p['name'] not in CFG['iod_points']][:5]       # 5 điểm E đầu tiên (longmaytrai_1, _5, longmayphai_1, _5, songmui_1)
 
 
 def labelled_run(tmp_path, tol_region=None):
@@ -155,7 +162,7 @@ def test_labelled_mode_auroc_and_wrong_points(tmp_path, monkeypatch, capsys):
     assert flag_eval.main(['--run', 'R', '--gt', 'gt.xml', '--manifest', 'khong_co.csv']) == 0
     out = capsys.readouterr().out
     assert '3 mặt, 150 điểm' in out and 'điểm sai' in out and '10.0%' in out                 # 5/50 = 10% điểm sai (E đo điểm-điểm: đúng 10% IOD)
-    assert 'AUROC toàn bộ: 1.000' in out and 'AUROC theo vùng' in out
+    assert 'AUROC toàn bộ: 1.000' in out and 'AUROC theo vùng' in out and 'AUROC theo nhóm' in out
     (tmp_path / 'ngoai.xml').write_text('<annotations></annotations>', encoding='utf-8')
     with pytest.raises(SystemExit, match='Không ghép được'):
         flag_eval.main(['--run', 'R', '--gt', 'ngoai.xml'])
@@ -172,8 +179,8 @@ def test_labelled_mode_uses_tolerance_by_region_and_drops_ttest(tmp_path, monkey
 
 
 def test_tolerance_for_and_report_with_hand_rows():
-    assert flag_eval.tolerance_for({'tolerance': None}, 'jaw', 3.0) == 3.0
-    assert flag_eval.tolerance_for({'tolerance': {'jaw': 5.5}}, 'jaw', 3.0) == 5.5 and flag_eval.tolerance_for({'tolerance': {'jaw': 5.5}}, 'eye', 3.0) == 3.0
+    assert flag_eval.tolerance_for({'tolerance': None}, 'brow', 3.0) == 3.0
+    assert flag_eval.tolerance_for({'tolerance': {'brow': 5.5}}, 'brow', 3.0) == 5.5 and flag_eval.tolerance_for({'tolerance': {'brow': 5.5}}, 'eye', 3.0) == 3.0
     assert flag_eval.tolerance_for({'tolerance': 4}, 'eye', 3.0) == 4.0
     rows = [('eye', 0.1 * i, 1.0 if i < 8 else 5.0, f'F_{i // 5}') for i in range(10)]
     lines = []
