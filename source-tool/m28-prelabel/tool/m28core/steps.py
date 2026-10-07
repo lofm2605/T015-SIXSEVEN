@@ -2,7 +2,7 @@
 
 Phần của P1 (crop, mediapipe, flags, overlays, review auto/excel, ghi XML) viết ở đây.
 Phần của người khác gọi qua module riêng, thiếu thì báo rõ tên module cần:
-  m28core.mapping.apply_map   (P3)  — 478 điểm → {tên điểm: [x, y]} ảnh cắt 512 (chọn đỉnh MediaPipe trực tiếp theo `mp_idx` của config, QĐ-001)
+  m28core.mapping.apply_map   (P3)  — 478 điểm → {tên điểm: [x, y]} ảnh cắt 512 (chọn đỉnh MediaPipe trực tiếp theo `mp_idx` của config; config version 3 = 50 điểm DMS, QĐ-003)
   m28core.autoqc.run          (P4, tuỳ chọn) — QC 5 kiểm; thiếu thì chạy kiểm tối thiểu
   m28core.push.push           (P4)  — tạo task CVAT và nhập XML
   m28core.collect.collect     (P4)  — xuất nhãn từ task
@@ -322,14 +322,45 @@ def map50(args, out):
     return True
 
 
+def _need_current_names(mp50, names, args):
+    """mp50.json của lượt phải có đúng tên điểm của config. Lượt chạy bằng config CŨ (version 2, tên pNN_vùng_bên, trước QĐ-003) không đọc được bằng config version 3:
+    báo rõ cách xử lý thay vì KeyError khó hiểu."""
+    for n, p in mp50.items():
+        orig = p.get("orig") or {}
+        miss = [x for x in names if x not in orig]
+        if miss:
+            old = [k for k in orig if re.match(r"p\d\d_", k)]
+            raise SystemExit(f"{_run_dir(args)}{os.sep}map50{os.sep}mp50.json (mặt {n}) thiếu điểm {miss[0]} của config hiện tại"
+                             + (f": lượt này chạy bằng định nghĩa 50 điểm CŨ (version 2, tên {old[0]}, trước QĐ-003)." if old else ".")
+                             + f" Chạy lại bước map50 và các bước sau bằng config hiện tại: python tool\\m28.py prepare --run {args.run} --force map50 flags autoqc overlays")
+    return mp50
+
+
+DERIVED = ("map50", "flags", "autoqc", "overlays")          # các bước phụ thuộc tên điểm của config (crop, mediapipe thì không)
+
+
+def stale_derived_steps(args):
+    """Lượt đã chạy map50 bằng config KHÁC (ví dụ định nghĩa 50 điểm cũ version 2, tên pNN_vùng_bên, trước QĐ-003) thì trả DERIVED để m28.py tự tính lại các bước đó
+    từ pred478.json (không phụ thuộc tên điểm, nên không chạy lại MediaPipe); lượt hợp lệ, chưa chạy hoặc không đọc được config thì trả []."""
+    try:
+        names = [p["name"] for p in _jload(args.config)["points"]]
+        mp50 = _jload(os.path.join(_run_dir(args), "map50", "mp50.json"))
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    first = next(iter(mp50.values()), None)
+    if not isinstance(first, dict) or not isinstance(first.get("orig"), dict):
+        return []
+    return list(DERIVED) if any(n not in first["orig"] for n in names) else []
+
+
 def flags(args, out):
     """low_conf của từng điểm: lệch giữa ảnh gốc và ảnh lật (đã bỏ lật) / khoảng cách hai mắt > t_flip.
     t_flip = null (chưa họp chốt): mọi cờ = false."""
     cfg = _jload(args.config)
     names = [p["name"] for p in cfg["points"]]
-    eye_r, eye_l = cfg["iod_points"]
+    iod_a, iod_b = cfg["iod_points"]                 # hai khoé mắt ngoài (mattrai_1, matphai_1)
     t = cfg.get("t_flip")
-    mp50 = _alive(_jload(os.path.join(_run_dir(args), "map50", "mp50.json")), args)
+    mp50 = _need_current_names(_alive(_jload(os.path.join(_run_dir(args), "map50", "mp50.json")), args), names, args)
     res = {}
     for name, p in mp50.items():
         if t is None:
@@ -339,7 +370,7 @@ def flags(args, out):
         else:
             o = np.array([p["orig"][n] for n in names], float)
             f = np.array([p["flip"][n] for n in names], float)
-            iod = np.linalg.norm(np.array(p["orig"][eye_r]) - np.array(p["orig"][eye_l])) or 1.0
+            iod = np.linalg.norm(np.array(p["orig"][iod_a]) - np.array(p["orig"][iod_b])) or 1.0
             res[name] = [bool(v) for v in np.linalg.norm(o - f, axis=1) / iod > float(t)]
     _jsave(os.path.join(out, "flags.json"), _keep_old(args, os.path.join(out, "flags.json"), res))
     n = np.mean([sum(v) for v in res.values()]) if res else 0
@@ -359,7 +390,7 @@ def autoqc(args, out):
     cfg = _jload(args.config)
     names = [p["name"] for p in cfg["points"]]
     rd = _run_dir(args)
-    mp50 = _alive(_jload(os.path.join(rd, "map50", "mp50.json")), args)
+    mp50 = _need_current_names(_alive(_jload(os.path.join(rd, "map50", "mp50.json")), args), names, args)
     fl = _alive(_jload(os.path.join(rd, "flags", "flags.json")), args)
     rows = []
     for name, p in mp50.items():
@@ -393,7 +424,7 @@ def overlays(args, out):
     cfg = _jload(args.config)
     names = [p["name"] for p in cfg["points"]]
     rd = _run_dir(args)
-    mp50 = _alive(_jload(os.path.join(rd, "map50", "mp50.json")), args)
+    mp50 = _need_current_names(_alive(_jload(os.path.join(rd, "map50", "mp50.json")), args), names, args)
     fl = _alive(_jload(os.path.join(rd, "flags", "flags.json")), args)
     for name, p in mp50.items():
         img = cv2.imread(os.path.join(rd, "crop", "images", name + ".png"))
@@ -581,6 +612,7 @@ def push(args, out):
         raise SystemExit("push chỉ nhận một --task")
     no_face = _no_face(args)
     point_names = [p["name"] for p in cfg["points"]]
+    _need_current_names(mp50, point_names, args)
     plan = push_plan(triage, meta_all, mp50, phan_loai.read_no_face(rd), excluded, point_names)   # classify tự trừ mặt xoá mềm
     nhan, tay, tay_nhap, tay_trong = plan["nhan"], plan["tay"], plan["tay_nhap"], plan["tay_trong"]
     for n in plan["nhan_khong_nhap"]:

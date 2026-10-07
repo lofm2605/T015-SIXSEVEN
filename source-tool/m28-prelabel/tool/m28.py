@@ -107,6 +107,10 @@ def main(argv=None):
         steps.cleanup(args)               # không ghi done.txt: push --cleanup chỉ dọn task, lượt đẩy lại được sau đó
         return
     if args.cmd in ("prepare", "all"):
+        stale = steps.stale_derived_steps(args)
+        if stale:                                   # lượt chạy bằng định nghĩa 50 điểm cũ (hoặc config khác): tính lại các bước phụ thuộc tên điểm, giữ crop và MediaPipe
+            print(f"Lượt {args.run} đã chạy map50 bằng config khác (ví dụ 50 điểm cũ version 2, trước QĐ-003): tính lại {', '.join(stale)} bằng config hiện tại (crop, mediapipe giữ nguyên).")
+            args.force = sorted(set(args.force) | set(stale))
         for s in PREPARE:
             run_step(s, args)
     if args.cmd in ("review", "all"):
