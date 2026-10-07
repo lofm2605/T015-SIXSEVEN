@@ -1,18 +1,20 @@
 """Đo cờ low_conf (P2, 8/10 và 10/10). Chỉ dùng numpy; không bao giờ chạy trên Ttest (Ttest chỉ chạy một lần ngày 20/10).
 
-Điểm số nghi sai của mỗi điểm = lệch giữa ảnh gốc và ảnh lật đã bỏ lật / khoảng cách hai khoé mắt ngoài DỰ ĐOÁN (giống steps.flags). Cờ bật khi điểm số > t_flip.
+Điểm số nghi sai của mỗi điểm = lệch giữa ảnh gốc và ảnh lật đã bỏ lật / khoảng cách hai điểm `iod_points` (hai khoé mắt ngoài) DỰ ĐOÁN (giống steps.flags). Cờ bật khi điểm số > t_flip.
+Báo theo NHÓM (7 nhóm của config version 3: longmaytrai, longmayphai, songmui, mattrai, matphai, moingoai, moitrong) và theo vùng thô (brow, nose, eye, lip); không còn vùng jaw.
 Hai chế độ:
 
 (a) KHÔNG đáp án (dùng ngay, chưa cần nhãn gán tay):
         python tool\\flag_eval.py --run <run đã chạy prepare cho Tdev> --set Tdev [--manifest data\\manifest.csv]
-    In phân bố điểm số theo vùng (trung vị, phân vị 0,85 và 0,95), với từng ngưỡng (phân vị 0,5 ... 0,95) tỉ lệ điểm bị cờ và số cờ/mặt, và ĐỀ XUẤT
+    In phân bố điểm số theo nhóm và theo vùng (trung vị, phân vị 0,85 và 0,95), với từng ngưỡng (phân vị 0,5 ... 0,95) tỉ lệ điểm bị cờ và số cờ/mặt, và ĐỀ XUẤT
     t_flip = phân vị 0,85 của điểm số trên Tdev (cờ ~ 15% số điểm, ~7 cờ/mặt trên 50 điểm; kế hoạch P2: cờ <= 15% số điểm) để P2 chốt ngày 12/10.
+    So với đề xuất của định nghĩa 50 điểm CŨ (version 2, có viền hàm): 0,0464, không còn hiệu lực sau QĐ-003 (xem V2_T_FLIP).
     Không ghi vào config (P2 tự ghi ở tab Cài đặt hoặc make_config.py --t-flip). Không có AUROC vì chưa biết điểm nào sai.
 
 (b) CÓ đáp án (khi nhóm đã gán tay xong tập G/X, nhãn ở raw\\*.xml):
         python tool\\flag_eval.py --run <run> --gt raw\\<đáp án>.xml [--tol 3.0]
     Lỗi từng điểm lấy từ eval50.point_errors (E điểm-điểm, C tới đường gấp khúc đáp án), ghép theo tên ảnh và tên điểm. "Điểm sai" = lỗi > sai số chấp nhận
-    (config.tolerance theo vùng nếu có, không thì --tol, mặc định 3% IOD). Báo % điểm sai, AUROC toàn bộ và THEO VÙNG, và với từng ngưỡng: % điểm bị cờ,
+    (config.tolerance theo vùng nếu có, không thì --tol, mặc định 3% IOD). Báo % điểm sai, AUROC toàn bộ, THEO VÙNG và THEO NHÓM, và với từng ngưỡng: % điểm bị cờ,
     % điểm sai bị bắt, độ chính xác, cờ/mặt. Mặt thuộc Ttest (theo manifest) bị bỏ.
 """
 import argparse
@@ -27,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 QUANTILES = (0.5, 0.7, 0.8, 0.85, 0.9, 0.95)
 SUGGEST_Q = 0.85
+V2_T_FLIP = 0.0464        # đề xuất t_flip (phân vị 0,85 trên Tdev) của định nghĩa 50 điểm CŨ (version 2, có viền hàm, 6/10/2026): chỉ để so, không còn hiệu lực
 
 
 def auroc(score, bad):
@@ -48,8 +51,8 @@ def auroc(score, bad):
     return float((ranks[bad].sum() - n1 * (n1 + 1) / 2) / (n1 * n0))
 
 
-def flip_scores(mp50_face, cfg):
-    """Điểm số nghi sai của từng điểm của một mặt: [(vùng, điểm số)] theo thứ tự config; None nếu mặt không có ảnh lật.
+def flip_scores_g(mp50_face, cfg):
+    """Điểm số nghi sai của từng điểm của một mặt: [(vùng, điểm số, nhóm)] theo thứ tự config; None nếu mặt không có ảnh lật.
     mp50_face = {'orig': {tên: [x, y]}, 'flip': {...} | None} (flip đã bỏ lật, như map50\\mp50.json)."""
     if not mp50_face.get("flip"):
         return None
@@ -59,18 +62,24 @@ def flip_scores(mp50_face, cfg):
     f = np.array([mp50_face["flip"][n] for n in names], float)
     iod = float(np.linalg.norm(np.array(mp50_face["orig"][e1]) - np.array(mp50_face["orig"][e2]))) or 1.0
     s = np.linalg.norm(o - f, axis=1) / iod
-    return [(p["region"], float(v)) for p, v in zip(cfg["points"], s)]
+    return [(p["region"], float(v), p.get("group", p["region"])) for p, v in zip(cfg["points"], s)]
+
+
+def flip_scores(mp50_face, cfg):
+    """Như flip_scores_g nhưng chỉ [(vùng, điểm số)]."""
+    sc = flip_scores_g(mp50_face, cfg)
+    return None if sc is None else [(r, v) for r, v, _ in sc]
 
 
 def collect_scores(files, mp50, cfg):
-    """Chế độ (a): [(vùng, điểm số, tên mặt)] của các mặt có ảnh lật; trả thêm số mặt bị bỏ vì thiếu ảnh lật."""
+    """Chế độ (a): [(vùng, điểm số, tên mặt, nhóm)] của các mặt có ảnh lật; trả thêm số mặt bị bỏ vì thiếu ảnh lật."""
     rows, skipped = [], 0
     for fn in files:
-        sc = flip_scores(mp50[fn], cfg)
+        sc = flip_scores_g(mp50[fn], cfg)
         if sc is None:
             skipped += 1
             continue
-        rows += [(r, v, fn) for r, v in sc]
+        rows += [(r, v, fn, g) for r, v, g in sc]
     return rows, skipped
 
 
@@ -87,23 +96,27 @@ def threshold_table(score, nface, out=print):
 
 
 def report_unlabelled(rows, out=print):
-    """Chế độ (a). Trả dict(t_flip, flags_per_face, flagged_pct, table, by_region)."""
+    """Chế độ (a). Trả dict(t_flip, flags_per_face, flagged_pct, table, by_region, by_group). rows: (vùng, điểm số, tên mặt[, nhóm])."""
     reg = np.array([r[0] for r in rows])
+    grp = np.array([r[3] if len(r) > 3 else r[0] for r in rows])
     score = np.array([r[1] for r in rows])
     faces = sorted(set(r[2] for r in rows))
     out(f"{len(faces)} mặt, {len(rows)} điểm (KHÔNG có đáp án: không tính được AUROC; AUROC cần nhãn gán tay G/X, dùng chế độ --gt)")
-    out("điểm số theo vùng (trung vị / phân vị 0,85 / phân vị 0,95): "
-        + ", ".join(f"{g} {np.median(score[reg == g]):.4f}/{np.quantile(score[reg == g], 0.85):.4f}/{np.quantile(score[reg == g], 0.95):.4f}"
-                    for g in sorted(set(reg))))
+    stat = lambda v: f"{np.median(v):.4f}/{np.quantile(v, 0.85):.4f}/{np.quantile(v, 0.95):.4f}"            # noqa: E731
+    gorder = list(dict.fromkeys(grp))                                                                         # thứ tự nhóm = thứ tự xuất hiện (thứ tự config)
+    out("điểm số theo nhóm (trung vị / phân vị 0,85 / phân vị 0,95): " + ", ".join(f"{g} {stat(score[grp == g])}" for g in gorder))
+    out("điểm số theo vùng (trung vị / phân vị 0,85 / phân vị 0,95): " + ", ".join(f"{g} {stat(score[reg == g])}" for g in sorted(set(reg))))
     table = threshold_table(score, len(faces), out)
     t = round(float(np.quantile(score, SUGGEST_Q)), 4)
     flagged = score > t
     per_face = float(flagged.sum() / len(faces))
     by_reg = {g: float((flagged[reg == g]).mean() * 100) for g in sorted(set(reg))}
+    by_grp = {g: float((flagged[grp == g]).mean() * 100) for g in gorder}
     out(f"ĐỀ XUẤT t_flip = {t:g} (phân vị {SUGGEST_Q:g} trên {len(faces)} mặt): {100 * flagged.mean():.1f}% điểm bị cờ, {per_face:.1f} cờ/mặt; "
-        "theo vùng: " + ", ".join(f"{g} {v:.0f}%" for g, v in by_reg.items()))
+        "theo nhóm: " + ", ".join(f"{g} {v:.0f}%" for g, v in by_grp.items()) + "; theo vùng: " + ", ".join(f"{g} {v:.0f}%" for g, v in by_reg.items()))
+    out(f"(so với đề xuất {V2_T_FLIP:g} của định nghĩa 50 điểm cũ version 2, có viền hàm, không còn hiệu lực sau QĐ-003)")
     out("(chỉ đề xuất cho P2 chốt ngày 12/10; chưa ghi vào config)")
-    return dict(t_flip=t, flags_per_face=per_face, flagged_pct=float(100 * flagged.mean()), table=table, by_region=by_reg)
+    return dict(t_flip=t, flags_per_face=per_face, flagged_pct=float(100 * flagged.mean()), table=table, by_region=by_reg, by_group=by_grp)
 
 
 def tolerance_for(cfg, region, tol):
@@ -118,25 +131,26 @@ def tolerance_for(cfg, region, tol):
 
 
 def collect_points(files, mp50, cfg, gt, pred_upload, tol):
-    """Chế độ (b): [(vùng, điểm số, lỗi % IOD, tên mặt)]. files: {tên mặt trong run: tên ảnh không đuôi trong nhãn}. pred_upload: dự đoán theo toạ độ nhãn."""
+    """Chế độ (b): [(vùng, điểm số, lỗi % IOD, tên mặt, nhóm)]. files: {tên mặt trong run: tên ảnh không đuôi trong nhãn}. pred_upload: dự đoán theo toạ độ nhãn."""
     import eval50
     rows = []
     for fn, key in files.items():
-        sc = flip_scores(mp50[fn], cfg)
+        sc = flip_scores_g(mp50[fn], cfg)
         if sc is None or key not in gt or key not in pred_upload:
             continue
         err, _missing, d = eval50.point_errors(pred_upload[key], gt[key], cfg)
         if d is None:
             continue
-        for p, (reg, v) in zip(cfg["points"], sc):
+        for p, (reg, v, grp) in zip(cfg["points"], sc):
             if p["name"] in err:
-                rows.append((reg, v, err[p["name"]], fn))
+                rows.append((reg, v, err[p["name"]], fn, grp))
     return rows
 
 
 def report(rows, tol, out=print, cfg=None):
-    """Chế độ (b): rows = [(vùng, điểm số, lỗi % IOD, tên mặt)]; điểm sai = lỗi > tol (hoặc config.tolerance theo vùng nếu truyền cfg)."""
+    """Chế độ (b): rows = [(vùng, điểm số, lỗi % IOD, tên mặt[, nhóm])]; điểm sai = lỗi > tol (hoặc config.tolerance theo vùng nếu truyền cfg)."""
     reg = np.array([r[0] for r in rows])
+    grp = np.array([r[4] if len(r) > 4 else r[0] for r in rows])
     score = np.array([r[1] for r in rows])
     err = np.array([r[2] for r in rows])
     tols = np.array([tolerance_for(cfg, g, tol) if cfg else tol for g in reg])
@@ -145,6 +159,9 @@ def report(rows, tol, out=print, cfg=None):
     out(f"AUROC toàn bộ: {auroc(score, bad):.3f}   (0,5 = cờ không có tác dụng; 1 = hoàn hảo)")
     out("AUROC theo vùng: " + ", ".join(f"{r} {auroc(score[reg == r], bad[reg == r]):.3f} (sai {100 * bad[reg == r].mean():.0f}%)"
                                           for r in sorted(set(reg))))
+    if len(rows[0]) > 4:
+        out("AUROC theo nhóm: " + ", ".join(f"{g} {auroc(score[grp == g], bad[grp == g]):.3f} (sai {100 * bad[grp == g].mean():.0f}%)"
+                                            for g in dict.fromkeys(grp)))
     out("phân vị  ngưỡng t_flip  điểm bị cờ  % điểm sai bị bắt  độ chính xác  cờ/mặt")
     nface = len(set(r[3] for r in rows))
     table = []
