@@ -148,7 +148,7 @@ def clean_text(s, maxlen, what="Văn bản"):
 
 
 def clean_diem(diem, known=None):
-    """Danh sách điểm (list hoặc chuỗi cách nhau bằng ; hoặc ,) -> 'p01;p02'. Có `known` (tên trong config) thì chỉ nhận tên đó."""
+    """Danh sách điểm (list hoặc chuỗi cách nhau bằng ; hoặc ,) -> 'mattrai_1;mattrai_2'. Có `known` (tên trong config) thì chỉ nhận tên đó."""
     if isinstance(diem, str):
         parts = re.split(r"[;,]", diem)
     else:

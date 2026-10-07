@@ -335,7 +335,7 @@ def phase_a(pw, E, port):
         # 9. t_flip
         cfgp = os.path.join(E.work, 'config', 'm28_config.json')
         ti = txt(pg, '#cd-tflip-info')
-        check('chưa đặt (null): mọi cờ = false' in ti and 'p33_eye_R' in ti and '0,0672' in ti, f'thông tin t_flip: {ti[:120]!r}')
+        check('chưa đặt (null): mọi cờ = false' in ti and 'mattrai_1' in ti and '0,0672' in ti, f'thông tin t_flip: {ti[:120]!r}')
         fill(pg, 'cd-tflip', '-1')
         pg.click('#cd-tflip-set')
         wait_in(pg, '#cd-tflip-msg', 'lớn hơn 0')

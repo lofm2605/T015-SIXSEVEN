@@ -76,7 +76,7 @@ def pkg(proj, nguoi='P1', now=None, **kw):
 
 # ---------- ghi nhận ca khó ----------
 def test_upsert_tao_sua_giu_khoa_nguoi_anh(proj):
-    row, created = mark(proj, note='Mắt trái lệch', diem='p01_jaw_R;p02_jaw_R')
+    row, created = mark(proj, note='Mắt trái lệch', diem='mattrai_1;mattrai_2')
     assert created and row['luot'] == 'CKA' and row['loai'] == 'SWAP' and row['tao_luc'] == row['sua_luc']
     row2, created2 = mark(proj, loai='RULE', note='đổi ý', now=at(5))
     assert not created2 and row2['loai'] == 'RULE' and row2['tao_luc'] == row['tao_luc'] and row2['sua_luc'] != row['tao_luc']
@@ -259,7 +259,7 @@ def test_chu_tren_giao_dien_noi_ve_anh_tai_xe_khong_con_cc_by_nc_nd():
 # ---------- xuất gói ----------
 def test_build_package_ba_loai_muc_va_manifest(proj):
     big_png(os.path.join(proj['cka'], 'overlays', 'F_001.png'))
-    mark(proj, note='Mắt', diem='p01_jaw_R')
+    mark(proj, note='Mắt', diem='mattrai_1')
     mark(proj, anh='F_002.png', loai='RULE')
     info = pkg(proj)
     assert info['so_ca'] == 2 and info['so_anh'] == 2 and not info['replaced'] and info['rel'].endswith('ca_kho_P1_1610.zip')
@@ -277,7 +277,7 @@ def test_build_package_ba_loai_muc_va_manifest(proj):
         im = Image.open(io.BytesIO(zf.read('anh/CKA__F_001.jpg')))
         assert im.format == 'JPEG' and max(im.size) <= 480 and not im.getexif()
         rows = list(csv.DictReader(io.StringIO(zf.read('ca_kho.csv').decode('utf-8-sig'))))
-        assert [r['thumb'] for r in rows] == ['anh/CKA__F_001.jpg', 'anh/CKA__F_002.jpg'] and rows[0]['diem'] == 'p01_jaw_R'
+        assert [r['thumb'] for r in rows] == ['anh/CKA__F_001.jpg', 'anh/CKA__F_002.jpg'] and rows[0]['diem'] == 'mattrai_1'
     assert not [f for f in os.listdir(os.path.dirname(info['path'])) if '.tmp' in f]
 
 
@@ -517,7 +517,7 @@ def test_khong_giai_nen_ra_dia(tmp_path, monkeypatch):
 # ---------- phiên họp ----------
 def make_packages(proj):
     """Hai gói: P1 (2 ca, ảnh WFLW) và P3 (2 ca: cùng F_001 + một ca khác); trả (đường dẫn P1, đường dẫn P3)."""
-    mark(proj, nguoi='P1', anh='F_001.png', loai='SWAP', note='Hai điểm hàm đổi chỗ', diem='p01_jaw_R;p02_jaw_R', now=at(0))
+    mark(proj, nguoi='P1', anh='F_001.png', loai='SWAP', note='Hai điểm mắt đổi chỗ', diem='mattrai_1;mattrai_2', now=at(0))
     mark(proj, nguoi='P1', anh='F_002.png', loai='CONG_CU', note='Khó kéo điểm', now=at(1))
     mark(proj, nguoi='P3', anh='F_001.png', loai='RULE', note='Chưa có quy tắc cho kính', now=at(2))
     mark(proj, nguoi='P3', anh='F_003.png', loai='GL_MO_HO', note='Mơ hồ | có dấu ống', now=at(3))
@@ -782,7 +782,7 @@ def test_write_minutes_khong_dung_repo_docs(proj, tmp_path):
 
 # ---------- HTML ----------
 def test_html_thoat_ky_tu(proj):
-    mark(proj, note='<script>alert(1)</script>', diem='p01_jaw_R')
+    mark(proj, note='<script>alert(1)</script>', diem='mattrai_1')
     rows = ck.read_marks(proj['cka'])
     assert '<script>' not in ck.list_html(rows) and '&lt;script&gt;' in ck.list_html(rows)
     pa = pkg(proj)['path']
