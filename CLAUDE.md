@@ -39,7 +39,7 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
    (dạng `**T3 6/10** việc — chạy ở … — ra … — xong khi …`) và bảng "Bạn nhận gì và giao gì".
 3. Làm đúng việc của ngày đó, đúng tên file và thư mục như kế hoạch. Không tự đổi tên điểm, tên file,
    ngày giao nhận; nếu thấy kế hoạch sai thì nói rõ và đề xuất sửa.
-4. Code chạy trên Windows, Python 3.14, CPU; lệnh viết cho **cmd** (không phải PowerShell). Phiên Claude
+4. Code chạy trên Windows, Python 3.14, CPU; lệnh viết cho **cmd** (không phải PowerShell). Máy Ubuntu: dùng `source-tool/m28-prelabel/chay.sh` và `HUONG-DAN-UBUNTU.md` (lệnh bash, đường dẫn `/`); code Python dùng chung, chỉ khác lệnh và đường dẫn. Phiên Claude
    trên cloud không có CVAT của ai và không có GPU. **Từ 6/10/2026 chủ repo cho phép phiên cloud tải và xử
    lý ảnh của các bộ in-cabin đã chọn (YawDD, DrivFace)** để dựng gói dữ liệu và thử `m28.py` trên dữ liệu thật; cần môi trường cloud cho phép
    các host tải (`archive.ics.uci.edu`, `skuld.cs.umass.edu`...). Host bị chặn thì báo chủ repo sửa Network access, không vòng qua.

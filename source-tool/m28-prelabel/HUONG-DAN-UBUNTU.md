@@ -1,0 +1,134 @@
+# Hướng dẫn chạy m28 trên Ubuntu
+
+Bản Ubuntu của `HUONG-DAN-WINDOWS.md`. Mọi lệnh viết cho **bash**, CPU, không cần GPU. Các mục nào không khác Windows (cách rà soát, ca khó, nhập CVAT trên trang) thì xem mục tương ứng bên kia;
+ở đây chỉ ghi chỗ khác. Bản này **chưa chạy đủ trên Ubuntu thật**: gặp lỗi thì ghi nguyên văn rồi báo P1.
+Ảnh trong xe (YawDD, DrivFace) là ảnh người lái xe, chỉ dùng nội bộ nhóm, không đăng, không đưa vào chat AI.
+
+> **Cách nhanh nhất:** lấy code (mục 1), giải nén dữ liệu (mục 4), rồi trong thư mục `source-tool/m28-prelabel` chạy `./chay.sh`.
+> File tự cài môi trường Python lần đầu, tải model, rồi hiện menu giống `chay.bat`.
+
+## 0. Chuẩn bị
+```bash
+sudo apt update
+sudo apt install -y git curl unzip python3 python3-venv python3-pip
+```
+- **Phiên bản Python:** kế hoạch ghi Python 3.14, nhưng Ubuntu thường chỉ có 3.10 (22.04) hoặc 3.12 (24.04). `chay.sh` tự chọn bản mới nhất có sẵn (3.14 → 3.10).
+  Mã nguồn biên dịch được trên 3.10; **mediapipe 1.0.1 và gradio 6.29.1 có chạy trên 3.10 hay không thì chưa kiểm**: nếu `pip install` báo không có bản phù hợp, cài Python mới hơn
+  (Ubuntu 22.04: PPA `deadsnakes`, `sudo apt install python3.12 python3.12-venv`) rồi chạy lại (menu mục 6 để cài lại `.venv`).
+- Thiếu `python3-venv` thì `python3 -m venv` báo thiếu `ensurepip`: cài đúng gói theo phiên bản (`python3.12-venv`...).
+- CVAT cài **Docker Engine gốc trên Ubuntu** (không cần WSL): làm theo `de-tai-m28/huong-dan-chung.md`, bỏ phần WSL; `docker compose up -d` chạy thẳng, chỉ mở ở `http://localhost:8080`.
+
+## 1. Lấy code
+```bash
+cd ~
+git clone https://github.com/lofm2605/T015-SIXSEVEN.git m28
+cd m28/source-tool/m28-prelabel
+git checkout main
+```
+Muốn lấy bản mới: `git pull`. Nếu `chay.sh` báo `Permission denied`: `chmod +x chay.sh`.
+
+## 2. Môi trường Python (làm tay; `chay.sh` đã làm hộ)
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+# bỏ torch/torchvision (chỉ để so sánh nội bộ, nặng, không cần để chạy m28):
+grep -v -i torch requirements.txt > /tmp/req_m28.txt
+python -m pip install -r /tmp/req_m28.txt
+python -m pip install -r requirements-ui.txt
+python -m pip install pytest
+python -c "import mediapipe as mp; print(mp.__version__)"
+```
+Phải in `1.0.1`. Mỗi lần mở terminal mới chạy lại `source .venv/bin/activate`. Trước khi cài `requirements-ui.txt` nên thử `python -m pip install --dry-run -r requirements-ui.txt`:
+nếu nó định đổi numpy/opencv thì dừng và báo P2.
+
+## 3. Model MediaPipe
+```bash
+curl -L -o face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+```
+Phải được file ~3,7 MB, đặt cùng thư mục chạy lệnh. Không commit file này.
+
+## 4. Dữ liệu in-cabin (YawDD + DrivFace)
+**a) Gói đã cắt sẵn** (chủ repo gửi `m28_incab_part*.zip`): giải nén tất cả vào cùng thư mục `data/` rồi kiểm:
+```bash
+mkdir -p data
+for f in m28_incab_part*.zip; do unzip -o "$f" -d data; done
+python tool/check_manifest.py data/manifest.csv
+```
+Phải in `Kiểm manifest kiểu: in-cabin (YawDD + DrivFace)` rồi `manifest.csv đạt`; `data/crops/` có 616 ảnh `.png`.
+
+**b) Tự dựng lại gói (chỉ P1/chủ repo; cần video YawDD 5,3 GB và DrivFace 26 MB):**
+```bash
+sudo apt install -y p7zip-full        # giải nén file .rar của YawDD
+mkdir -p ~/incab && cd ~/incab
+curl -L -O https://skuld.cs.umass.edu/traces/mmsys/2014/user06.tar
+tar -xf user06.tar
+7z x "user06/YawDD dataset.rar" -o"$HOME/incab"        # ra thư mục "YawDD dataset"
+curl -L -o drivface.zip https://archive.ics.uci.edu/static/public/378/drivface.zip
+unzip -o drivface.zip -d "$HOME/incab"
+mkdir -p DrivFace/imgs && unzip -o DrivFace/DrivImages.zip -d DrivFace/imgs
+cd -    # về lại source-tool/m28-prelabel
+python tool/inc_ingest.py all --yawdd "$HOME/incab/YawDD dataset" --drivface "$HOME/incab/DrivFace" --model face_landmarker.task --out data --seed 5
+```
+Các lệnh tải/giải nén này **chưa thử**: đối chiếu tên thư mục thật sau mỗi bước. Chi tiết các cờ: `README.md`, mục "Dữ liệu in-cabin".
+
+## 5. Chạy thử trên 5 mặt (không cần CVAT, không cần token)
+Cách nhanh: `./chay.sh`, chọn 3. Hoặc gõ tay:
+```bash
+python -c "import csv;r=[x for x in csv.DictReader(open('data/manifest.csv',encoding='utf-8')) if x['set']=='F'][:5];w=csv.writer(open('data/f5_list.csv','w',newline=''));w.writerow(['image','face_idx','seed']);[w.writerow([x['image'],x['face_idx'],x['seed']]) for x in r]"
+python tool/m28.py all --run F5 --list data/f5_list.csv --images data/crops --box crop --review auto --dry-run
+```
+Kết quả đúng: các bước `crop`, `mediapipe`, `map50`, `flags`, `autoqc`, `overlays` đều "xong", `push` in "Chạy thử (--dry-run)", và có `runs/F5/xml/prelabel.xml`.
+Khoản `t_flip` và điểm đỏ: như `HUONG-DAN-WINDOWS.md` mục 5; hoàn lại config bằng `git checkout config/m28_config.json`.
+
+## 6. Trang rà soát
+```bash
+python tool/m28.py review --run F5 --reviewer P1 --force review
+python tool/review_app.py --nap P1          # chưa có lượt nào: kéo thả ảnh ở tab Nạp ảnh
+python tool/review_app.py runs/F5 P1        # mở lại một lượt
+```
+Trình duyệt tự mở http://127.0.0.1:7860 (chỉ máy bạn vào được). Cách rà, Ca khó, tab Các đợt: như bản Windows (đổi `\` thành `/` trong đường dẫn; thông báo trong tool vẫn in `\` kiểu Windows, gõ lại bằng `/`).
+Khác với Windows:
+- Chạy trên máy không có giao diện (SSH) hoặc trình duyệt không tự mở: `export M28_NO_BROWSER=1`, rồi tự mở http://127.0.0.1:7860 (qua SSH: `ssh -L 7860:127.0.0.1:7860 <máy>`). Không `share=True`, không tunnel công khai.
+- Cổng bận: `export GRADIO_SERVER_PORT=7861`.
+- `--review excel` mở CSV bằng LibreOffice Calc (`libreoffice --calc runs/F5/autoqc/autoqc.csv`), lưu CSV UTF-8 thành `runs/F5/review/triage_P1.csv`.
+
+## 7. Nhập vào CVAT
+Cài CVAT cùng bản 2.77.0 (mục 0), rồi:
+```bash
+python -m pip install cvat-sdk==2.77.0
+python tool/make_label.py
+```
+- **Từ trang rà soát:** tab **Cài đặt** → dán `http://localhost:8080` và token → **Lưu** → **Thử kết nối CVAT**. Bật **Nhớ trên máy này** thì token lưu ở `~/.config/m28/cvat.json`
+  (hoặc `$XDG_CONFIG_HOME/m28/`), ngoài repo, quyền `0600` (chỉ chủ máy đọc được; tool tự đặt). Ngày 24/10 bấm **Quên token** và thu hồi token trong CVAT.
+- **Lệnh trong terminal** (`m28.py push/collect`) **không đọc `cvat.json`**: đặt biến môi trường trong chính terminal đó:
+```bash
+export CVAT_URL=http://localhost:8080
+read -rs CVAT_ACCESS_TOKEN && export CVAT_ACCESS_TOKEN     # gõ/dán token, không hiện ra màn hình và không vào lịch sử
+python tool/m28.py push --run F5 --reviewer P2 --task demo-F5
+python tool/m28.py collect --task demo-F5 --reviewer P2
+```
+  Đừng viết token thẳng trên dòng lệnh (`export CVAT_ACCESS_TOKEN=...` ghi vào `~/.bash_history`). Đóng terminal là biến mất; không lưu vào `~/.bashrc`.
+- Kiểm tra nhanh trước lần push đầu: `./chay.sh` mục 4, hoặc `python tool/cvat_smoke.py` (và `--dry-run` để kiểm cục bộ). Các cảnh báo xoá, `collect`, `demo-` / `m28-`: như `HUONG-DAN-WINDOWS.md` mục 7.
+- Kiểm CVAT đang chạy: `docker compose ps` trong thư mục CVAT, rồi mở http://localhost:8080.
+
+## 8. Test và báo lỗi
+```bash
+source .venv/bin/activate
+python -m pytest tests -q
+```
+Trên Windows có 11 lỗi có sẵn (symlink, CRLF); trên Ubuntu **chưa có số đo**, ghi lại kết quả đầu tiên rồi báo P1. `tests/test_chay_bat.py` chỉ đọc tĩnh `chay.bat`, nên vẫn chạy được trên Linux.
+Test chỉ dùng dữ liệu giả, không cần ảnh mặt thật hay mạng.
+
+| Triệu chứng | Cách xử lý |
+|---|---|
+| `No module named ensurepip` / `venv` | `sudo apt install python3-venv` (hoặc `python3.X-venv`) |
+| `pip install mediapipe` không tìm được bản phù hợp | Python quá cũ/mới: cài Python 3.12 (PPA `deadsnakes`), xoá `.venv`, chạy lại |
+| `ImportError: libGL.so.1` / `libgthread` | `sudo apt install libgl1 libglib2.0-0` |
+| `UnicodeEncodeError` | `export PYTHONUTF8=1` (`chay.sh` đã đặt) |
+| `Cổng 7860 bận` | Đóng bản đang chạy, hoặc `export GRADIO_SERVER_PORT=7861` |
+| Trình duyệt không tự mở | `export M28_NO_BROWSER=1` rồi tự mở http://127.0.0.1:7860 |
+| `docker: permission denied` | `sudo usermod -aG docker $USER`, đăng xuất và đăng nhập lại |
+| `Thiếu file config/...` | Chưa `git pull`, hoặc đứng sai thư mục (phải ở `source-tool/m28-prelabel`) |
+
+Khi báo lỗi gửi: bản Ubuntu (`lsb_release -a`), `python --version`, lệnh đã gõ và 10 dòng cuối của `runs/<run>/log.txt`. **Không** gửi ảnh mặt, file xuất CVAT hay token.
