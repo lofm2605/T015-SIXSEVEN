@@ -411,11 +411,12 @@ def tinh(project_root, luot=None, gom_ttest=False, nguoi_ra=(), luot_nhap=None, 
                         luot_nhap=luot_nhap or "", canh_bao=list(bang.warnings), nhan_dung=[i["file"] for i in bang.labels if i["dieu_kien"] != "bo_qua" and not i["ghi_chu"].startswith("không đọc")],
                         co_manifest=bool(manifest)))
     st["so_luong"] = so_luong(bang, rows, nguoi_ra)
-    st["chat_luong"] = chat_luong(bang, rows, project_root)
+    song = [r for r in rows if not r["xoa_mem"]]                       # mặt đã xoá mềm chỉ được ĐẾM ở mục số lượng, không vào số đo chất lượng, cờ, giây rà
+    st["chat_luong"] = chat_luong(bang, song, project_root)
     cap = st["chat_luong"].get("cap", [])
-    st["co"] = co_lowconf(bang, rows, cap)
+    st["co"] = co_lowconf(bang, song, cap)
     st["toc_do"] = toc_do_muc(project_root, timing, manifest)
-    st["giay_ra"] = giay_ra(bang, rows, nguoi_ra, st["toc_do"])
+    st["giay_ra"] = giay_ra(bang, song, nguoi_ra, st["toc_do"])
     st["tien_do"] = tien_do(project_root, bang, rows, st["toc_do"], nguoi_ra)
     st["nme_nhap_rows"] = nme_nhap_rows(bang, cap)
     st["nme_nhap_cols"] = nme_nhap_cols(bang)
@@ -540,7 +541,7 @@ def main(argv=None):
     ap.add_argument("--nguoi-ra", nargs="*", default=None, help="chỉ tính quyết định/giây rà của những người này (triage_auto không tính)")
     ap.add_argument("--luot-nhap", default=None, help="lượt chứa NHÁP cho nhãn thí nghiệm không có push.json (m28-manual, m28-assisted…)")
     ap.add_argument("--file-nhan", nargs="*", default=None, help="thêm file nhãn (trong thư mục dự án)")
-    ap.add_argument("--project", default=os.path.dirname(TOOL_DIR), help=argparse.SUPPRESS)
+    ap.add_argument("--project", default=bang_mat.mac_dinh_du_an(), help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
     try:
         st, bang = tinh(a.project, a.luot, a.gom_ttest, a.nguoi_ra or (), a.luot_nhap, a.file_nhan or (), a.timing)

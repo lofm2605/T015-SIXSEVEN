@@ -75,6 +75,13 @@ def rel(project_root, path):
     return os.path.basename(path)
 
 
+def mac_dinh_du_an():
+    """Thư mục gốc dự án mặc định của các CLI: thư mục hiện tại nếu có config\\m28_config.json (chạy từ source-tool\\m28-prelabel hoặc một thư mục chạy riêng), không thì thư mục
+    chứa tool\\ (bản m28-prelabel đang chạy)."""
+    cwd = os.getcwd()
+    return cwd if os.path.isfile(os.path.join(cwd, "config", "m28_config.json")) else os.path.dirname(TOOL_DIR)
+
+
 def load_cfg(project_root):
     p = os.path.join(project_root, "config", "m28_config.json")
     try:

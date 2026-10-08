@@ -213,7 +213,7 @@ def save_cfg_path(project_root, name):
 
 def loc_tab(gr, demo, store, ctx):
     """Tab "Lọc dữ liệu". Trả (hàm làm mới, inputs, outputs, opts) để build_ui nối vào tab.select."""
-    opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="locdl")
+    opts = dict(show_progress="minimal", api_visibility="private", concurrency_limit=1, concurrency_id="locdl")
     groups, regions = ([], [])
     try:
         groups, regions = groups_regions(ctx.project_root)

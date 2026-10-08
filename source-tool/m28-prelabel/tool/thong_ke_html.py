@@ -215,6 +215,9 @@ def muc_chat_luong(st):
     out = []
     if cl["can_duoi"]:
         out.append(f'<div class="tk-note tk-warn"><b>Chỉ có nhãn assisted: cận dưới.</b> {e(_can_duoi())}</div>')
+    if cl["n_khong_nhap"]:
+        out.append(f'<div class="tk-note">Có {cl["n_khong_nhap"]} nhãn chưa ghép với nháp của máy. Nếu đó là nhãn thí nghiệm (m28-manual, m28-assisted…), chọn ô '
+                   '<b>Lượt chứa nháp</b> (luot_nhap, hoặc --luot-nhap) rồi Làm mới để tính NME cho chúng.</div>')
     for c, s in cl["theo_dieu_kien"].items():
         ten = {"manual": "Nhãn manual — đáp án trung thực cho chất lượng nháp", "assisted": "Nhãn assisted — CẬN DƯỚI (lượng người đã sửa nháp)",
                "khong_ro_dieu_kien": "Nhãn chưa rõ điều kiện (không dùng làm số tiêu đề)"}[c]

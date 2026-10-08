@@ -702,7 +702,7 @@ def main(argv=None):
     ap.add_argument("--ten", help="tên bộ dữ liệu (mặc định lấy khoá ten của cấu hình)")
     ap.add_argument("--ghi-de", action="store_true", help="cho phép ghi đè bộ cùng tên")
     ap.add_argument("--zip", action="store_true", help="thêm outputs\\train_sets\\<tên>.zip (chứa ảnh mặt: chỉ gửi trong đội)")
-    ap.add_argument("--project", default=os.path.dirname(TOOL_DIR), help=argparse.SUPPRESS)
+    ap.add_argument("--project", default=bang_mat.mac_dinh_du_an(), help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
     try:
         groups, regions = _config_groups(a.project)

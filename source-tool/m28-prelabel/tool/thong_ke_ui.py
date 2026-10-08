@@ -84,7 +84,7 @@ def clean_args(runs_root, luot, nguoi, luot_nhap):
 
 def stats_tab(gr, demo, store, ctx):
     """Tab "Thống kê". Trả (hàm làm mới, inputs, outputs, opts) để build_ui nối vào tab.select."""
-    opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="thongke")
+    opts = dict(show_progress="minimal", api_visibility="private", concurrency_limit=1, concurrency_id="thongke")
     gr.HTML(note_html(), elem_id="tk-note", apply_default_css=False)
     with gr.Row(elem_id="tk-filters"):
         d_luot = gr.Dropdown(choices=[], value=[], multiselect=True, label="Lượt (để trống = tất cả)", elem_id="tk-luot")

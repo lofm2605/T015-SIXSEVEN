@@ -359,3 +359,45 @@ def test_module_thong_ke_khong_keo_gradio_torch():
             "    assert m not in sys.modules, m\nprint('ok')\n") % os.path.join(HERE, '..', 'tool')
     r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, encoding='utf-8')
     assert r.returncode == 0 and 'ok' in r.stdout, r.stderr
+
+
+def test_cli_mac_dinh_dung_thu_muc_hien_tai_co_config(world, monkeypatch, capsys):
+    monkeypatch.chdir(world['root'])
+    assert bm.mac_dinh_du_an() == world['root']
+    assert tk.main(['--luot', 'R1']) == 0                                                       # không cần --project: gốc dự án = thư mục hiện tại
+    assert os.path.isdir(os.path.join(world['root'], 'outputs', 'thong_ke'))
+    monkeypatch.chdir(os.path.dirname(world['root']))                                           # thư mục không có config: rơi về bản m28-prelabel chứa tool\
+    assert os.path.isfile(os.path.join(bm.mac_dinh_du_an(), 'config', 'm28_config.json')) and bm.mac_dinh_du_an() != world['root']
+
+
+def test_mat_xoa_mem_chi_duoc_dem_khong_vao_so_do(world):
+    with open(os.path.join(world['root'], 'runs', 'R1', 'excluded.txt'), 'w', encoding='utf-8') as f:
+        f.write('F_001\n')
+    st, _ = stats(world)
+    assert not any(r['face_id'] == 'F_001' for r in st['nme_nhap_rows'])                       # không vào NME
+    r1 = next(r for r in st['so_luong']['theo_luot'] if r['ten'] == 'R1')
+    assert r1['xoa_mem'] == 1 and r1['tong'] == 9                                                # vẫn được đếm là "đã xoá mềm"
+    assert st['co']['khong_dap_an']['n_mat'] == (9 - 1) + 6                                       # R1 còn 8 (bỏ F_001; Ttest ẩn) + RX 6
+    assert st['giay_ra']['tong']['tong'] == 8                                                     # giây rà của mặt xoá mềm cũng không tính
+
+
+def test_nhan_thi_nghiem_chua_co_luot_nhap_thi_goi_y_chon_luot_chua_nhap(world):
+    st, _ = stats(world, luot_nhap='')
+    cl = st['chat_luong']
+    assert cl['n_khong_nhap'] == 12 and set(cl['theo_dieu_kien']) == {'assisted'}                  # 12 nhãn m28-manual/m28-assisted chưa có nháp liên kết
+    html = th.muc_chat_luong(st)
+    assert 'Lượt chứa nháp' in html and 'luot_nhap' in html and '12 nhãn chưa ghép với nháp' in html
+    st2, _ = stats(world)                                                                          # chọn đúng lượt chứa nháp: gợi ý biến mất
+    assert st2['chat_luong']['n_khong_nhap'] == 0 and 'chưa ghép với nháp của máy. Nếu đó là nhãn thí nghiệm' not in th.muc_chat_luong(st2)
+
+
+def test_it_hon_3_nguoi_thi_trang_khong_ket_luan_va_khong_co_so_tieu_de(world):
+    world['p'].write_timing(folder='.', people=('P1', 'P2'))
+    st, _ = stats(world)
+    td = st['toc_do']
+    assert td['ok'] is False and td['trong'] and td['n_nguoi'] == 2 and td['tb_nhan'] is None
+    html = th.muc_toc_do(st)
+    assert 'Chưa có số' in html and 'Chưa đủ dữ liệu' in html and 'mới có 2 người' in html and 'P5' in html
+    assert 'TB nhân của r_i' not in html and 'nhanh hơn gán tay (1' not in html and 'KTC 90%' not in html            # không có số tiêu đề nào
+    assert 'r_i = assisted ÷ manual' in html                                                                         # nhưng vẫn cho thấy r_i từng người đã có
+    assert 'toc_do_tong' not in tk.bang_csv(st) and 'toc_do_r_i' not in tk.bang_csv(st)                                # không xuất bảng kết luận khi chưa đủ dữ liệu
