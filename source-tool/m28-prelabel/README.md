@@ -18,7 +18,7 @@ rà nháp trên trang Gradio chỉ mở ở 127.0.0.1, rồi nhập nhãn nháp 
 | `prepare` | Cắt mặt, chạy MediaPipe, đổi 478 → 50 điểm, gắn cờ `low_conf`, tự kiểm, vẽ ảnh chồng |
 | `review` | Trang rà soát: mỗi mặt bấm **Nhận / Gán tay / Bỏ ảnh** |
 | `push` | Tạo task CVAT mới `demo-…` và nhập nhãn nháp đúng một lần |
-| `collect` | Sau khi gán: xuất nhãn từ CVAT về `raw/` (chỉ đọc) |
+| `collect` | Sau khi gán: xuất nhãn từ CVAT về `raw/` (chỉ đọc); với task `demo-…` còn tách nhãn theo từng job ra `raw/<task>_<người>_<DDMM>_job<id>.xml` (offline; file job chỉ để đọc/đo, không nhập lại vào CVAT). Tách file đã xuất từ trước: `python tool/tach_job.py --xml raw/<file>.xml` |
 | `all` | `prepare` → `review` → `push` |
 
 ### Thống kê và lọc dữ liệu train (08/10/2026, QĐ-005)

@@ -126,6 +126,31 @@ def test_happy_path(cvat, capsys):
     assert '[7/12] Tạo task và job' in out
 
 
+def test_step9_checks_the_job_files_and_fails_when_the_split_is_wrong(cvat, monkeypatch):
+    from m28core import tach_job
+    code, rep, st = go(cvat)
+    assert code == 0 and st[9]['ket_qua'] == 'ĐẠT' and 'tách theo job' in json.dumps(rep, ensure_ascii=False)
+    real = tach_job.tach
+
+    def wrong(*a, **k):                                                    # tách sai: job cuối (Gán tay) mất file
+        res = real(*a, **k)
+        os.remove(res['jobs'][-1]['path'])
+        return res
+    monkeypatch.setattr(tach_job, 'tach', wrong)
+    code, rep, st = go(cvat)
+    assert code == 1 and st[9]['ket_qua'] == 'HỎNG' and 'tách job' in st[9]['ghi_chu'] and tasks_named(cvat) == []      # vẫn dọn task sau khi HỎNG
+
+    def swapped(*a, **k):                                                  # tách sai: ảnh Gán tay lọt vào job Nhận đầu tiên
+        res = real(*a, **k)
+        first = res['jobs'][0]['path']
+        data = open(res['jobs'][-1]['path'], 'rb').read()
+        open(first, 'wb').write(data)
+        return res
+    monkeypatch.setattr(tach_job, 'tach', swapped)
+    code, rep, st = go(cvat)
+    assert code == 1 and st[9]['ket_qua'] == 'HỎNG' and 'tách job' in st[9]['ghi_chu']
+
+
 def test_existing_project_is_left_alone_and_giu_project(cvat):
     code, rep, st = go(cvat, giu_project=True)
     assert code == 0 and st[12]['ket_qua'] == 'BỎ QUA' and 'giữ theo --giu-project' in st[12]['ghi_chu']

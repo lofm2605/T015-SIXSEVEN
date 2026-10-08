@@ -2,8 +2,12 @@
 
 Chỉ XUẤT: không bao giờ import_annotations, không tạo/sửa/xoá gì trên CVAT. Chỉ thư viện chuẩn + cvat_sdk (nạp lười).
 Nhận nhiều --task. Task bắt đầu `demo-` (và không --skip-export): tìm theo tên, xuất "CVAT for images 1.1" chỉ nhãn vào
-raw/<task>_<người>_<ngàyDDMM>.xml + .txt cùng tên (bản server, id, số ảnh, giờ tạo theo giờ Việt Nam, job và stage/state), KHÔNG ghi đè.
+raw/<task>_<người>_<ngàyDDMM>.xml + .txt cùng tên (bản server, id, số ảnh, giờ tạo theo giờ Việt Nam, job với frame, loại và stage/state), KHÔNG ghi đè.
 Task khác (ví dụ m28-manual): không bao giờ gọi CVAT, chỉ đọc raw/<task>_*_*.xml đã có. --dry-run: chỉ liệt kê job, không ghi file nào.
+Tách theo JOB (--per-job / --no-per-job / --job <id>): từ file cả task vừa xuất (hoặc đã có trong raw/) tách OFFLINE ra
+raw/<task>_<người>_<DDMM>_job<id>.xml (+ .txt) cho từng job mà push đã chia (module m28core/tach_job.py, không thêm lời gọi CVAT nào).
+Mặc định bật cho task demo-…, tắt cho task khác; --job <id> (nhiều lần được) chỉ ghi file của job đó (file cả task vẫn xuất như cũ) và tự bật tách.
+File job chỉ để đọc/đo (eval50, QC), KHÔNG nhập lại vào CVAT; RAW_RE/latest_raw_files bỏ qua chúng nên không đếm một mặt hai lần.
 Mọi đường ghi nằm trong raw/ và outputs/ của thư mục chạy.
 """
 import datetime
@@ -18,6 +22,8 @@ import time
 import traceback
 
 from . import cvat_io as io_
+from . import tach_job
+from .tach_job import push_jobs  # noqa: F401  (tra loại job từ push.json; dùng cả ở đây lẫn trong tach_job)
 
 RAW, OUT = "raw", "outputs"
 RAW_RE = re.compile(r"^(?P<task>.+)_(?P<who>[A-Za-z0-9-]+)_(?P<day>\d{4})\.xml$")
@@ -40,10 +46,12 @@ def _vn_time(dt):
     return str(dt)
 
 
-def _jobs_info(task):
+def _jobs_info(task, kinds=None):
+    """[dict(id, n, stage, state, start, stop, kind)] của task theo start_frame; kinds = {job_id: nhan|gan_tay} từ push.json (thiếu thì khong_ro)."""
     out = []
     for j in sorted(task.get_jobs(), key=lambda j: j.start_frame):
-        out.append(dict(id=j.id, n=j.stop_frame - j.start_frame + 1, stage=str(j.stage), state=str(j.state)))
+        out.append(dict(id=j.id, n=j.stop_frame - j.start_frame + 1, stage=str(j.stage), state=str(j.state),
+                        start=j.start_frame, stop=j.stop_frame, kind=(kinds or {}).get(j.id, "khong_ro")))
     return out
 
 
@@ -51,21 +59,15 @@ def _meta_text(task, version, url, who, jobs):
     lines = [f"task: {task.name}", f"task_id: {task.id}", f"cvat_url: {io_.norm_url(url)}", f"ban_server: {version}",
              f"so_anh: {task.size}", f"task_tao_luc: {_vn_time(getattr(task, 'created_date', None))}", f"nguoi_xuat: {who}",
              f"xuat_luc: {datetime.datetime.now(io_.VN_TZ).strftime('%Y-%m-%d %H:%M')} (giờ Việt Nam, UTC+7)", f"so_job: {len(jobs)}"]
-    lines += [f"job {j['id']}: {j['n']} frame, stage {j['stage']}, state {j['state']}" for j in jobs]
+    lines += [tach_job.job_line(j) for j in jobs]       # job <id>: <n> frame, stage <s>, state <t> | frames <a>-<b> | loai <nhan|gan_tay|khong_ro>
     return "\n".join(lines) + "\n"
 
 
 def _jobs_from_txt(txt_path):
-    jobs = []
-    try:
-        with open(txt_path, encoding="utf-8") as f:
-            for ln in f:
-                m = re.match(r"job (\d+): (\d+) frame, stage (\S+), state (\S+)", ln.strip())
-                if m:
-                    jobs.append(dict(id=int(m.group(1)), n=int(m.group(2)), stage=m.group(3), state=m.group(4)))
-    except OSError:
-        return None
-    return jobs
+    """[dict(id, n, stage, state, start, stop, kind, suy_ra)] đọc từ .txt cạnh file xuất (dòng job cũ lẫn mới), None nếu không mở được file.
+    Khoá cũ id, n, stage, state giữ nguyên nghĩa; start/stop tính cộng dồn từ n khi .txt cũ không có `frames` (suy_ra=True); kind mặc định khong_ro."""
+    meta = tach_job.read_txt(txt_path)
+    return None if meta is None else meta["jobs"]
 
 
 def latest_raw_files(task, raw_dir=RAW):
@@ -151,6 +153,88 @@ def _qc_line(paths, out_dir):
     return f"QC của P2: {res}" if res else "QC của P2 đã chạy."
 
 
+
+
+# ---------- tách theo job (offline, từ file cả task) ----------
+def _tach_mode(args):
+    """(per_job, job_ids): per_job None = tự động (bật cho demo-…, tắt cho task khác), True/False theo cờ; job_ids = danh sách --job (không trùng)."""
+    per_job = getattr(args, "per_job", None)
+    ids = []
+    for x in getattr(args, "job", None) or []:
+        try:
+            i = int(x)
+        except (TypeError, ValueError):
+            raise SystemExit(f"--job cần số nguyên (job id), không phải {x!r}.")
+        if i not in ids:
+            ids.append(i)
+    if per_job is False and ids:
+        raise SystemExit("--job tự bật tách job nên không đi cùng --no-per-job: bỏ một trong hai.")
+    return per_job, ids
+
+
+def _tach_on(name, per_job, ids):
+    if per_job is False:
+        return False
+    return bool(per_job or ids) or name.startswith(io_.SAFE_PREFIX)
+
+
+def _txt_job_ids(paths):
+    ids = set()
+    for p in paths:
+        meta = tach_job.read_txt(os.path.splitext(p)[0] + ".txt")
+        if meta:
+            ids |= {j["id"] for j in meta["jobs"]}
+    return ids
+
+
+def _check_job_ids(ids, valid):
+    """valid = {task: {job id}}. Id không thuộc job nào của các task đã nêu thì SystemExit (gọi TRƯỚC khi xuất hay ghi bất kỳ file nào)."""
+    known = set()
+    for v in valid.values():
+        known |= v
+    bad = [i for i in ids if i not in known]
+    if bad:
+        have = "; ".join(f"{t}: {', '.join(str(i) for i in sorted(v))}" for t, v in valid.items() if v) or "chưa thấy job nào (task chưa xuất, thiếu file .txt)"
+        raise SystemExit(f"--job {', '.join(str(i) for i in bad)} không thuộc job nào của các task đã nêu. Job hợp lệ: {have}. Chưa xuất và chưa ghi file nào.")
+
+
+def _job_files_text(res):
+    """Một dòng mỗi job của kết quả tách để in ra màn hình."""
+    out = []
+    for j in res["jobs"]:
+        s = f"    job {j['id']} ({j['kind']}) frames {j['start']}-{j['stop']}: {j['n_anh']}/{j['n']} ảnh -> {j['path']}"
+        out.append(s + (" đã có: KHÔNG ghi đè" if j["da_co"] else ""))
+        out += [f"      cảnh báo: {w}" for w in j["canh_bao"]]
+    return out
+
+
+def _job_table(res, point_names):
+    """Bảng markdown 'Theo job' cho một file cả task đã tách (số liệu tính bằng analyze trên bytes của chính file job)."""
+    head = [f"  - Theo job (file job chỉ để đọc/đo, không nhập lại vào CVAT; {res['kiem_lech']}):", "",
+            f"    | job | loại | frame | ảnh/frame | ảnh có nhãn | mặt đủ {len(point_names)} điểm | điểm thiếu | low_conf bật | stage/state | file |",
+            "    |---|---|---|---|---|---|---|---|---|---|"]
+    for j in res["jobs"]:
+        try:
+            with open(j["path"], "rb") as f:
+                st = analyze(f.read(), point_names)
+            cells = [str(st["n_face"]), str(st["n_full"]), str(st["n_missing"]), str(st["n_low_on"])]
+        except (OSError, SystemExit):
+            cells = ["?"] * 4
+        name = f"`{j['path']}`" + (" (đã có từ trước)" if j["da_co"] else "")
+        head.append(f"    | {j['id']} | {j['kind']} | {j['start']}-{j['stop']} | {j['n_anh']}/{j['n']} | " + " | ".join(cells)
+                    + f" | {j['stage']}/{j['state']} | {name} |")
+    return head + [""]
+
+
+def _dry_plan(name, base_xml, jobs, ids):
+    """In kế hoạch tách job (dry-run): frame, loại và tên file job sẽ ghi; đánh dấu job được chọn bởi --job."""
+    for j in jobs:
+        sel = not ids or j["id"] in ids
+        dest = tach_job.job_path(base_xml, RAW, j["id"])
+        print(f"    {'sẽ ghi' if sel else 'bỏ qua (không được chọn bởi --job)'}: job {j['id']} ({j['kind']}) frames {j['start']}-{j['stop']} -> {dest}"
+              + ("  [được chọn bởi --job]" if ids and sel else ""))
+
+
 def collect(args):
     """Trả True khi xong. Lỗi người dùng sửa được: SystemExit tiếng Việt."""
     t_all = time.time()
@@ -163,6 +247,7 @@ def collect(args):
         raise SystemExit("collect cần ít nhất một --task.")
     reviewer = io_.safe_file_part(getattr(args, "reviewer", None) or "RA")
     skip, dry = bool(getattr(args, "skip_export", False)), bool(getattr(args, "dry_run", False))
+    per_job, job_ids = _tach_mode(args)
     pipe = io_.load_pipeline(getattr(args, "pipeline", None))
     cfg_path = getattr(args, "config", None) or os.path.join("config", "m28_config.json")
     point_names = _point_names(cfg_path)
@@ -177,6 +262,22 @@ def collect(args):
     exporting = [] if skip else demo
     if reviewer == "RA" and exporting and not dry:
         print("Nhắc: chưa có --reviewer nên file raw ghi tên người là RA; nên chạy lại với --reviewer P4 (đúng người xuất).")
+
+    def valid_ids(found):
+        """{task: {job id hợp lệ}}: job trên CVAT (task vừa liệt kê) cộng job trong .txt của file sẽ dùng/tách (file đã có hoặc file mới nhất trong raw/)."""
+        out = {}
+        for name in tasks:
+            v = {j["id"] for j in found[name][1]} if name in found else set()
+            if name in exporting:
+                target = os.path.join(RAW, f"{name}_{reviewer}_{day}.xml")
+                v |= _txt_job_ids([target] if os.path.exists(target) else [])
+            else:
+                v |= _txt_job_ids(latest_raw_files(name).values())
+            out[name] = v
+        return out
+
+    if job_ids and not exporting:
+        _check_job_ids(job_ids, valid_ids({}))                      # không phải xuất: kiểm ngay, trước khi ghi bất kỳ file nào
     if exporting:
         env = io_.read_env()
         print(io_.status_line(env), flush=True)
@@ -198,7 +299,8 @@ def collect(args):
                 doing = "liệt kê task"
                 all_tasks = list(client.tasks.list())
                 timings["kết nối"] = time.time() - t0
-                for name in exporting:
+                found_tasks = {}
+                for name in exporting:                          # lượt 1: liệt kê job của mọi task (chưa xuất gì)
                     found = [t for t in all_tasks if t.name == name]
                     if not found:
                         print(f"{name}: KHÔNG thấy task tên này trên CVAT, bỏ qua.")
@@ -211,11 +313,17 @@ def collect(args):
                         continue
                     task = found[0]
                     doing = f"đọc job của {name}"
-                    jobs = _jobs_info(task)
+                    jobs = _jobs_info(task, (push_jobs(name, task_id=task.id) or {}).get("kinds"))
                     job_rows[name] = jobs
+                    found_tasks[name] = (task, jobs)
                     print(f"{name}: id {task.id}, {task.size} ảnh, {len(jobs)} job")
                     for j in jobs:
-                        print(f"  job {j['id']}: {j['n']} frame, stage {j['stage']}, state {j['state']}")
+                        print(f"  {tach_job.job_line(j)}")
+                    if dry and _tach_on(name, per_job, job_ids):
+                        _dry_plan(name, os.path.join(RAW, f"{name}_{reviewer}_{day}.xml"), jobs, job_ids)
+                if job_ids:
+                    _check_job_ids(job_ids, valid_ids(found_tasks))         # trước export_dataset đầu tiên
+                for name, (task, jobs) in found_tasks.items():              # lượt 2: xuất
                     if dry:
                         continue
                     base = os.path.join(RAW, f"{name}_{reviewer}_{day}")
@@ -251,6 +359,17 @@ def collect(args):
                 msg = f"Lỗi không lường trước khi {doing}: {type(e).__name__}: {io_.scrub(e)[:300]}"
             raise SystemExit(io_.scrub(msg))
     if dry:
+        for name in tasks:                                       # task đọc từ raw/: in kế hoạch tách job từ .txt (chỉ đọc)
+            if name in exporting or not _tach_on(name, per_job, job_ids):
+                continue
+            for who, p in latest_raw_files(name).items():
+                meta = tach_job.read_txt(os.path.splitext(p)[0] + ".txt")
+                print(f"{name} ({who}): " + (f"{len(meta['jobs'])} job theo .txt" if meta else "chưa có .txt cạnh file xuất: không biết ranh giới job"))
+                if meta and meta["jobs"]:
+                    try:
+                        _dry_plan(name, p, meta["jobs"], job_ids)
+                    except tach_job.TachJobLoi as e:
+                        print(f"    {io_.scrub(e)}")
         print("Chạy thử (--dry-run): chỉ liệt kê job, không ghi file nào.")
         return True
     for name in tasks:                                           # task đọc từ raw/: --skip-export, hoặc không phải demo-
@@ -260,6 +379,46 @@ def collect(args):
                 files[name] = found
             elif not any(m.startswith(name + " ") for m in missing):
                 missing.append(f"{name} (chưa có raw\\{name}_*_*.xml)")
+    # tách theo job (offline, không gọi thêm CVAT): từ chính file cả task đã có/vừa xuất, theo .txt cạnh nó
+    t_split = time.time()
+    split_res, split_notes, split_on = {}, {}, False
+    for name in tasks:
+        if name not in files or not _tach_on(name, per_job, job_ids):
+            continue
+        for who, path in files[name].items():
+            split_on = True
+            meta = tach_job.read_txt(os.path.splitext(path)[0] + ".txt")
+            only = None
+            if job_ids and meta is not None:
+                only = [i for i in job_ids if i in {j["id"] for j in meta["jobs"]}]
+                if not only:
+                    print(f"  tách job {name} ({who}): không có job nào trong --job {job_ids} (job của file này: "
+                          f"{', '.join(str(j['id']) for j in meta['jobs'])}): không ghi file job.")
+                    continue
+            try:
+                res = tach_job.tach(path, RAW, only=only)
+            except tach_job.TachJobLoi as e:
+                msg = io_.scrub(str(e))
+                print(f"  tách job {name} ({who}): KHÔNG tách được: {msg}")
+                split_notes.setdefault((name, who), []).append(msg)
+                continue
+            except Exception as e:                                # lỗi tách không làm mất file cả task, không chặn task khác
+                msg = f"Lỗi không lường trước khi tách job ({type(e).__name__}): {io_.scrub(e)[:300]}"
+                print(f"  tách job {name} ({who}): {msg}")
+                split_notes.setdefault((name, who), []).append(msg)
+                continue
+            split_res[(name, who)] = res
+            print(f"  tách job {name} ({who}): {len(res['jobs'])} job từ {res['nguon']}")
+            for ln in _job_files_text(res):
+                print(ln)
+            warns = [f"job {j['id']}: {w}" for j in res["jobs"] for w in j["canh_bao"]]
+            suy = [str(j["id"]) for j in res["jobs"] if j["suy_ra"]]
+            if suy:
+                warns.append(f"frame của job {', '.join(suy)} suy ra từ số frame cộng dồn (.txt cũ không có trường frames)")
+            if warns:
+                split_notes[(name, who)] = warns
+    if split_on:
+        timings["tách job"] = time.time() - t_split
     # phân tích và báo cáo
     t2 = time.time()
     lines = [f"# Báo cáo collect: {', '.join(tasks)}", "",
@@ -289,10 +448,20 @@ def collect(args):
                 pend = [j for j in jobs if j["state"] != "completed"]
                 lines.append(f"  - Job: {len(jobs)}" + (f" · **chưa sửa xong (state khác completed): {len(pend)}** "
                              + ", ".join(f"job {j['id']} ({j['stage']}/{j['state']})" for j in pend) if pend else " · tất cả completed"))
+            if (name, who) in split_res:
+                lines += _job_table(split_res[(name, who)], point_names)
         lines.append("")
     lines += ["## File còn thiếu", ""] + ([f"- {m}" for m in missing] if missing else ["Không thiếu."]) + [""]
+    if split_notes:
+        lines += ["## Tách job", ""]
+        for (name, who), msgs in split_notes.items():
+            lines += [f"- {name} ({who}): {m}" for m in msgs]
+        lines.append("")
     timings["phân tích"] = time.time() - t2
-    lines += ["## QC", "", _qc_line(all_paths, OUT), "", "## Thời gian từng bước", ""]
+    lines += ["## QC", "", _qc_line(all_paths, OUT)]
+    if split_res:
+        lines += ["", "File job không đưa vào QC để không đếm hai lần (QC chỉ nhận file cả task)."]
+    lines += ["", "## Thời gian từng bước", ""]
     timings["tổng"] = time.time() - t_all
     lines += [f"- {k}: {v:.1f} giây" for k, v in timings.items()]
     tag = io_.safe_file_part(getattr(args, "tag", None) or tasks[0])

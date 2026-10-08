@@ -579,8 +579,9 @@ class Smoke:
                 collect.collect(args)
         finally:
             os.chdir(cwd)
-        raws = [p for p in os.listdir(os.path.join(self.run_dir, "raw")) if p.startswith(f"{TASK}_{REVIEWER}_") and p.endswith(".xml")] \
-            if os.path.isdir(os.path.join(self.run_dir, "raw")) else []
+        raw_dir = os.path.join(self.run_dir, "raw")
+        names_raw = os.listdir(raw_dir) if os.path.isdir(raw_dir) else []
+        raws = [p for p in names_raw if p.startswith(f"{TASK}_{REVIEWER}_") and collect.RAW_RE.match(p)]      # file cả task; file _job<id> không tính
         if len(raws) != 1:
             return HONG, f"collect không ghi đúng 1 file raw (thấy {raws}); " + "; ".join(bad)
         xml_path = os.path.join(self.run_dir, "raw", raws[0])
@@ -596,13 +597,51 @@ class Smoke:
         want_jobs = [1, 1, 2]
         if jobs is None or [j["n"] for j in jobs] != want_jobs:
             bad.append(f"file .txt của collect ghi job {jobs and [j['n'] for j in jobs]} (cần {want_jobs} frame)")
+        bad += self.s9_jobs(raw_dir, names_raw, raws[0], jobs, want_jobs)
         if not os.path.exists(os.path.join(self.run_dir, "outputs", f"collect_{TASK}.md")):
             bad.append(f"collect không ghi outputs\\collect_{TASK}.md")
         if bad:
             return HONG, "nhãn xuất ra khác nhãn đã nhập: " + "; ".join(bad), sub
         sub.append(f"collect ghi {raws[0]} (+ .txt, {len(jobs)} job) và báo cáo collect_{TASK}.md")
+        sub.append(f"tách theo job (offline, từ file cả task): {len(jobs)} file _job<id>.xml với số ảnh {want_jobs}, job cuối chứa đúng ảnh Gán tay; "
+                   "id ảnh trong file xuất = số frame trong task (giả định của tach_job)")
         return DAT, (f"3 mặt x 50 điểm đúng tên, đúng thứ tự, low_conf giữ nguyên, sai số toạ độ lớn nhất {worst:.3f}px (cho phép {TOL_PX}), "
                      "kích thước và tên ảnh khớp, Gán tay trống không có nhãn."), sub
+
+    def s9_jobs(self, raw_dir, names_raw, xml_name, jobs, want_jobs):
+        """Kiểm file job do collect tách (mặc định bật cho demo-…): đúng số file, số ảnh [1, 1, 2], job cuối chứa đúng ảnh Gán tay, id ảnh = số frame của task.
+        Đây là chỗ duy nhất kiểm được giả định 'id ảnh trong file xuất = số frame trong task' trên CVAT THẬT. Trả danh sách vấn đề."""
+        from m28core import tach_job
+        bad = []
+        if not jobs or len(jobs) != len(want_jobs):
+            return bad                                                  # lỗi job đã báo ở trên
+        stem = xml_name[:-4]
+        files = [f"{stem}_job{j['id']}.xml" for j in jobs]
+        extra = sorted(p for p in names_raw if tach_job.JOB_RE.match(p) and p.startswith(stem + "_job") and p not in files)
+        absent = [f for f in files if f not in names_raw]
+        if absent or extra:
+            return [f"tách job: thiếu file {absent} hoặc thừa file {extra} (cần đúng {len(jobs)} file _job<id>.xml)"]
+        tay = {n for n, _s, r in IMAGES if r != "nhan"}
+
+        def names_in(fname):
+            with open(os.path.join(raw_dir, fname), "rb") as fh:
+                return sorted(cvat_io.parse_annotations(fh.read()))
+
+        joined = []
+        for j, f, want_n in zip(jobs, files, want_jobs):
+            names = names_in(f)
+            joined += names
+            last = j is jobs[-1]
+            if len(names) != want_n:
+                bad.append(f"tách job: {f} có {len(names)} ảnh (cần {want_n})")
+            elif last and set(names) != tay:
+                bad.append(f"tách job: job cuối ({f}) phải chứa đúng ảnh Gán tay {sorted(tay)}, thấy {names}")
+            elif not last and set(names) & tay:
+                bad.append(f"tách job: {f} (job Nhận) lại chứa ảnh Gán tay {sorted(set(names) & tay)}")
+        whole = names_in(xml_name)
+        if sorted(joined) != whole:
+            bad.append(f"tách job: gộp các file job ({len(joined)} ảnh) khác file cả task ({len(whole)} ảnh)")
+        return bad
 
     # --- bước 10 ---
     def others_now(self):

@@ -14,6 +14,11 @@ Công cụ đo (không nằm trong pipeline, cùng thư mục tool\\): make_conf
 Mỗi bước ghi vào runs/<run>/<bước>/ và để lại done.txt khi xong thật; chạy lại thì bước đã xong được bỏ qua
 (trừ khi tên bước nằm trong --force). Địa chỉ CVAT và token đọc từ CVAT_URL, CVAT_ACCESS_TOKEN (tuỳ chọn CVAT_ORG).
 push chỉ tạo task MỚI demo-…; collect chỉ xuất (--skip-export, --dry-run, nhiều --task, --reviewer). --cleanup xoá task đã đẩy rồi lượt đẩy lại được.
+collect còn tách nhãn theo từng job mà push đã chia (offline, từ file cả task): raw\\<task>_<người>_<DDMM>_job<id>.xml (+ .txt), mặc định bật cho demo-…:
+    python tool\\m28.py collect --task demo-R1610 --reviewer P4                (cả task + file từng job)
+    python tool\\m28.py collect --task demo-R1610 --reviewer P4 --no-per-job   (chỉ file cả task như trước)
+    python tool\\m28.py collect --task demo-R1610 --reviewer P4 --job 105      (chỉ ghi file của job 105, nhiều --job được)
+File job chỉ để đọc/đo (eval50, QC), không nhập lại vào CVAT. Tách file đã xuất từ trước: python tool\\tach_job.py --xml raw\\<file>.xml
 """
 import argparse
 import os
@@ -82,16 +87,25 @@ def build_parser():
                    help="push: xoá đúng task trong push.json trên CVAT (cần --confirm-name), đánh dấu task_deleted để đẩy lại được")
     p.add_argument("--confirm-name", help="push --cleanup: gõ lại đúng tên task sẽ xoá")
     p.add_argument("--dry-run", action="store_true",
-                   help="push: chỉ ghi XML; collect: chỉ in danh sách job; không ghi done.txt")
+                   help="push: chỉ ghi XML; collect: chỉ in danh sách job (kèm frame, loại và tên file job sẽ ghi); không ghi done.txt")
+    p.add_argument("--per-job", action=argparse.BooleanOptionalAction, default=None, dest="per_job",
+                   help="collect: tách nhãn theo từng job (file raw\\<task>_<người>_<DDMM>_job<id>.xml). Mặc định tự động: bật cho task demo-…, tắt cho task khác; "
+                        "--no-per-job chỉ giữ file cả task")
+    p.add_argument("--job", action="append", type=int, default=None, metavar="ID",
+                   help="collect: chỉ ghi file của job có id này (dùng nhiều lần được); file cả task vẫn xuất như cũ; tự bật tách job")
     return p
 
 
 def main(argv=None):
     p = build_parser()
     args = p.parse_args(argv)
+    if args.cmd != "collect" and (args.per_job is not None or args.job):
+        p.error("--per-job, --no-per-job và --job chỉ dùng với lệnh collect")
     if args.cmd == "collect":
         if not args.task:
             p.error("collect cần --task")
+        if args.job and args.per_job is False:
+            p.error("--job tự bật tách job nên không đi cùng --no-per-job")
         if not steps.collect(args, None):
             raise SystemExit("collect chưa xong (lý do in ở trên).")
         return

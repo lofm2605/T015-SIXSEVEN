@@ -534,6 +534,25 @@ def test_collect_needs_task_and_passes_args(tmp_path, world):
     assert a.task == ['demo-x', 'demo-y'] and a.dry_run and a.skip_export and a.tag == 't'
 
 
+def test_collect_per_job_flags_are_passed_and_rejected_elsewhere(tmp_path, world):
+    m28.main(['collect', '--task', 'demo-x'])
+    a = world.collect[-1]
+    assert a.per_job is None and a.job is None                                  # mặc định: tự động (bật cho demo-…, tắt cho task khác)
+    m28.main(['collect', '--task', 'demo-x', '--per-job'])
+    assert world.collect[-1].per_job is True
+    m28.main(['collect', '--task', 'demo-x', '--no-per-job'])
+    assert world.collect[-1].per_job is False and world.collect[-1].job is None
+    m28.main(['collect', '--task', 'demo-x', '--job', '101', '--job', '102'])
+    assert world.collect[-1].job == [101, 102] and world.collect[-1].per_job is None
+    for bad in (['collect', '--task', 'demo-x', '--job', '101', '--no-per-job'], ['collect', '--task', 'demo-x', '--job', 'abc'],
+                ['push', '--run', 'A', '--per-job'], ['push', '--run', 'A', '--no-per-job'], ['review', '--run', 'A', '--job', '1'],
+                ['prepare', '--run', 'A', '--job', '1']):
+        with pytest.raises(SystemExit) as e:
+            m28.main(bad)
+        assert e.value.code == 2, bad
+    assert len(world.collect) == 4
+
+
 def test_run_required_and_log(tmp_path, world):
     with pytest.raises(SystemExit) as e:
         m28.main(['prepare'])

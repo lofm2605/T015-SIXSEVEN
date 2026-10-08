@@ -121,6 +121,12 @@ python tool/m28.py push --run F5 --reviewer P2 --task demo-F5
 python tool/m28.py collect --task demo-F5 --reviewer P2
 ```
   Đừng viết token thẳng trên dòng lệnh (`export CVAT_ACCESS_TOKEN=...` ghi vào `~/.bash_history`). Đóng terminal là biến mất; không lưu vào `~/.bashrc`.
+- **`collect` tách nhãn theo từng job** (task `demo-…`, mặc định bật): ngoài file cả task còn có `raw/<task>_<người>_<DDMM>_job<id>.xml` (+ `.txt`), tách offline, không gọi thêm CVAT. `--no-per-job` bỏ tách; `--job <id>` (nhiều lần được) chỉ ghi job đó; `--dry-run` in frame, loại và tên file job sẽ ghi. Tách file đã xuất từ trước:
+```bash
+python tool/tach_job.py --xml raw/demo-F5_P2_1810.xml
+python tool/tach_job.py --xml final/demo-F5_P2_1810.xml --out final/ --job 105
+```
+  File job **chỉ để đọc/đo** (`python tool/eval50.py --gt raw/<file>_job<id>.xml ...`), **không nhập lại vào CVAT**, không vào git.
 - Kiểm tra nhanh trước lần push đầu: `./chay.sh` mục 4, hoặc `python tool/cvat_smoke.py` (và `--dry-run` để kiểm cục bộ). Các cảnh báo xoá, `collect`, `demo-` / `m28-`: như `HUONG-DAN-WINDOWS.md` mục 7.
 - Kiểm CVAT đang chạy: `docker compose ps` trong thư mục CVAT, rồi mở http://localhost:8080.
 
