@@ -186,3 +186,32 @@ def test_tolerance_for_and_report_with_hand_rows():
     lines = []
     flag_eval.report(rows, 3.0, out=lines.append, cfg={'tolerance': {'eye': 10.0}})        # eye chấp nhận 10%: không còn điểm sai
     assert '0.0%' in lines[0] and 'nan' in lines[1]
+
+
+# ---------- hàm trả dict (dùng cho trang Thống kê); đầu ra CLI của report không đổi ----------
+def test_analyze_tra_dict_khop_report_va_tay():
+    rows = [('eye', 0.1 * i, 1.0 if i < 8 else 5.0, f'F_{i // 5}', 'mattrai' if i % 2 else 'matphai') for i in range(10)]
+    a = flag_eval.analyze(rows, 3.0, t_flip=0.55)
+    assert (a['n_faces'], a['n_points'], a['n_bad']) == (2, 10, 2) and a['bad_pct'] == pytest.approx(20.0) and a['auroc'] == 1.0
+    assert a['by_region']['eye'] == dict(auroc=1.0, n=10, n_bad=2, bad_pct=pytest.approx(20.0))
+    assert set(a['by_group']) == {'mattrai', 'matphai'} and a['by_group']['matphai']['n'] == 5
+    # tại ngưỡng 0,55: điểm số 0,6..0,9 bị cờ (4 điểm; 2 sai nằm trong đó): recall 100%, precision 50%, 2 mặt -> 2 cờ/mặt
+    m = a['at_t']
+    assert m['flagged_pct'] == pytest.approx(40.0) and m['caught'] == pytest.approx(100.0) and m['precision'] == pytest.approx(50.0)
+    assert m['per_face'] == pytest.approx(2.0)
+    assert flag_eval.analyze(rows, 3.0)['at_t'] is None
+    # không có cột nhóm (rows 4 phần tử): by_group None
+    assert flag_eval.analyze([r[:4] for r in rows], 3.0)['by_group'] is None
+    lines = []
+    table = flag_eval.report(rows, 3.0, out=lines.append)
+    assert [tuple(x) for x in a['table']] == [tuple(x) for x in table]
+    assert lines[1].startswith('AUROC toàn bộ: 1.000') and lines[3].startswith('AUROC theo nhóm: ')
+
+
+def test_at_threshold_dung_tay():
+    score = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    bad = np.array([False, False, True, False, True, True])
+    m = flag_eval.at_threshold(score, bad, 0.35, nface=2)                # cờ: 0.4, 0.5, 0.6 -> sai bắt được 2/3, chính xác 2/3, 1,5 cờ/mặt
+    assert m['flagged_pct'] == pytest.approx(50.0) and m['caught'] == pytest.approx(200 / 3) and m['precision'] == pytest.approx(200 / 3)
+    assert m['per_face'] == pytest.approx(1.5)
+    assert flag_eval.at_threshold(score, np.zeros(6, bool), 0.35, 2)['caught'] == 0.0     # không có điểm sai: không chia cho 0

@@ -147,31 +147,58 @@ def collect_points(files, mp50, cfg, gt, pred_upload, tol):
     return rows
 
 
-def report(rows, tol, out=print, cfg=None):
-    """Chế độ (b): rows = [(vùng, điểm số, lỗi % IOD, tên mặt[, nhóm])]; điểm sai = lỗi > tol (hoặc config.tolerance theo vùng nếu truyền cfg)."""
+def _mang(rows, tol, cfg=None):
+    """rows -> (vùng, nhóm, điểm số, lỗi, điểm sai) dạng mảng; điểm sai = lỗi > sai số chấp nhận (config.tolerance theo vùng nếu truyền cfg)."""
     reg = np.array([r[0] for r in rows])
     grp = np.array([r[4] if len(r) > 4 else r[0] for r in rows])
     score = np.array([r[1] for r in rows])
     err = np.array([r[2] for r in rows])
     tols = np.array([tolerance_for(cfg, g, tol) if cfg else tol for g in reg])
-    bad = err > tols
-    out(f"{len(set(r[3] for r in rows))} mặt, {len(rows)} điểm; điểm sai (lỗi > sai số chấp nhận, mặc định {tol:g}% IOD): {100 * bad.mean():.1f}%")
-    out(f"AUROC toàn bộ: {auroc(score, bad):.3f}   (0,5 = cờ không có tác dụng; 1 = hoàn hảo)")
-    out("AUROC theo vùng: " + ", ".join(f"{r} {auroc(score[reg == r], bad[reg == r]):.3f} (sai {100 * bad[reg == r].mean():.0f}%)"
-                                          for r in sorted(set(reg))))
-    if len(rows[0]) > 4:
-        out("AUROC theo nhóm: " + ", ".join(f"{g} {auroc(score[grp == g], bad[grp == g]):.3f} (sai {100 * bad[grp == g].mean():.0f}%)"
-                                            for g in dict.fromkeys(grp)))
-    out("phân vị  ngưỡng t_flip  điểm bị cờ  % điểm sai bị bắt  độ chính xác  cờ/mặt")
+    return reg, grp, score, err, err > tols
+
+
+def at_threshold(score, bad, t, nface):
+    """Số liệu của cờ tại ngưỡng t (cờ bật khi điểm số > t): % điểm bị cờ, % điểm sai bị bắt (recall), độ chính xác (precision), cờ/mặt."""
+    flag = np.asarray(score, float) > t
+    bad = np.asarray(bad, bool)
+    return dict(t=float(t), flagged_pct=float(flag.mean() * 100), caught=float((flag & bad).sum() / max(bad.sum(), 1) * 100),
+                precision=float((flag & bad).sum() / max(flag.sum(), 1) * 100), per_face=float(flag.sum() / max(nface, 1)))
+
+
+def analyze(rows, tol, cfg=None, t_flip=None):
+    """Chế độ (b) trả dict thay vì in: rows = [(vùng, điểm số, lỗi % IOD, tên mặt[, nhóm])].
+    Khoá: n_faces, n_points, tol, n_bad, bad_pct, auroc, by_region/by_group {tên: dict(auroc, n, n_bad, bad_pct)} (by_group None nếu rows không có nhóm),
+    table [(q, t, % điểm bị cờ, % điểm sai bị bắt, độ chính xác, cờ/mặt) theo phân vị], at_t (at_threshold tại t_flip nếu t_flip không None)."""
+    reg, grp, score, err, bad = _mang(rows, tol, cfg)
     nface = len(set(r[3] for r in rows))
+
+    def part(mask):
+        return dict(auroc=auroc(score[mask], bad[mask]), n=int(mask.sum()), n_bad=int(bad[mask].sum()), bad_pct=float(100 * bad[mask].mean()))
+
     table = []
     for q in QUANTILES:
         t = float(np.quantile(score, q))
-        flag = score > t
-        caught = float((flag & bad).sum() / max(bad.sum(), 1) * 100)
-        prec = float((flag & bad).sum() / max(flag.sum(), 1) * 100)
-        table.append((q, t, flag.mean() * 100, caught, prec, flag.sum() / nface))
-        out(f"{q:7.2f}  {t:12.4f}  {flag.mean() * 100:9.1f}%  {caught:16.1f}%  {prec:11.1f}%  {flag.sum() / nface:6.1f}")
+        m = at_threshold(score, bad, t, nface)
+        table.append((q, t, m["flagged_pct"], m["caught"], m["precision"], m["per_face"]))
+    return dict(n_faces=nface, n_points=len(rows), tol=tol, n_bad=int(bad.sum()), bad_pct=float(100 * bad.mean()), auroc=auroc(score, bad),
+                by_region={r: part(reg == r) for r in sorted(set(reg))},
+                by_group={g: part(grp == g) for g in dict.fromkeys(grp)} if len(rows[0]) > 4 else None,
+                table=table, at_t=None if t_flip is None else at_threshold(score, bad, float(t_flip), nface))
+
+
+def report(rows, tol, out=print, cfg=None):
+    """Chế độ (b): rows = [(vùng, điểm số, lỗi % IOD, tên mặt[, nhóm])]; điểm sai = lỗi > tol (hoặc config.tolerance theo vùng nếu truyền cfg)."""
+    a = analyze(rows, tol, cfg)
+    out(f"{a['n_faces']} mặt, {a['n_points']} điểm; điểm sai (lỗi > sai số chấp nhận, mặc định {tol:g}% IOD): {a['bad_pct']:.1f}%")
+    out(f"AUROC toàn bộ: {a['auroc']:.3f}   (0,5 = cờ không có tác dụng; 1 = hoàn hảo)")
+    out("AUROC theo vùng: " + ", ".join(f"{r} {v['auroc']:.3f} (sai {v['bad_pct']:.0f}%)" for r, v in a["by_region"].items()))
+    if a["by_group"] is not None:
+        out("AUROC theo nhóm: " + ", ".join(f"{g} {v['auroc']:.3f} (sai {v['bad_pct']:.0f}%)" for g, v in a["by_group"].items()))
+    out("phân vị  ngưỡng t_flip  điểm bị cờ  % điểm sai bị bắt  độ chính xác  cờ/mặt")
+    table = []
+    for q, t, flagged, caught, prec, per_face in a["table"]:
+        table.append((q, t, flagged, caught, prec, per_face))
+        out(f"{q:7.2f}  {t:12.4f}  {flagged:9.1f}%  {caught:16.1f}%  {prec:11.1f}%  {per_face:6.1f}")
     return table
 
 
