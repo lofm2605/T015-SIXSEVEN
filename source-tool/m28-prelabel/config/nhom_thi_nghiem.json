@@ -1,0 +1,6 @@
+{
+  "nhom": {},
+  "bo_anh": "",
+  "_ghi_chu": "FILE MẪU (QĐ-006): điền khi cả đội chốt, KHÔNG đoán ai ở nhóm nào. nhom = {người: manual | assisted}; bo_anh = tên bộ ảnh chung hai nhóm cùng làm (khớp tên đợt/lượt, ví dụ NAP_001).",
+  "_vi_du": {"nhom": {"P1": "manual", "P2": "assisted"}, "bo_anh": "NAP_001"}
+}
