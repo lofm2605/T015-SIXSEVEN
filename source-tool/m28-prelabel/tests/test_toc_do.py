@@ -1,7 +1,4 @@
 """Thử tool/m28core/toc_do.py: giao thức tốc độ của P5 (khởi động, r_i, trung bình nhân, bootstrap seed 28, ngoại lai, n nhỏ, < 3 người) bằng file bấm giờ GIẢ."""
-import csv
-import glob
-import json
 import os
 import sys
 

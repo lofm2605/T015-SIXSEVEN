@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..', 'tool'))
 sys.path.insert(0, HERE)
 import eval50  # noqa: E402
-from m28core import bang_mat as bm, steps  # noqa: E402
+from m28core import bang_mat as bm  # noqa: E402
 from thong_ke_fake import Proj, simple_project  # noqa: E402
 
 

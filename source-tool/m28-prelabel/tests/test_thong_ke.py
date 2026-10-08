@@ -1,6 +1,5 @@
 """Thử tool/thong_ke.py (4 nhóm số liệu, trạng thái trống, tách manual/assisted, xuất CSV + HTML tĩnh) bằng dự án GIẢ. Mọi số là dữ liệu giả."""
 import csv
-import glob
 import json
 import os
 import re

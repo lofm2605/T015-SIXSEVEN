@@ -15,7 +15,6 @@ import csv
 import glob
 import io
 import os
-import re
 
 TIMING_COLS = ["date", "person", "condition", "task", "job", "block", "seq", "face_id", "seconds", "warmup", "interrupted", "note"]
 TASKS_TN = ("m28-manual", "m28-assisted")

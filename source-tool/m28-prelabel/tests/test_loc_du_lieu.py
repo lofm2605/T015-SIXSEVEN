@@ -1,6 +1,5 @@
 """Thử bộ lọc dữ liệu train/finetune (tool/loc_du_lieu.py) bằng dự án GIẢ: tiêu chí, luật cứng, chia theo người, gói xuất, tất định, chỉ ghi dưới outputs\\train_sets."""
 import csv
-import hashlib
 import json
 import os
 import sys

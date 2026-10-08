@@ -6,7 +6,6 @@ thật tính), nhãn CVAT bảy skeleton giả (steps.image_xml thật), file b�
 import csv
 import json
 import os
-import shutil
 import sys
 import types
 

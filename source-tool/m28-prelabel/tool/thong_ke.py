@@ -15,8 +15,6 @@ Ttest ẩn mặc định (tập đo một lần); triage_auto (máy tự quyết
 import argparse
 import csv
 import datetime
-import io
-import json
 import os
 import shutil
 import subprocess
