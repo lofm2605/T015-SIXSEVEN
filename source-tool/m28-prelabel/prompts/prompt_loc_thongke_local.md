@@ -1,3 +1,9 @@
+> **MÁY UBUNTU (ghi đè, ưu tiên hơn mọi chỗ nói Windows/cmd bên dưới):** chủ repo đã chuyển sang Ubuntu. Cách dùng: ở thư mục repo chạy `git pull`, mở Claude Code rồi gõ
+> `Đọc source-tool/m28-prelabel/prompts/prompt_loc_thongke_local.md và thực hiện đúng và đầy đủ.` Khi đọc phần bên dưới, đổi: đường dẫn `\` thành `/`; `cmd` thành bash;
+> `%TEMP%\m28_loc_thongke\` thành `/tmp/m28_loc_thongke/` (hoặc `$TMPDIR`); `robocopy` thành `cp -r`; `chay.bat` thành `chay.sh` và `HUONG-DAN-WINDOWS.md` thành `HUONG-DAN-UBUNTU.md`
+> (cập nhật CẢ HAI file hướng dẫn nếu cùng có mục tương ứng; nếu thêm mục vào `chay.sh` thì giữ đồng bộ với `chay.bat`); venv `source .venv/bin/activate`; chụp HTML tĩnh bằng
+> `chromium`/`google-chrome --headless=new --screenshot=...` nếu có (không có thì ghi "chưa chụp"); Python theo máy (không bắt buộc 3.14). Mọi quy tắc khác giữ nguyên.
+
 > Cách dùng: ở `D:\AI\T015-SIXSEVEN` chạy `git pull`, mở Claude Code trong thư mục đó rồi gõ: `Đọc source-tool\m28-prelabel\prompts\prompt_loc_thongke_local.md và thực hiện đúng và đầy đủ.`
 
 # Prompt chạy LOCAL (Windows): M28, bộ lọc dữ liệu train và trang Thống kê
