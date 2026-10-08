@@ -93,6 +93,18 @@ Khác với Windows:
 - Cổng bận: `export GRADIO_SERVER_PORT=7861`.
 - `--review excel` mở CSV bằng LibreOffice Calc (`libreoffice --calc runs/F5/autoqc/autoqc.csv`), lưu CSV UTF-8 thành `runs/F5/review/triage_P1.csv`.
 
+### Thống kê và lọc dữ liệu train
+Chỉ đọc `runs/`, `raw/`, `final/`, `data/`; chỉ ghi dưới `outputs/`. Cùng code với Windows (xem mục "Thống kê và lọc dữ liệu train" trong `HUONG-DAN-WINDOWS.md`), chỉ khác lệnh:
+```bash
+source .venv/bin/activate
+python tool/thong_ke.py --luot-nhap <lượt chứa nháp của khối X> --timing .
+mkdir -p outputs
+cp config/loc_mau.json outputs/loc_cua_toi.json
+python tool/loc_du_lieu.py --cau-hinh outputs/loc_cua_toi.json --dry-run
+python tool/loc_du_lieu.py --cau-hinh outputs/loc_cua_toi.json --ten finetune_v1
+```
+Hai tab **Thống kê** và **Lọc dữ liệu** nằm trong trang rà soát (`./chay.sh` mục 1 hoặc `python tool/review_app.py --nap P5`). Gói train chứa ảnh mặt người lái xe thật: chỉ dùng nội bộ nhóm, không đưa lên git hay chat AI.
+
 ## 7. Nhập vào CVAT
 Cài CVAT cùng bản 2.77.0 (mục 0), rồi:
 ```bash

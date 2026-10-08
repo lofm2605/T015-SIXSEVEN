@@ -17,6 +17,7 @@ cũ được gán theo cách cũ.
 | [QĐ-002](#qđ-002) | Ánh xạ 478→50 bằng chọn đỉnh MediaPipe trực tiếp | 06/10/2026 | QĐ-001 | Bị thay một phần bởi QĐ-003 (định nghĩa 50 điểm, config v2); chọn đỉnh trực tiếp vẫn hiệu lực |
 | [QĐ-003](#qđ-003) | Định nghĩa 50 điểm DMS (7 nhóm, không viền hàm), trái/phải theo ảnh, config v3 | 07/10/2026 | QĐ-002 | Bị thay một phần bởi QĐ-004 (cách dựng label CVAT: bảy label theo nhóm, màu theo nhóm); phần còn lại hiệu lực |
 | [QĐ-004](#qđ-004) | Tách label `face50` thành bảy label skeleton theo nhóm, mỗi nhóm một màu (bảng màu hình minh hoạ DMS) | 07/10/2026 | QĐ-003 | Hiệu lực |
+| [QĐ-005](#qđ-005) | Bộ lọc dữ liệu train chỉ chuẩn bị dữ liệu (chưa train), kèm trang Thống kê chỉ số model và tốc độ gán | 08/10/2026 | Chủ repo | Hiệu lực |
 
 **Trạng thái:** Hiệu lực · Bị thay bởi QĐ-xxx · Huỷ (ghi lý do)
 
@@ -121,6 +122,34 @@ cũ được gán theo cách cũ.
   - [ ] Dựng lại project/label CVAT bằng `config/face50_label.json` mới: CVAT lưu label và màu lúc tạo, project cũ giữ label `face50`; task dựng từ label cũ và file sao lưu của chúng phải làm lại (@P4 và mỗi người có CVAT riêng)
   - [ ] Chạy mục kiểm tra nhanh CVAT (`chay.bat`, mục 4) trên CVAT thật: lần đầu thử bảy label, nhập XML bảy skeleton và xuất lại (@P4)
   - [ ] Cập nhật guideline gán tay: mỗi mặt chọn lần lượt bảy label, mỗi lần đặt đủ điểm của nhóm (@P5)
+- **Trạng thái:** Hiệu lực
+
+## QĐ-005
+
+**Bộ lọc dữ liệu train chỉ chuẩn bị dữ liệu (chưa train), kèm trang Thống kê chỉ số model và tốc độ gán**
+
+- **Ngày:** 08/10/2026
+- **Người tham gia:** chủ repo (chốt), P1, P2, P3, P4, P5 (chờ duyệt)
+- **Xuất phát từ:** yêu cầu của chủ repo (phiên làm việc 08/10/2026)
+- **Bối cảnh:** sau này đội cần dữ liệu train/finetune cho một model landmark KHÁC (MediaPipe không train được), lấy từ ảnh đã có nhãn sửa tay; đồng thời báo cáo và buổi demo cần số liệu của model và của quá trình gán (chất lượng nháp, cờ `low_conf`, tốc độ, số lượng, tiến độ). Dữ liệu đã nằm rải trong `runs\`, `raw\`, `final\`, `timing_P*.csv`, nhưng chưa có chỗ tổng hợp.
+- **Các phương án đã cân nhắc:**
+  1. *Không làm* — vẫn phải tự ghép dữ liệu bằng tay mỗi lần cần số hay bộ train; dễ lẫn manual với assisted, dễ rò rỉ người giữa train và test. Loại.
+  2. *Lọc dữ liệu và train ngay* — MediaPipe không train được, máy đội không có GPU, repo chưa có bước train, và model đích chưa chọn: ngoài phạm vi. Loại.
+  3. *Bộ lọc chỉ chuẩn bị dữ liệu, chưa train, kèm trang Thống kê.* **Chọn.** Công cụ chỉ đọc dữ liệu có sẵn, ghi dưới `outputs\` (ngoài git), không thêm gói, không thêm code train.
+- **Quyết định:**
+  - Một lớp đọc dùng chung (`tool\m28core\bang_mat.py`, bảng mặt: mỗi dòng một (lượt, mặt)) cho cả bộ lọc (`tool\loc_du_lieu.py`, tab **Lọc dữ liệu**) và Thống kê (`tool\thong_ke.py`, tab **Thống kê**); hai tab đặt trước **Cài đặt**.
+  - **Tiêu chí lọc:** cờ `low_conf` (tổng và theo từng nhóm/vùng; nguồn cờ mặc định là `flags.json`, hoặc tính lại từ điểm số lật với `t_flip` cụ thể vì lượt chạy khi `t_flip = null` có mọi cờ = false), NME của nháp so với nhãn đã sửa, cờ manifest, quyết định rà và người rà, vệ sinh nhãn (đủ điểm, `low_conf` còn bật trong nhãn, độ lệch hai nhãn người).
+  - **Chia theo `set` gốc, không rò rỉ người:** train = F, G, P, X, D; val = Tdev; test = Ttest (đúng cách chia theo người của `inc_ingest.py`), rồi kiểm lại trên chính bộ xuất bằng cột `subject`; một tài xế ở hai phần là lỗi, không ghi gì. Tiêu chí chọn ca khó chỉ áp lên train. Ttest là tập đo một lần: không dùng số trên Ttest để chỉnh ngưỡng lọc; Thống kê ẩn Ttest mặc định.
+  - **Luật cứng không tắt được:** mặt nguồn không rõ (`khong_ro`: lượt Nạp ảnh hoặc không khớp manifest, có thể là ảnh khách hàng) luôn bị loại; mặt xoá mềm, mặt chưa có nhãn sửa tay, mặt `Bỏ` cũng bị loại.
+  - **Tốc độ gán theo đúng giao thức P5** (`timing_P*.csv` của `facetimer.py`, trung bình nhân r_i, KTC 90% bootstrap seed 28, mục tiêu nhanh hơn ≥ 20% và ≥ 4/5 người có r_i < 1); ngoại lai và dòng gián đoạn được đánh dấu nhưng vẫn nằm trong chỉ số chính; giây rà soát là chỉ số khác (thời gian quyết định Nhận/Gán tay/Bỏ). manual và assisted luôn tách riêng; assisted chỉ là cận dưới của chất lượng nháp.
+  - **Xuất tĩnh** (`outputs\thong_ke\<ngày-giờ>\`) không ảnh mặt, không mã tài xế, không đường dẫn tuyệt đối. Gói train (`outputs\train_sets\<tên>\`, có `README.md` ghi giấy phép và trích dẫn) chứa ảnh mặt người lái xe: dự án phi thương mại, chỉ dùng nội bộ nhóm, không phát tán, không giao bên thứ ba, không vào git hay chat AI.
+- **Việc phải làm theo:**
+  - [ ] Duyệt cách tính tốc độ, ngoại lai, giây rà soát và bố cục trang cho báo cáo (@P5)
+  - [ ] Duyệt thống kê cờ, AUROC và `t_flip` dùng để tính lại cờ (@P2)
+  - [ ] Xác nhận quy ước `raw\`/`final\`, tên task thí nghiệm (`m28-manual`, `m28-assisted`) và liên kết `push.json` (@P4)
+  - [ ] Duyệt ánh xạ train/val/test theo `set` gốc; chốt có dùng Ttest làm test của model sau này không (@P1)
+  - [ ] Duyệt NME theo nhóm và `tolerance` mặc định 3% IOD khi config còn null (@P3)
+  - [ ] Cập nhật `CLAUDE.md` và bản Claude Docs về hai tab mới và luật cứng `khong_ro` (chủ repo)
 - **Trạng thái:** Hiệu lực
 
 ## Mẫu để copy

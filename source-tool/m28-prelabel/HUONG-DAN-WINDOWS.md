@@ -121,6 +121,26 @@ Mở tab **Họp team** (không cần lượt), bấm **Tạo phiên mới hôm 
 Biên bản ở `outputs\ca_kho\hop_1610\bien_ban_1610.md`: **tự** chép các khối vào `problem-backlog.md` và `so-quyet-dinh.md` rồi commit hai file đó (trang không ghi vào hai file này).
 Sau họp xoá các gói zip đã nhận nếu không cần nữa.
 
+### Thống kê và lọc dữ liệu train
+Hai việc này **chỉ đọc** `runs\`, `raw\`, `final\`, `data\` và chỉ ghi dưới `outputs\`. Cần nhãn sửa tay trong `raw\` (P4 `collect` hoặc `export.py`) và, cho mục tốc độ, các file `timing_P1.csv` … `timing_P5.csv` do `facetimer.py` ghi.
+
+**Xem số liệu (tab Thống kê):** `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`), chọn tab **Thống kê**; bấm **Làm mới**; **Xuất CSV + HTML** ghi `outputs\thong_ke\<ngày-giờ>\`. Ttest ẩn mặc định (tập đo một lần). Nhãn thí nghiệm (`m28-manual`, `m28-assisted`) chỉ có nháp khi chọn ô **Lượt chứa nháp**.
+```bat
+python tool\thong_ke.py --luot-nhap <lượt chứa nháp của khối X> --timing .
+```
+Chỗ đặt `timing_P*.csv`: thư mục `source-tool\m28-prelabel\` (hoặc `outputs\`, `raw\`, `final\`); file `timing_*.csv` đã bị `.gitignore` chặn. Định dạng là 12 cột của `facetimer.py` (`date, person, condition, task, job, block, seq, face_id, seconds, warmup, interrupted, note`), không đặt định dạng mới; thiếu cột thì báo rõ tên cột.
+
+**Lọc dữ liệu train (tab Lọc dữ liệu hoặc lệnh):** bắt đầu bằng xem trước, không ghi gì:
+```bat
+if not exist outputs mkdir outputs
+copy config\loc_mau.json outputs\loc_cua_toi.json
+python tool\loc_du_lieu.py --cau-hinh outputs\loc_cua_toi.json --dry-run
+python tool\loc_du_lieu.py --cau-hinh outputs\loc_cua_toi.json --ten finetune_v1 [--zip]
+```
+Bảng `--dry-run` cho biết bao nhiêu mặt bị loại vì sao. Nếu một lượt chạy khi `t_flip` còn `null` thì mọi cờ của lượt = false: bộ lọc cảnh báo rõ, dùng `"co": {"nguon": "tinh_lai", "t_flip": 0.06}` để tính lại cờ. Gói ở `outputs\train_sets\finetune_v1\` (có `README.md` ghi giấy phép và trích dẫn).
+
+**Cảnh báo dữ liệu nhạy cảm:** gói train chứa **ảnh mặt người lái xe thật** (YawDD, DrivFace: chỉ dùng học tập, nghiên cứu, phi thương mại). Chỉ gửi trong đội (Drive riêng tư), không đăng, không giao bên thứ ba, không commit (`outputs\` và `*.zip` đã bị `.gitignore` chặn), không đưa vào chat AI. Bản HTML của Thống kê không có ảnh mặt và không có mã tài xế nên đưa vào báo cáo được.
+
 ## 7. Nhập vào CVAT (khi đã có CVAT trên máy)
 **Lưu ý: `push`, `collect`, xoá task và bảy label skeleton theo nhóm mới chỉ thử bằng CVAT giả, CHƯA thử trên CVAT thật.** Lần đầu chạy trên task thử `demo-…` và báo P4 nếu có lỗi.
 
@@ -167,7 +187,7 @@ Làm một lần trên máy có CVAT, trước khi đẩy ảnh thật (mất kh
 ```bat
 python -m pytest tests -q
 ```
-Trên máy Windows của chủ repo (7/10/2026, Python 3.14.7) ra `666 passed, 3 skipped` và **11 lỗi có sẵn do Windows** (tạo symlink cần quyền, đường dẫn/CRLF của vài bài test; không do M28): đừng coi 11 lỗi đó là hỏng, chỉ cần không có lỗi MỚI. Test chỉ dùng dữ liệu giả, không cần ảnh mặt thật hay mạng.
+Trên máy Windows của chủ repo (7/10/2026, Python 3.14.7) ra `666 passed, 3 skipped` và **11 lỗi có sẵn do Windows** (tạo symlink cần quyền, đường dẫn/CRLF của vài bài test; không do M28): đừng coi 11 lỗi đó là hỏng, chỉ cần không có lỗi MỚI. Test chỉ dùng dữ liệu giả, không cần ảnh mặt thật hay mạng. Từ 8/10/2026 có thêm test cho bảng mặt, bộ lọc và Thống kê (`test_bang_mat.py`, `test_loc_du_lieu.py`, `test_thong_ke.py`, `test_toc_do.py`, `test_thong_ke_ui.py`: 122 test); số qua phải **không ít hơn** số lúc bạn đo gốc trước khi `git pull`.
 
 | Triệu chứng | Cách xử lý |
 |---|---|

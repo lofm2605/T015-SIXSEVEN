@@ -21,6 +21,18 @@ rà nháp trên trang Gradio chỉ mở ở 127.0.0.1, rồi nhập nhãn nháp 
 | `collect` | Sau khi gán: xuất nhãn từ CVAT về `raw/` (chỉ đọc) |
 | `all` | `prepare` → `review` → `push` |
 
+### Thống kê và lọc dữ liệu train (08/10/2026, QĐ-005)
+Hai việc đọc dữ liệu đã có (không sửa `runs\`, `raw\`, `final\`, `data\`), có cả lệnh và tab trong trang rà soát:
+
+| Lệnh | Tab | Làm gì |
+|---|---|---|
+| `python tool\thong_ke.py [--luot R1 R2] [--gom-ttest] [--timing <thư mục>] [--luot-nhap <lượt>]` | **Thống kê** | Số liệu: chất lượng nháp (NME so với nhãn sửa tay, tách manual/assisted), cờ `low_conf` (% điểm bị cờ, AUROC), tốc độ gán theo giao thức P5 (TB nhân, KTC 90%), giây rà soát, số lượng và tiến độ. Ghi `outputs\thong_ke\<ngày-giờ>\`: `thong_ke.html` (không ảnh mặt, không mã tài xế) + CSV từng bảng + `nme_nhap.csv` |
+| `python tool\loc_du_lieu.py --cau-hinh config\loc_mau.json [--dry-run] [--ten T] [--ghi-de] [--zip]` | **Lọc dữ liệu** | Lọc ảnh đã có nhãn sửa tay thành bộ train/val/test (cho một model landmark KHÁC sau này; **chỉ chuẩn bị dữ liệu, không train**). Tiêu chí: cờ `low_conf` (tổng, theo nhóm, theo vùng), NME nháp, cờ manifest, quyết định rà, vệ sinh nhãn. Chia theo `set` gốc rồi kiểm không tài xế nào ở hai phần. Ghi `outputs\train_sets\<tên>\` |
+
+- **Vào:** `runs\<lượt>\` đã `prepare`, nhãn sửa tay `raw\<task>_<Pk>_<DDMM>.xml` (bản sửa lần hai ở `final\`), `timing_P1..P5.csv` của `facetimer.py` (đặt ở thư mục này, `outputs\`, `raw\` hoặc `final\`), `data\manifest.csv`. Chưa có thứ nào thì mục tương ứng hiện trạng thái trống nói rõ cần file gì, ai làm ra (không hiện số 0 hay số giả).
+- **Luật cứng của bộ lọc:** mặt nguồn không rõ (lượt Nạp ảnh, có thể là ảnh khách hàng), mặt xoá mềm, mặt chưa có nhãn sửa tay, mặt `Bỏ` luôn bị loại. Gói xuất chứa ảnh mặt người lái xe: chỉ dùng nội bộ nhóm, không git, không chat AI.
+- **Giới hạn:** chưa thử với nhãn bảy skeleton xuất thật từ CVAT, file bấm giờ thật (14–15/10), `final\`, lượt `--box auto` có ảnh gốc khác tên; tab chưa được chụp trên Windows thật. Chi tiết cách tính từng số: [`TAI-LIEU-CHI-TIET.md`](TAI-LIEU-CHI-TIET.md), mục "Thống kê và lọc dữ liệu train".
+
 ## Cài đặt và chạy
 Windows (cmd, Python 3.14), từ thư mục `source-tool\m28-prelabel`:
 ```bat
