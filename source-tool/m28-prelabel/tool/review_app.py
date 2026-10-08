@@ -10,6 +10,8 @@ Sửa điểm không làm ở đây (làm trong CVAT).
 Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
 ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà
 không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team",
+"Đồng hồ" (dong_ho.py + dong_ho_ui.py: bấm giờ gán nhãn theo PHIÊN, thay facetimer: Bắt đầu, Tạm dừng/Tiếp tục, Hủy có xác nhận, Xong (lưu & xuất gói kết quả `outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip`
+gửi nhóm trưởng, và dòng `outputs\\timing\\timing_<Pk>.csv` đúng định dạng facetimer; nguồn sự thật là đồng hồ phía server, trạng thái ghi ra file nên đóng tab không mất; đóng trang thì tự tạm dừng),
 "Thống kê" (thong_ke.py + thong_ke_html.py + thong_ke_ui.py: NME của nháp, cờ low_conf, tốc độ gán theo giao thức P5, số lượng và tiến độ; chỉ đọc, tính khi chọn tab,
 xuất CSV + HTML tĩnh không ảnh mặt), "Lọc dữ liệu" (loc_du_lieu.py + loc_ui.py: bộ lọc ảnh đã có nhãn sửa tay thành bộ train/val/test cho model landmark khác sau này, chỉ chuẩn bị
 dữ liệu, không train, xem trước = dry-run, ghi dưới outputs\\train_sets), "Cài đặt" (cai_dat.py + cai_dat_ui.py: link/token/tổ chức CVAT, người rà mặc định, đường dẫn ảnh và model, t_flip của cờ low_conf).
@@ -53,6 +55,7 @@ import ca_kho  # noqa: E402  (ca khó, tab Ca khó và Họp team; chỉ thư vi
 import dot_anh  # noqa: E402
 import cai_dat  # noqa: E402  (cài đặt dùng chung cả tiến trình: CVAT, người rà, đường dẫn; chỉ thư viện chuẩn)
 import cai_dat_ui  # noqa: E402  (tab Cài đặt; không import gradio ở đầu module)
+import dong_ho_ui  # noqa: E402  (tab Đồng hồ: bấm giờ theo phiên; không import gradio ở đầu module)
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
 import loc_ui  # noqa: E402  (tab Lọc dữ liệu; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
@@ -930,10 +933,10 @@ def close_prompt(store):
             "Bạn chưa bấm Xong: m28 sẽ coi như chưa rà xong; bấm Huỷ rồi bấm Xong trước nếu muốn đi tiếp.")
 
 
-def close_body_html(store):
+def close_body_html(store, extra=""):
     kind, q, warn = close_prompt(store)
     w = f'<div class="nap-box nap-err" role="alert"><b>{html.escape(warn)}</b></div>' if warn else ""
-    return f'<div class="modal-title" id="close-confirm-title">{html.escape(q)}</div>{w}'
+    return f'<div class="modal-title" id="close-confirm-title">{html.escape(q)}</div>{w}{extra}'
 
 
 CLOSED_HTML = ('<div class="m28-closed" role="alert"><div class="m28-closed-box"><b>Đã đóng trang rà soát.</b>'
@@ -1334,8 +1337,8 @@ PAGE_JS = r"""() => {
     .observe(document.body, { childList: true, subtree: true, characterData: true });
   mark();
 }"""
-PAGE_JS = PAGE_JS[:-1] + dot_ui.JS_BODY + "}"          # JS của hộp xác nhận và tab Các đợt chạy một lần, cùng hàm với phím tắt
-CSS = CSS + dot_ui.CSS + ca_kho.CSS + cai_dat_ui.CSS + thong_ke_ui.CSS + loc_ui.CSS
+PAGE_JS = PAGE_JS[:-1] + dot_ui.JS_BODY + dong_ho_ui.JS_BODY + "}"          # JS của hộp xác nhận, tab Các đợt và đồng hồ chạy một lần, cùng hàm với phím tắt
+CSS = CSS + dot_ui.CSS + ca_kho.CSS + cai_dat_ui.CSS + dong_ho_ui.CSS + thong_ke_ui.CSS + loc_ui.CSS
 
 
 def prepare_env(run_dir, environ=None):
@@ -1550,6 +1553,10 @@ class AppCtx:
     auto_open: object = None           # tên lượt vừa bấm "Nạp & Mở": chuẩn bị xong thì tự làm như bấm "Rà lượt này" (một lần)
     closing: bool = False              # đã xác nhận "Đóng trang rà soát" (một lần duy nhất cho mọi tab): mọi handler ghi từ chối
     close_lock: object = dataclasses.field(default_factory=threading.Lock, repr=False)
+    dong_ho: object = None             # dong_ho.DongHo của thư mục dự án (dong_ho_ui.get_dh); trạng thái nằm trong file nên dựng lại ctx không mất phiên
+    dh_auto: object = None             # {nguoi, dieu_kien} khi bật "Tự bắt đầu đồng hồ khi nạp ảnh"
+    dh_started: object = dataclasses.field(default_factory=set, repr=False)      # lượt đã bắt đầu đồng hồ (không gợi ý lại)
+    dh_dismissed: object = dataclasses.field(default_factory=set, repr=False)    # lượt đã bỏ qua gợi ý
     demo: object = None
     tmp_dir: str = ""
     runs_root: str = ""
@@ -1718,6 +1725,7 @@ def _nap_tab(gr, demo, store, ctx):
             job.start(run, ctx.runs_root, ctx.project_root)
         except RunError as e:
             return refuse(str(e))
+        dong_ho_ui.auto_start(gr, ctx, run, len(plan_st["plan"]["ok"]))     # ô "Tự bắt đầu đồng hồ khi nạp ảnh" bật thì đồng hồ bắt đầu ngay lúc nạp
         ctx.auto_open = run if open_after else None
         text = (f"Đã nạp {len(plan_st['plan']['ok'])} ảnh vào runs\\{run}\\inbox, đang chạy prepare"
                 + (": xong thì trang tự mở rà soát lượt này." if open_after else "."))
@@ -1839,7 +1847,7 @@ def _close_bar(gr, demo, store, ctx):
         ok, text, level = close_check(store, ctx)
         if not ok:
             return refuse(text, level)
-        return gr.update(visible=True), close_body_html(store), "", gr.update()
+        return gr.update(visible=True), close_body_html(store, dong_ho_ui.close_note(ctx)), "", gr.update()
 
     def on_confirm():
         ok, text, level = close_check(store, ctx)               # job có thể vừa bắt đầu khi hộp đang mở: kiểm lại
@@ -1851,6 +1859,7 @@ def _close_bar(gr, demo, store, ctx):
             return refuse("Trang đang đóng hoặc đang chuyển lượt.", "info")
         if store is not None:
             store.closed = True
+        dong_ho_ui.tu_tam_dung(ctx)                                 # đồng hồ đang chạy thì tự tạm dừng (rồi từ chối mọi thao tác ghi)
         threading.Timer(1.0, lambda: demo.close(verbose=False)).start()
         return hide, "", "", CLOSED_HTML
 
@@ -1894,6 +1903,8 @@ def build_ui(store, ctx=None):
                 ck_fn, ck_in, ck_out, ck_opts = ca_kho.member_tab(gr, demo, store, ctx)
             with gr.Tab("Họp team", id="hop", elem_id="tab-hop"):
                 ca_kho.meeting_tab(gr, demo, ctx)
+            with gr.Tab("Đồng hồ", id="dongho", elem_id="tab-dongho") as tab_dh:
+                dh_fn, dh_in, dh_out, dh_opts = dong_ho_ui.dong_ho_tab(gr, demo, store, ctx)
             with gr.Tab("Thống kê", id="thongke", elem_id="tab-thongke") as tab_tk:
                 tk_fn, tk_in, tk_out, tk_opts = thong_ke_ui.stats_tab(gr, demo, store, ctx)
             with gr.Tab("Lọc dữ liệu", id="loc", elem_id="tab-loc") as tab_loc:
@@ -1908,6 +1919,7 @@ def build_ui(store, ctx=None):
                 cd_fn, cd_in, cd_out, cd_opts = cai_dat_ui.settings_tab(gr, demo, store, ctx, after_cvat, run_name, after_model)
         tab_ck.select(ck_fn, ck_in, ck_out, **ck_opts)                      # tab Ca khó tự làm mới khi chọn (ca vừa đánh dấu ở tab Rà soát)
         tab_dot.select(refresh, [dot_ses], dot_outs, **dot_opts)           # tự làm mới khi chọn tab (không quét lại mỗi giây)
+        tab_dh.select(dh_fn, dh_in, dh_out, **dh_opts)                      # Đồng hồ: đọc lại file trạng thái khi chọn tab (đồng hồ có thể vừa đổi ở tab khác)
         tab_tk.select(tk_fn, tk_in, tk_out, **tk_opts)                      # Thống kê: tính khi chọn tab, không tính lúc mở trang
         tab_loc.select(lc_fn, lc_in, lc_out, **lc_opts)                     # Lọc dữ liệu: làm mới danh sách lượt/người rà/cấu hình khi chọn tab
         tab_nap.select(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])  # kiểm lại model/cấu hình khi chọn tab (vừa đổi đường dẫn ở tab Cài đặt)
@@ -2038,6 +2050,7 @@ def main(argv=None):
             ctx = AppCtx(reviewer=new_store.reviewer, run_dir=new_dir)      # job mới, ctx mới; tên người rà là tên của lượt mới (cài đặt ở tab Cài đặt)
             reviewer = ctx.reviewer
     except KeyboardInterrupt:
+        dong_ho_ui.tu_tam_dung(ctx)                       # Ctrl+C: đồng hồ đang chạy tự tạm dừng, không mất số đo
         if store is not None and os.path.exists(store.done_path):
             print(f"Đã đóng trang rà soát bằng Ctrl+C: lượt {run_name(store.run_dir)} đã bấm Xong ({_shown(store.done_path)}).", flush=True)
         else:
