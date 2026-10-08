@@ -13,7 +13,7 @@
 Tên video YawDD (cần biết khi viết code): Dash `1-FemaleNoGlasses.avi`, `13-MaleNoGlasses .avi` (**dấu cách trước đuôi**), có chỗ `.avi.avi`;
 Mirror `1-FemaleNoGlasses-Normal.avi` (trạng thái `Normal|Talking|Yawning|Talking&Yawning`; có chỗ `GlassesBeard`, `Glassesmoustache`, `Talking&yawning` viết thường);
 kính `Glasses|NoGlasses|SunGlasses`. Thư mục `Male_mirror Avi Videos` **có dấu cách**. Người ở Dash và Mirror cùng giới + cùng số: tài liệu không nói là cùng hay khác người
-(xem `README.md`, mục "Mã người"), nên mã người **gộp** (`yd_M004` dùng chung cho cả hai).
+(xem `TAI-LIEU-CHI-TIET.md`, mục "Mã người"), nên mã người **gộp** (`yd_M004` dùng chung cho cả hai).
 
 **Tải YawDD (6/10/2026, đã chạy trên cloud).** Dùng **HTTPS** (HTTP cổng 80 bị chặn trên cloud). Link đúng là `user06.tar` (**không phải** `user02`):
 ```bat
@@ -29,7 +29,7 @@ Cách dùng: **không còn đáp án 98 điểm và không còn ánh xạ học 
 **Kết quả 6/10/2026 là của 50 điểm CŨ (version 2, trước QĐ-003), không còn hiệu lực cho định nghĩa DMS; chưa đo lại trên DMS** (ngày 7/10 máy chạy không có DrivFace gốc: cần thư mục DrivFace có `drivPoints.txt` rồi chạy `check_drivface.py`, thêm `--old-config`/`--old-map` để so với bản chép config/map v2). Số cũ trên 606 ảnh (trung vị, % khoảng cách hai tâm mắt DrivFace; v2 chọn đỉnh / ridge đã bỏ): tâm mắt R 4,6 / 4,0, tâm mắt L 8,2 / 7,0, mũi 4,8 (p29 chóp) / 5,2, khoé miệng R 8,6 / 10,5, khoé miệng L 4,9 / 6,3; tâm iris MediaPipe 4,2 (R) và 6,1 (L). Bản mới của công cụ so tâm mắt DrivFace với trung bình 8 điểm mỗi mắt của DMS, mũi với chóp `songmui_4`, khoé miệng với `moingoai_1`/`moingoai_7`, ghép bên theo vị trí trong ảnh.
 Lưu ý: mốc DrivFace có định nghĩa riêng và lệch hệ thống (xem ảnh: tâm mắt bên phải ảnh lệch sang phải 5-7% IOD, khoé miệng trái ảnh lệch vào trong ~8%; mũi khớp chóp mũi (đỉnh 1), không khớp chân mũi (đỉnh 2) thấp hơn ~15% IOD), nên số này là cận trên cho lỗi của ta chứ không phải lỗi thật; đáng chú ý là nó không tệ đi so với ridge cũ.
 
-**Gói dữ liệu cho đội** dựng từ hai bộ này bằng `tool\\inc_ingest.py` (xem `README.md`, mục "Dữ liệu in-cabin"): 616 mặt `F/Tdev/Ttest/G/P/X/D`, tách theo người.
+**Gói dữ liệu cho đội** dựng từ hai bộ này bằng `tool\\inc_ingest.py` (xem `TAI-LIEU-CHI-TIET.md`, mục "Dữ liệu in-cabin"): 616 mặt `F/Tdev/Ttest/G/P/X/D`, tách theo người.
 
 Lệnh tải DrivFace (cmd): `curl -L -O https://archive.ics.uci.edu/static/public/378/drivface.zip` (bên trong có `DrivImages.zip`, `drivPoints.txt`, `readme.txt`; tên file ảnh có **dấu cách trước `.jpg`**).
 

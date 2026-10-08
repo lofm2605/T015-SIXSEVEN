@@ -70,7 +70,7 @@ mkdir -p DrivFace/imgs && unzip -o DrivFace/DrivImages.zip -d DrivFace/imgs
 cd -    # về lại source-tool/m28-prelabel
 python tool/inc_ingest.py all --yawdd "$HOME/incab/YawDD dataset" --drivface "$HOME/incab/DrivFace" --model face_landmarker.task --out data --seed 5
 ```
-Các lệnh tải/giải nén này **chưa thử**: đối chiếu tên thư mục thật sau mỗi bước. Chi tiết các cờ: `README.md`, mục "Dữ liệu in-cabin".
+Các lệnh tải/giải nén này **chưa thử**: đối chiếu tên thư mục thật sau mỗi bước. Chi tiết các cờ: `TAI-LIEU-CHI-TIET.md`, mục "Dữ liệu in-cabin".
 
 ## 5. Chạy thử trên 5 mặt (không cần CVAT, không cần token)
 Cách nhanh: `./chay.sh`, chọn 3. Hoặc gõ tay:

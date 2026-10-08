@@ -71,7 +71,7 @@ python tool\inc_ingest.py all --yawdd "D:\incab\YawDD dataset" --drivface D:\inc
 ```
 `drivface.zip` giải ra thư mục `DrivFace\` có `DrivImages.zip` (ảnh), `drivPoints.txt`, `readme.txt`; hai lệnh `mkdir`/`tar` thứ hai đưa ảnh vào `DrivFace\imgs\DrivImages\*.jpg` (đúng chỗ `inc_ingest.py` tìm). Các lệnh `tar -xf` trên Windows này **chưa thử**.
 Quét video chậm (10-20 phút trên CPU 4 nhân của cloud; máy Windows chưa đo); `inc_ingest.py scan` lưu cache nên chạy lại `split`/`pack` chỉ mất vài phút. Gói zip ra `data_parts\` (mỗi file <= 28 MiB).
-Chi tiết, các cờ và luật tách người: `README.md`, mục "Dữ liệu in-cabin".
+Chi tiết, các cờ và luật tách người: `TAI-LIEU-CHI-TIET.md`, mục "Dữ liệu in-cabin".
 
 ## 5. Chạy thử trên 5 mặt (không cần CVAT, không cần token)
 Chỉ cần gói dữ liệu ở mục 4a (**không** cần video hay khung gốc): `--images data\crops` dùng chính ảnh cắt. Cách nhanh nhất là `chay.bat`, chọn 3. Hoặc gõ tay: tạo danh sách 5 mặt F rồi chạy cả chuỗi ở chế độ chạy thử:
