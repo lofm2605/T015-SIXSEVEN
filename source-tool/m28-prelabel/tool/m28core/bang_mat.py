@@ -438,18 +438,19 @@ def _ngay_key(d):
     return d[2:] + d[:2] if len(d) == 4 and d.isdigit() else ""
 
 
+def hang_nhan(e, uu_tien=UU_TIEN_MAC_DINH):
+    """Hạng ưu tiên của một nhãn (số nhỏ = ưu tiên hơn): nhãn ở final\\ là 'final', còn lại theo điều kiện (manual/assisted); ngoài danh sách = cuối."""
+    cat = "final" if e["kind"] == "final" else e["dieu_kien"]
+    return list(uu_tien).index(cat) if cat in uu_tien else len(uu_tien)
+
+
 def chon_nhan(row, uu_tien=UU_TIEN_MAC_DINH):
     """Một nhãn của mặt: theo thứ tự ưu tiên `uu_tien` (final, manual, assisted), cùng hạng thì mới nhất (ngày DDMM trong tên file, rồi tên file); None nếu không có."""
     labs = row.get("nhan") or []
     if not labs:
         return None
-
-    def rank(e):
-        cat = "final" if e["kind"] == "final" else e["dieu_kien"]
-        return list(uu_tien).index(cat) if cat in uu_tien else len(uu_tien)
-
-    best = min(rank(e) for e in labs)
-    return max((e for e in labs if rank(e) == best), key=lambda e: (_ngay_key(e["ngay"]), e["file"]))
+    best = min(hang_nhan(e, uu_tien) for e in labs)
+    return max((e for e in labs if hang_nhan(e, uu_tien) == best), key=lambda e: (_ngay_key(e["ngay"]), e["file"]))
 
 
 def _loai_mat(r, manual_kind, co_nhap_files):

@@ -1,0 +1,23 @@
+{
+ "ten": "finetune_v1",
+ "nguon_nhan": {"luot": [], "file_nhan": [], "luot_nhap": null, "uu_tien": ["final", "manual", "assisted"]},
+ "nguon_du_lieu": ["yawdd", "drivface"],
+ "set_goc": [],
+ "quyet_dinh": ["nhan", "gan_tay"],
+ "nguoi_ra": [],
+ "co": {
+  "nguon": "flags_json",
+  "t_flip": null,
+  "tong": {"toi_thieu": 0, "toi_da": 50},
+  "theo_nhom": {"mattrai": {"toi_da": 8}, "matphai": {"toi_da": 8}},
+  "theo_vung": {}
+ },
+ "nme_nhap": {"toi_thieu": null, "toi_da": null},
+ "manifest": {"pose": null, "expression": null, "illumination": null, "makeup": null, "occlusion": null, "blur": null,
+              "camera": null, "glasses": null, "state": null},
+ "nhan": {"so_diem_thieu_toi_da": 0, "low_conf_trong_nhan_toi_da": null, "lech_nhan_toi_da": null, "dieu_kien": [], "loai_mat": []},
+ "giu_mat_khong_nhap": false,
+ "chia": {"train": ["F", "G", "P", "X", "D"], "val": ["Tdev"], "test": ["Ttest"], "loc_tap_danh_gia": false},
+ "kem_anh": true,
+ "zip": false
+}
