@@ -10,7 +10,9 @@ Sửa điểm không làm ở đây (làm trong CVAT).
 Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
 ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà
 không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team",
-"Cài đặt" (cai_dat.py + cai_dat_ui.py: link/token/tổ chức CVAT, người rà mặc định, đường dẫn ảnh và model, t_flip của cờ low_conf).
+"Thống kê" (thong_ke.py + thong_ke_html.py + thong_ke_ui.py: NME của nháp, cờ low_conf, tốc độ gán theo giao thức P5, số lượng và tiến độ; chỉ đọc, tính khi chọn tab,
+xuất CSV + HTML tĩnh không ảnh mặt), "Lọc dữ liệu" (loc_du_lieu.py + loc_ui.py: bộ lọc ảnh đã có nhãn sửa tay thành bộ train/val/test cho model landmark khác sau này, chỉ chuẩn bị
+dữ liệu, không train, xem trước = dry-run, ghi dưới outputs\\train_sets), "Cài đặt" (cai_dat.py + cai_dat_ui.py: link/token/tổ chức CVAT, người rà mặc định, đường dẫn ảnh và model, t_flip của cờ low_conf).
 Nút Xong chỉ ghi done.txt và khoá việc bấm quyết định (hiện dải xanh ở đầu trang); trang KHÔNG tự tắt, vẫn Đẩy lên CVAT, xem Các đợt,
 xuất Ca khó được. Chỗ duy nhất tắt trang là nút "Đóng trang rà soát" (có hộp xác nhận, đứng trên các tab), Ctrl+C, hoặc chuyển lượt.
 Trang KHÔNG gọi mạng: đẩy lên CVAT, xoá task và "Thử kết nối CVAT" chạy bằng tiến trình con (`m28.py push ...`, cai_dat_thu.py). Link/token CVAT
@@ -52,7 +54,9 @@ import dot_anh  # noqa: E402
 import cai_dat  # noqa: E402  (cài đặt dùng chung cả tiến trình: CVAT, người rà, đường dẫn; chỉ thư viện chuẩn)
 import cai_dat_ui  # noqa: E402  (tab Cài đặt; không import gradio ở đầu module)
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
+import loc_ui  # noqa: E402  (tab Lọc dữ liệu; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
+import thong_ke_ui  # noqa: E402  (tab Thống kê; không import gradio ở đầu module)
 from m28core import dang_chay, loai_tru, mau_nhom  # noqa: E402  (khoá lượt; danh sách mặt xoá mềm excluded.txt)
 from m28core.steps import DECISIONS, _stem  # noqa: E402  (dùng chung quy ước tên/quyết định với push)
 from nap_anh import NO_FACE_VI, RunError  # noqa: E402,F401  (RunError dùng chung với nap_anh)
@@ -1331,7 +1335,7 @@ PAGE_JS = r"""() => {
   mark();
 }"""
 PAGE_JS = PAGE_JS[:-1] + dot_ui.JS_BODY + "}"          # JS của hộp xác nhận và tab Các đợt chạy một lần, cùng hàm với phím tắt
-CSS = CSS + dot_ui.CSS + ca_kho.CSS + cai_dat_ui.CSS
+CSS = CSS + dot_ui.CSS + ca_kho.CSS + cai_dat_ui.CSS + thong_ke_ui.CSS + loc_ui.CSS
 
 
 def prepare_env(run_dir, environ=None):
@@ -1890,6 +1894,10 @@ def build_ui(store, ctx=None):
                 ck_fn, ck_in, ck_out, ck_opts = ca_kho.member_tab(gr, demo, store, ctx)
             with gr.Tab("Họp team", id="hop", elem_id="tab-hop"):
                 ca_kho.meeting_tab(gr, demo, ctx)
+            with gr.Tab("Thống kê", id="thongke", elem_id="tab-thongke") as tab_tk:
+                tk_fn, tk_in, tk_out, tk_opts = thong_ke_ui.stats_tab(gr, demo, store, ctx)
+            with gr.Tab("Lọc dữ liệu", id="loc", elem_id="tab-loc") as tab_loc:
+                lc_fn, lc_in, lc_out, lc_opts = loc_ui.loc_tab(gr, demo, store, ctx)
             with gr.Tab("Cài đặt", id="caidat", elem_id="tab-caidat") as tab_cd:
                 def after_cvat(ev):                         # Lưu/Quên token xong: khung Đẩy lên CVAT và tab Các đợt thấy ngay giá trị mới
                     if review is not None:
@@ -1900,6 +1908,8 @@ def build_ui(store, ctx=None):
                 cd_fn, cd_in, cd_out, cd_opts = cai_dat_ui.settings_tab(gr, demo, store, ctx, after_cvat, run_name, after_model)
         tab_ck.select(ck_fn, ck_in, ck_out, **ck_opts)                      # tab Ca khó tự làm mới khi chọn (ca vừa đánh dấu ở tab Rà soát)
         tab_dot.select(refresh, [dot_ses], dot_outs, **dot_opts)           # tự làm mới khi chọn tab (không quét lại mỗi giây)
+        tab_tk.select(tk_fn, tk_in, tk_out, **tk_opts)                      # Thống kê: tính khi chọn tab, không tính lúc mở trang
+        tab_loc.select(lc_fn, lc_in, lc_out, **lc_opts)                     # Lọc dữ liệu: làm mới danh sách lượt/người rà/cấu hình khi chọn tab
         tab_nap.select(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])  # kiểm lại model/cấu hình khi chọn tab (vừa đổi đường dẫn ở tab Cài đặt)
         tab_cd.select(cd_fn, cd_in, cd_out, **cd_opts)                     # tab Cài đặt: nạp lại trạng thái từ server khi chọn (nhiều tab trình duyệt)
         if review is not None:                                             # chọn lại tab Rà soát: vẽ lại (ảnh vừa xoá/khôi phục ở tab Các đợt)
@@ -1988,6 +1998,8 @@ def main(argv=None):
             # Chỉ phát file của lượt đang rà (overlays, crop/images, _tmp); không bao giờ inbox/ hay cả runs/.
             allowed = [os.path.abspath(os.path.join(ctx.run_dir, d)) for d in ("overlays", os.path.join("crop", "images"), "_tmp")]
             allowed.append(os.path.abspath(ca_kho.serve_dir(ctx.project_root)))        # chỉ outputs/ca_kho (gói họp, phiên họp), không cả outputs/
+            allowed.append(os.path.abspath(thong_ke_ui.serve_dir(ctx.project_root)))   # chỉ outputs/thong_ke (bản xuất thống kê để tải)
+            allowed.append(os.path.abspath(loc_ui.serve_dir(ctx.project_root)))        # chỉ outputs/train_sets (file .zip bộ dữ liệu để tải)
             try:
                 _app, url, _share = _launch(demo, theme, ctx, port, allowed, inbrowser and first, 0 if first else 10)
             except OSError as e:
