@@ -136,7 +136,8 @@ def nme_mat(pred, gt, cfg):
         v = [s["errors"][n] for n in ns if n in s["errors"]]
         if v:
             nhom[g] = float(np.mean(v))
-    return dict(ok=True, nme=s["nme"], nhom=nhom)
+    return dict(ok=True, nme=s["nme"], nhom=nhom, nme_eye=s.get("nme_eye"), nme_p2p=s.get("nme_p2p"), vung=dict(s.get("region") or {}),
+                eye_open_err=s.get("eye_open_err"), n_missing=s.get("n_missing", 0))
 
 
 def tom_tat(giatri, bad=None):
@@ -162,7 +163,8 @@ def nme_nhom(mats, ref, cfg, bad):
         if not s["ok"]:
             khong.append((m["anh"], s["ly_do"]))
             continue
-        rows.append(dict(anh=m["anh"], nguoi=m["nguoi"], nme=s["nme"], nhom=s["nhom"], n_ref=r["n_nguoi"]))
+        rows.append(dict(anh=m["anh"], nguoi=m["nguoi"], nme=s["nme"], nhom=s["nhom"], n_ref=r["n_nguoi"], nme_eye=s["nme_eye"], nme_p2p=s["nme_p2p"], vung=s["vung"],
+                         eye_open_err=s["eye_open_err"], n_missing=s["n_missing"]))
     nhom = {}
     for g in _nhom_cua_diem(cfg):
         nhom[g] = tom_tat([r["nhom"].get(g) for r in rows], bad)

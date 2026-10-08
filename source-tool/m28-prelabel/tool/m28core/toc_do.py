@@ -1,4 +1,7 @@
-"""Tốc độ gán nhãn theo ĐÚNG giao thức của P5 (de-tai-m28/p5-thi-nghiem.md, mục "Thời gian"): chỉ numpy + thư viện chuẩn (không pandas), chỉ ĐỌC.
+"""LƯU Ý (QĐ-006): trang Thống kê KHÔNG còn dùng giao thức ghép cặp này (thiết kế đổi sang hai nhóm độc lập, xem m28core/so_sanh.py); module giữ lại để đối chiếu với đoạn
+code pandas gốc của P5 và vì bộ đọc `doc_file`/`tim_file` còn được dùng. Các hàm phan_tich/_ri/_bootstrap/tom_tat_giay chỉ còn test gọi; xoá khi P5 và mentor chốt thiết kế hai nhóm.
+
+Tốc độ gán nhãn theo ĐÚNG giao thức của P5 (de-tai-m28/p5-thi-nghiem.md, mục "Thời gian"): chỉ numpy + thư viện chuẩn (không pandas), chỉ ĐỌC.
 
 Đầu vào: timing_P*.csv do facetimer.py ghi, 12 cột `date, person, condition, task, job, block, seq, face_id, seconds, warmup, interrupted, note`.
 Định dạng đã có nên KHÔNG đặt định dạng mới. Cách tính (khớp đoạn code P5 bằng pandas, có test so sánh khi máy có pandas):
@@ -26,7 +29,7 @@ MIN_NGUOI = 3                    # dưới ngần này người có đủ hai đ
 TY_LE_NGUOI_NHANH = 0.8          # >= 4/5 người có r_i < 1
 SAI_SO_SO = 1e-9                 # so sánh với 0,80 / 4/5 không bị lệch bởi sai số dấu phẩy động (exp(mean(log 0,8)) = 0,8000000000000002)
 HE_SO_IQR = 3.0                  # ngoại lai: > Q3 + 3·IQR
-TIMING_DIRS = ("", "outputs", "raw", "final")
+TIMING_DIRS = ("", "outputs", os.path.join("outputs", "timing"), "raw", "final")
 KET_LUAN_VI = {"dat": "Đạt", "khong_dat": "Không đạt", "chua_ket_luan": "Chưa kết luận", "chua_du_du_lieu": "Chưa đủ dữ liệu"}
 
 
@@ -91,7 +94,10 @@ def doc_file(path, ten=None):
         seq = _f(r["seq"])
         rows.append(dict(date=r["date"], person=r["person"], condition=r["condition"].lower(), task=r["task"], job=r["job"], block=r["block"],
                          seq=None if seq is None else int(seq), face_id=r["face_id"], seconds=_f(r["seconds"]),
-                         warmup=int(_f(r["warmup"]) or 0), interrupted=int(_f(r["interrupted"]) or 0), note=r["note"], file=ten))
+                         warmup=int(_f(r["warmup"]) or 0), interrupted=int(_f(r["interrupted"]) or 0), note=r["note"], file=ten,
+                         # cột thêm của tab Đồng hồ (QĐ-006); file facetimer 12 cột thì để mặc định
+                         phien=r.get("phien", ""), dot=r.get("dot", ""), bo_anh=r.get("bo_anh", ""), sua_tay=int(_f(r.get("sua_tay", "")) or 0),
+                         canh_bao=r.get("canh_bao", ""), uoc_luong=int(_f(r.get("uoc_luong_chia_deu", "")) or 0)))
     return rows
 
 

@@ -61,11 +61,11 @@ def test_build_ui_co_hai_tab_moi_co_lượt_va_che_do_nap(world, tmp_path):
     store = ra.Store(world['ctx'].run_dir, 'P1')
     demo, _theme = ra.build_ui(store, world['ctx'])
     ids = {getattr(b, 'elem_id', None) for b in demo.blocks.values()}
-    for want in ('tab-thongke', 'tab-loc', 'tk-refresh', 'tk-export', 'tk-ttest', 'tk-luot', 'tk-nguoi', 'tk-luotnhap', 'tk-view', 'loc-preview', 'loc-create', 'loc-cfg',
+    for want in ('tab-thongke', 'tab-loc', 'tk-refresh', 'tk-export', 'tk-ttest', 'tk-luotnhap', 'tk-nguong', 'tk-tatca', 'tk-chibo', 'tk-goi', 'tk-view', 'loc-preview', 'loc-create', 'loc-cfg',
                  'loc-load-cfg', 'loc-save-cfg', 'loc-ten', 'loc-warn', 'loc-overwrite-ok', 'tab-caidat', 'tab-hop'):
         assert want in ids, want
-    titles = [getattr(b, 'label', None) for b in demo.blocks.values() if getattr(b, 'elem_id', None) in ('tab-hop', 'tab-thongke', 'tab-loc', 'tab-caidat')]
-    assert titles == ['Họp team', 'Thống kê', 'Lọc dữ liệu', 'Cài đặt']                    # đặt trước "Cài đặt", sau "Họp team"
+    titles = [getattr(b, 'label', None) for b in demo.blocks.values() if getattr(b, 'elem_id', None) in ('tab-hop', 'tab-dongho', 'tab-thongke', 'tab-loc', 'tab-caidat')]
+    assert titles == ['Họp team', 'Đồng hồ', 'Thống kê', 'Lọc dữ liệu', 'Cài đặt']        # Đồng hồ sau Họp team; Thống kê, Lọc dữ liệu đặt trước "Cài đặt"
     os.makedirs('runs/_nap', exist_ok=True)
     ctx2 = ra.AppCtx(reviewer='P2', run_dir=os.path.join('runs', '_nap'), nap_only=True)
     demo2, _ = ra.build_ui(None, ctx2)                                                        # --nap: store None vẫn dựng đủ
@@ -104,42 +104,68 @@ def test_hai_module_ui_khong_nap_gradio_o_dau_module():
 # ---------- tab Thống kê ----------
 def test_thong_ke_lam_moi_tinh_khi_goi_va_loc_lua_chon_do_server_tinh(world):
     fn, demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
-    out = fn([], [], '', False, '')
-    luot, nguoi, nhap, msg, view = out
-    assert luot['choices'] == ['R1'] and nguoi['choices'] == ['P1'] and nhap['choices'][1] == ('R1', 'R1')
-    assert 'Thống kê' not in view and 'tk-root' in view and 'Chất lượng nháp' in view and 'Số lượng dữ liệu' in view and msg == ''
-    assert 'Ttest đang ẩn (1 mặt)' in view
-    on = fn(['R1', 'KHONGCO'], ['P1', 'hacker'], 'XYZ', True, '')                              # giá trị lạ từ trình duyệt bị bỏ khỏi lựa chọn
-    assert on[0]['value'] == ['R1'] and on[1]['value'] == ['P1'] and on[2]['value'] == '' and 'GỒM Ttest' in on[4]
-    bad = fn([], [], '', False, '/etc')
-    assert 'ngoài thư mục dự án' in bad[4] and 'Chưa có số' in bad[4]                          # đường dẫn bấm giờ ngoài dự án: mục tốc độ báo lỗi rõ, không traceback
+    out = fn('', 2.0, False, False, False, '', None)
+    nhap, msg, view = out
+    assert nhap['choices'][1] == ('R1', 'R1') and msg == ''
+    assert 'tk-root' in view and 'So sánh thời gian' in view and 'NME của nháp' in view and 'Tỉ lệ điểm phải sửa' in view
+    for gone in ('low_conf', 'AUROC', 'Số lượng dữ liệu', 'Tiến độ', 'giờ tiết kiệm', 'Giây rà'):
+        assert gone not in view, gone                                                               # các thẻ bị bỏ không còn trên tab
+    assert view.count('Chưa có số') == 3                                                            # chưa có gói/nhãn manual: ba khung trống nói rõ cần gì
+    on = fn('R1', 5.0, True, False, True, '', None)                                                 # lượt hợp lệ giữ nguyên, gồm Ttest, mọi task
+    assert on[0]['value'] == 'R1' and 'ngưỡng sửa 5,0% IOD' in on[2]
+    bad = fn('KHONGCO', 2.0, False, True, False, '', None)                                          # lượt lạ bị bỏ khỏi lựa chọn (server tự tính danh sách)
+    assert bad[0]['value'] == ''
+    bad = fn('', 2.0, False, True, False, '/etc', None)
+    assert 'ngoài thư mục dự án' in bad[1] and bad[2] == ''                                         # đường dẫn bấm giờ ngoài dự án: báo rõ, không traceback
+    bad = fn('', 99.0, False, True, False, '', None)
+    assert 'Ngưỡng' in bad[1] and bad[2] == ''
 
 
-def test_thong_ke_clean_args_tu_choi_luot_la_va_ten_nguoi_la(world):
+def test_thong_ke_clean_args_tu_choi_luot_la(world):
     runs = world['ctx'].runs_root
-    assert thong_ke_ui.clean_args(runs, ['R1'], ['P1'], 'R1') == (['R1'], ['P1'], 'R1')
-    assert thong_ke_ui.clean_args(runs, [], [], '') == (None, [], None)
-    with pytest.raises(nap_anh.RunError, match='Lượt'):
-        thong_ke_ui.clean_args(runs, ['../runs'], [], '')
-    with pytest.raises(nap_anh.RunError, match='người rà'):
-        thong_ke_ui.clean_args(runs, [], ['../P1'], '')
-    with pytest.raises(nap_anh.RunError, match='người rà'):
-        thong_ke_ui.clean_args(runs, [], ['auto'], '')
+    assert thong_ke_ui.clean_args(runs, 'R1') == 'R1' and thong_ke_ui.clean_args(runs, '') is None and thong_ke_ui.clean_args(runs, None) is None
     with pytest.raises(nap_anh.RunError, match='nháp'):
-        thong_ke_ui.clean_args(runs, [], [], 'NOPE')
-    assert thong_ke_ui.reviewers(runs) == ['P1']
+        thong_ke_ui.clean_args(runs, 'NOPE')
+    with pytest.raises(nap_anh.RunError, match='nháp'):
+        thong_ke_ui.clean_args(runs, '../runs')
+    assert thong_ke_ui.goi_paths(None) == [] and thong_ke_ui.goi_paths(['/khong/co.zip', __file__]) == []                  # chỉ nhận file .zip/.json có thật
+    assert thong_ke_ui.reviewers(runs) == ['P1']                                                                              # tab Lọc dữ liệu vẫn dùng danh sách người rà này
+
+
+def test_thong_ke_nap_goi_ket_qua_tu_nguoi_khac_qua_o_tai_len(world, tmp_path):
+    from tk_fake import mo_phong
+    import shutil
+    d = tmp_path / 'tai_len'
+    d.mkdir()
+    ngoai = tmp_path / 'ban_goc'
+    ngoai.mkdir()
+    import dh_fake
+    dh_fake.du_an(ngoai)
+    mo_phong(str(ngoai))
+    for f in sorted(os.listdir(ngoai / 'outputs' / 'goi_nhom')):
+        if f.endswith('.zip'):
+            shutil.copy(ngoai / 'outputs' / 'goi_nhom' / f, d)
+    files = [str(d / f) for f in sorted(os.listdir(d))]
+    fn, demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
+    nhap, msg, view = fn('', 2.0, False, False, False, '', files)
+    assert 'assisted nhanh hơn manual' in view and '4 gói kết quả' in view and 'Chưa có số' not in view
+    assert not os.path.exists(os.path.join(world['root'], 'outputs', 'ket_qua')) and not os.path.exists(os.path.join(world['root'], 'outputs', 'goi_nhom'))
+    bad = d / 'hong.zip'
+    bad.write_bytes(b'PK\x03\x04 hong')
+    nhap, msg, view = fn('', 2.0, False, False, False, '', files + [str(bad)])
+    assert 'Gói bị loại' in view and 'hong.zip' in view
 
 
 def test_thong_ke_xuat_ghi_duoi_outputs_thong_ke_va_tu_choi_khi_dong(world):
     fn, demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
     export = handler(demo, 'thong_ke_ui', 'on_export')
     before = tree_hash(world['root'])
-    msg, dl = export([], [], '', False, '')
+    msg, dl = export('', 2.0, False, True, False, '', None)
     assert 'Đã xuất outputs/thong_ke/' in msg and 'Không có ảnh mặt' in msg and dl['visible'] is True and dl['value'].endswith('thong_ke.html')
     assert os.path.isfile(dl['value']) and os.path.commonpath([dl['value'], os.path.join(world['root'], 'outputs', 'thong_ke')]) == os.path.join(world['root'], 'outputs', 'thong_ke')
     assert tree_hash(world['root']) == before and world['root'] not in msg                        # chỉ đọc runs/raw/final/data; thông báo không lộ đường dẫn tuyệt đối
     world['ctx'].closing = True
-    msg2, dl2 = export([], [], '', False, '')
+    msg2, dl2 = export('', 2.0, False, True, False, '', None)
     assert 'đang đóng' in msg2 and dl2['visible'] is False
     assert len(os.listdir(os.path.join(world['root'], 'outputs', 'thong_ke'))) == 1                # không ghi thêm khi trang đang đóng
 

@@ -12,8 +12,8 @@ Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dướ
 không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team",
 "Đồng hồ" (dong_ho.py + dong_ho_ui.py: bấm giờ gán nhãn theo PHIÊN, thay facetimer: Bắt đầu, Tạm dừng/Tiếp tục, Hủy có xác nhận, Xong (lưu & xuất gói kết quả `outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip`
 gửi nhóm trưởng, và dòng `outputs\\timing\\timing_<Pk>.csv` đúng định dạng facetimer; nguồn sự thật là đồng hồ phía server, trạng thái ghi ra file nên đóng tab không mất; đóng trang thì tự tạm dừng),
-"Thống kê" (thong_ke.py + thong_ke_html.py + thong_ke_ui.py: NME của nháp, cờ low_conf, tốc độ gán theo giao thức P5, số lượng và tiến độ; chỉ đọc, tính khi chọn tab,
-xuất CSV + HTML tĩnh không ảnh mặt), "Lọc dữ liệu" (loc_du_lieu.py + loc_ui.py: bộ lọc ảnh đã có nhãn sửa tay thành bộ train/val/test cho model landmark khác sau này, chỉ chuẩn bị
+"Thống kê" (thong_ke.py + thong_ke_html.py + thong_ke_ui.py: CHỈ BA chỉ số của thí nghiệm hai nhóm độc lập (QĐ-006): NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa, so sánh thời gian manual với
+assisted; đọc gói kết quả, nhãn raw\\ và timing; chỉ đọc, tính khi chọn tab, xuất CSV + HTML tĩnh không ảnh mặt; nhóm trưởng dùng tool\\tong_ket.py với các gói của thành viên), "Lọc dữ liệu" (loc_du_lieu.py + loc_ui.py: bộ lọc ảnh đã có nhãn sửa tay thành bộ train/val/test cho model landmark khác sau này, chỉ chuẩn bị
 dữ liệu, không train, xem trước = dry-run, ghi dưới outputs\\train_sets), "Cài đặt" (cai_dat.py + cai_dat_ui.py: link/token/tổ chức CVAT, người rà mặc định, đường dẫn ảnh và model, t_flip của cờ low_conf).
 Nút Xong chỉ ghi done.txt và khoá việc bấm quyết định (hiện dải xanh ở đầu trang); trang KHÔNG tự tắt, vẫn Đẩy lên CVAT, xem Các đợt,
 xuất Ca khó được. Chỗ duy nhất tắt trang là nút "Đóng trang rà soát" (có hộp xác nhận, đứng trên các tab), Ctrl+C, hoặc chuyển lượt.
