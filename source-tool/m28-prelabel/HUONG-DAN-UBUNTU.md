@@ -93,11 +93,30 @@ Khác với Windows:
 - Cổng bận: `export GRADIO_SERVER_PORT=7861`.
 - `--review excel` mở CSV bằng LibreOffice Calc (`libreoffice --calc runs/F5/autoqc/autoqc.csv`), lưu CSV UTF-8 thành `runs/F5/review/triage_P1.csv`.
 
+### Bấm giờ và thống kê (thí nghiệm hai nhóm, QĐ-006)
+Đội chia **hai nhóm độc lập**: `manual` (gán tay hoàn toàn) và `assisted` (dùng tool, sửa nháp), cùng một bộ ảnh. Ai ở nhóm nào do cả đội chốt, ghi vào `config/nhom_thi_nghiem.json` (file mẫu để trống; tool không đoán). Đồng hồ thay `facetimer.py`.
+
+**Quy trình một buổi (mỗi người):**
+1. Đầu buổi **khôi phục task của hôm nay** (file sao lưu P4 phát) rồi mở trang: `./chay.sh` mục 1 (hoặc `python tool/review_app.py --nap P5`).
+2. Tab **Đồng hồ**: chọn người P1–P5 (và nhóm, nếu chưa có trong file nhóm), gõ tên **đợt** (ví dụ `NAP_001`), bấm **Bắt đầu**. Hoặc nạp ảnh ở tab Nạp ảnh rồi bấm gợi ý **Bắt đầu đồng hồ cho đợt này** (hoặc bật ô tự bắt đầu khi nạp).
+3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm **Tạm dừng**, quay lại bấm **Tiếp tục**. Muốn đo từng mặt thì bấm **Xong mặt này → mặt tiếp** sau mỗi mặt (tuỳ chọn); bấm nhầm thì **Hoàn tác mặt vừa xong**.
+4. Xong việc: `python tool/m28.py collect --task demo-<đợt> --reviewer P<số của bạn>`, rồi bấm **Xong (lưu & xuất)**. Trang ghi `outputs/timing/timing_P<số>.csv` và gói **`outputs/ket_qua/ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Bấm Xong trước khi collect thì gói chỉ có thời gian: sau khi collect dùng **Xuất lại gói**.
+5. Quên bấm, nghỉ lâu, qua nửa đêm: trang hiện cảnh báo vàng; chọn **Sửa thời gian** (nhập thời gian thật), **Giữ nguyên** hoặc **Hủy phiên…** (gõ `HUY`; không ghi dòng nào). Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, tab Đồng hồ, bấm Tiếp tục hoặc Xong.
+
+**Nhóm trưởng tổng kết** (chỉ cần các gói zip, không cần ảnh hay CVAT):
+```bash
+source .venv/bin/activate
+python tool/tong_ket.py --vao <thư mục chứa các gói> --ra outputs/tong_ket
+```
+Công cụ kiểm từng gói (loại gói hỏng hoặc trùng và nói lý do), gộp các người, tính ba chỉ số và ghi `outputs/tong_ket/<ngày-giờ>/thong_ke.html` + CSV. Trên trang cũng có nút **Nạp các gói kết quả của nhóm** ở tab Thống kê.
+
+**Ba chỉ số (tab Thống kê, `python tool/thong_ke.py`):** (1) NME của nháp so với nhãn gán tay của nhóm manual trên cùng ảnh; (2) tỉ lệ điểm phải sửa của nhóm assisted (ngưỡng 2% IOD, chỉnh được); (3) giây/mặt hai nhóm và % nhanh hơn của assisted (mục tiêu ≥ 20%, KTC 90% bằng cluster bootstrap; mỗi nhóm dưới 2 người thì chỉ có kết quả mô tả). **Hạn chế:** tốc độ từng người khác nhau lẫn vào kết quả (nên có một đợt khởi động chung hoặc chia nhóm cân tốc độ); giây/mặt là ước lượng chia đều nếu không bấm từng mặt.
+
 ### Thống kê và lọc dữ liệu train
 Chỉ đọc `runs/`, `raw/`, `final/`, `data/`; chỉ ghi dưới `outputs/`. Cùng code với Windows (xem mục "Thống kê và lọc dữ liệu train" trong `HUONG-DAN-WINDOWS.md`), chỉ khác lệnh:
 ```bash
 source .venv/bin/activate
-python tool/thong_ke.py --luot-nhap <lượt chứa nháp của khối X> --timing .
+python tool/thong_ke.py --luot-nhap <lượt chứa nháp> [--nguong-sua 2] [--goi <thư mục gói>] [--timing .]
 mkdir -p outputs
 cp config/loc_mau.json outputs/loc_cua_toi.json
 python tool/loc_du_lieu.py --cau-hinh outputs/loc_cua_toi.json --dry-run

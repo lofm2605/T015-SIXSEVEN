@@ -21,15 +21,26 @@ rà nháp trên trang Gradio chỉ mở ở 127.0.0.1, rồi nhập nhãn nháp 
 | `collect` | Sau khi gán: xuất nhãn từ CVAT về `raw/` (chỉ đọc); với task `demo-…` còn tách nhãn theo từng job ra `raw/<task>_<người>_<DDMM>_job<id>.xml` (offline; file job chỉ để đọc/đo, không nhập lại vào CVAT). Tách file đã xuất từ trước: `python tool/tach_job.py --xml raw/<file>.xml` |
 | `all` | `prepare` → `review` → `push` |
 
-### Thống kê và lọc dữ liệu train (08/10/2026, QĐ-005)
+### Đồng hồ bấm giờ, Thống kê ba chỉ số và tổng kết cho nhóm trưởng (09/10/2026, QĐ-006)
+Thí nghiệm chia **hai nhóm độc lập**: `manual` (gán tay hoàn toàn) và `assisted` (dùng tool, sửa nháp), cùng một bộ ảnh; nhóm ghi ở `config/nhom_thi_nghiem.json` (file mẫu trống, đội tự điền).
+
+| Việc | Ở đâu | Làm gì |
+|---|---|---|
+| Bấm giờ | tab **Đồng hồ** (thay `facetimer.py`) | Bắt đầu (hoặc bấm gợi ý sau khi nạp ảnh xong), Tạm dừng/Tiếp tục, Hủy (gõ HUY), **Xong (lưu & xuất)**. Đo cả **phiên**; bấm từng mặt chỉ là tuỳ chọn. Ghi `outputs/timing/timing_<Pk>.csv` (12 cột đầu đúng facetimer, cột thêm cuối) và gói kết quả `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (+ `.json`, không ảnh) để **gửi nhóm trưởng**. |
+| Thống kê | tab **Thống kê**, `python tool/thong_ke.py` | Chỉ **ba chỉ số**: NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa (nhóm assisted), so sánh thời gian manual với assisted (KTC 90% bằng cluster bootstrap). |
+| Tổng kết | `python tool/tong_ket.py --vao <thư mục chứa các gói> --ra outputs/tong_ket/` | Của nhóm trưởng: gộp gói của thành viên (kiểm sha256, loại gói hỏng/trùng), cùng ba chỉ số, CSV + HTML tĩnh. Không cần ảnh hay CVAT. |
+
+Giới hạn: tốc độ từng người lẫn vào kết quả (thiết kế hai nhóm); giây/mặt là ước lượng chia đều nếu không bấm từng mặt; chưa thử với nhãn xuất thật từ CVAT, giờ thật buổi 14–15/10, Windows/cmd. Chi tiết: [`TAI-LIEU-CHI-TIET.md`](TAI-LIEU-CHI-TIET.md), mục "Đồng hồ, gói kết quả, Thống kê ba chỉ số".
+
+### Lọc dữ liệu train (08/10/2026, QĐ-005)
 Hai việc đọc dữ liệu đã có (không sửa `runs\`, `raw\`, `final\`, `data\`), có cả lệnh và tab trong trang rà soát:
 
 | Lệnh | Tab | Làm gì |
 |---|---|---|
-| `python tool\thong_ke.py [--luot R1 R2] [--gom-ttest] [--timing <thư mục>] [--luot-nhap <lượt>]` | **Thống kê** | Số liệu: chất lượng nháp (NME so với nhãn sửa tay, tách manual/assisted), cờ `low_conf` (% điểm bị cờ, AUROC), tốc độ gán theo giao thức P5 (TB nhân, KTC 90%), giây rà soát, số lượng và tiến độ. Ghi `outputs\thong_ke\<ngày-giờ>\`: `thong_ke.html` (không ảnh mặt, không mã tài xế) + CSV từng bảng + `nme_nhap.csv` |
+| `python tool\thong_ke.py [--luot-nhap <lượt>] [--nguong-sua 2] [--gom-ttest] [--timing <thư mục>] [--goi <thư mục>]` | **Thống kê** | Ba chỉ số của thí nghiệm hai nhóm (xem mục trên; từ QĐ-006 trang không còn cờ `low_conf`, số lượng, tiến độ, giây rà). Ghi `outputs\thong_ke\<ngày-giờ>\`: `thong_ke.html` (không ảnh mặt, không mã tài xế) + CSV từng bảng + `nme_nhap.csv` |
 | `python tool\loc_du_lieu.py --cau-hinh config\loc_mau.json [--dry-run] [--ten T] [--ghi-de] [--zip]` | **Lọc dữ liệu** | Lọc ảnh đã có nhãn sửa tay thành bộ train/val/test (cho một model landmark KHÁC sau này; **chỉ chuẩn bị dữ liệu, không train**). Tiêu chí: cờ `low_conf` (tổng, theo nhóm, theo vùng), NME nháp, cờ manifest, quyết định rà, vệ sinh nhãn. Chia theo `set` gốc rồi kiểm không tài xế nào ở hai phần. Ghi `outputs\train_sets\<tên>\` |
 
-- **Vào:** `runs\<lượt>\` đã `prepare`, nhãn sửa tay `raw\<task>_<Pk>_<DDMM>.xml` (bản sửa lần hai ở `final\`), `timing_P1..P5.csv` của `facetimer.py` (đặt ở thư mục này, `outputs\`, `raw\` hoặc `final\`), `data\manifest.csv`. Chưa có thứ nào thì mục tương ứng hiện trạng thái trống nói rõ cần file gì, ai làm ra (không hiện số 0 hay số giả).
+- **Vào:** gói kết quả (`outputs\ket_qua\`, `outputs\goi_nhom\`), nhãn sửa tay `raw\<task>_<Pk>_<DDMM>.xml` (`final\` chỉ cho Lọc dữ liệu), `outputs\timing\timing_P*.csv` của tab Đồng hồ (hay `timing_P*.csv` của `facetimer.py`), `runs\<lượt>\` (nháp), `data\manifest.csv`, `config\nhom_thi_nghiem.json`. Chưa có thứ nào thì mục tương ứng hiện trạng thái trống nói rõ cần file gì, ai làm ra (không hiện số 0 hay số giả).
 - **Luật cứng của bộ lọc:** mặt nguồn không rõ (lượt Nạp ảnh, có thể là ảnh khách hàng), mặt xoá mềm, mặt chưa có nhãn sửa tay, mặt `Bỏ` luôn bị loại. Gói xuất chứa ảnh mặt người lái xe: chỉ dùng nội bộ nhóm, không git, không chat AI.
 - **Giới hạn:** chưa thử với nhãn bảy skeleton xuất thật từ CVAT, file bấm giờ thật (14–15/10), `final\`, lượt `--box auto` có ảnh gốc khác tên; tab chưa được chụp trên Windows thật. Chi tiết cách tính từng số: [`TAI-LIEU-CHI-TIET.md`](TAI-LIEU-CHI-TIET.md), mục "Thống kê và lọc dữ liệu train".
 

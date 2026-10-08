@@ -1,3 +1,5 @@
+> **GHI CHÚ (09/10/2026, QĐ-006):** Mục 4 của prompt này (trang Thống kê 4 nhóm số liệu) đã bị thay bởi `prompts/prompt_m28_dongho_thongke_job_local.md` và QĐ-006: chạy prompt này thì chỉ làm bộ lọc (mục 2, 3) và tab Lọc dữ liệu, dùng lại `bang_mat`/`thong_ke` đã có; không thêm lại thẻ cờ `low_conf`, số lượng, tiến độ, giây rà vào tab Thống kê (trang chỉ còn ba chỉ số của thí nghiệm hai nhóm độc lập).
+
 > **MÁY UBUNTU (ghi đè, ưu tiên hơn mọi chỗ nói Windows/cmd bên dưới):** chủ repo đã chuyển sang Ubuntu. Cách dùng: ở thư mục repo chạy `git pull`, mở Claude Code rồi gõ
 > `Đọc source-tool/m28-prelabel/prompts/prompt_loc_thongke_local.md và thực hiện đúng và đầy đủ.` Khi đọc phần bên dưới, đổi: đường dẫn `\` thành `/`; `cmd` thành bash;
 > `%TEMP%\m28_loc_thongke\` thành `/tmp/m28_loc_thongke/` (hoặc `$TMPDIR`); `robocopy` thành `cp -r`; `chay.bat` thành `chay.sh` và `HUONG-DAN-WINDOWS.md` thành `HUONG-DAN-UBUNTU.md`

@@ -17,7 +17,8 @@ cũ được gán theo cách cũ.
 | [QĐ-002](#qđ-002) | Ánh xạ 478→50 bằng chọn đỉnh MediaPipe trực tiếp | 06/10/2026 | QĐ-001 | Bị thay một phần bởi QĐ-003 (định nghĩa 50 điểm, config v2); chọn đỉnh trực tiếp vẫn hiệu lực |
 | [QĐ-003](#qđ-003) | Định nghĩa 50 điểm DMS (7 nhóm, không viền hàm), trái/phải theo ảnh, config v3 | 07/10/2026 | QĐ-002 | Bị thay một phần bởi QĐ-004 (cách dựng label CVAT: bảy label theo nhóm, màu theo nhóm); phần còn lại hiệu lực |
 | [QĐ-004](#qđ-004) | Tách label `face50` thành bảy label skeleton theo nhóm, mỗi nhóm một màu (bảng màu hình minh hoạ DMS) | 07/10/2026 | QĐ-003 | Hiệu lực |
-| [QĐ-005](#qđ-005) | Bộ lọc dữ liệu train chỉ chuẩn bị dữ liệu (chưa train), kèm trang Thống kê chỉ số model và tốc độ gán | 08/10/2026 | Chủ repo | Hiệu lực |
+| [QĐ-005](#qđ-005) | Bộ lọc dữ liệu train chỉ chuẩn bị dữ liệu (chưa train), kèm trang Thống kê chỉ số model và tốc độ gán | 08/10/2026 | Chủ repo | Bị thay một phần bởi QĐ-006 (trang Thống kê chỉ còn ba chỉ số, thiết kế hai nhóm độc lập); bộ lọc vẫn hiệu lực |
+| [QĐ-006](#qđ-006) | Thí nghiệm hai nhóm độc lập (manual / assisted) thay cho ghép cặp; đồng hồ bấm giờ theo phiên thay facetimer; Thống kê chỉ ba chỉ số; gói kết quả cho nhóm trưởng | 09/10/2026 | Chủ repo | Hiệu lực (chờ P5 và mentor đồng ý trước 14/10) |
 
 **Trạng thái:** Hiệu lực · Bị thay bởi QĐ-xxx · Huỷ (ghi lý do)
 
@@ -150,7 +151,36 @@ cũ được gán theo cách cũ.
   - [ ] Duyệt ánh xạ train/val/test theo `set` gốc; chốt có dùng Ttest làm test của model sau này không (@P1)
   - [ ] Duyệt NME theo nhóm và `tolerance` mặc định 3% IOD khi config còn null (@P3)
   - [ ] Cập nhật `CLAUDE.md` và bản Claude Docs về hai tab mới và luật cứng `khong_ro` (chủ repo)
-- **Trạng thái:** Hiệu lực
+- **Trạng thái:** Bị thay một phần bởi QĐ-006 (trang Thống kê chỉ còn ba chỉ số, thiết kế hai nhóm độc lập); bộ lọc vẫn hiệu lực
+
+## QĐ-006
+
+**Thí nghiệm hai nhóm độc lập (manual / assisted) thay cho ghép cặp; đồng hồ bấm giờ theo phiên thay facetimer; Thống kê chỉ ba chỉ số; gói kết quả cho nhóm trưởng**
+
+- **Ngày:** 09/10/2026
+- **Người tham gia:** chủ repo (chốt), P5 (chờ đồng ý: giao thức bấm giờ và luật kết luận), mentor (chờ đồng ý thiết kế mới, trước 14/10), P2 (trang rà soát), P3 (NME, ngưỡng sửa), P4 (`raw/`, tên file theo job, tên task)
+- **Xuất phát từ:** yêu cầu của chủ repo sau khi xem trang Thống kê (QĐ-005) và chốt cách chia đội ngày 08/10/2026
+- **Bối cảnh:** kế hoạch gốc ghép cặp theo người: mỗi Pk gán tay khối Xk (manual) và sửa nháp khối X(k+1) (assisted), P5 sửa X1, so sánh bằng trung bình nhân của r_i theo người. Chủ repo chia đội thành **hai nhóm**: một nhóm gán tay hoàn toàn, một nhóm dùng tool (sửa nháp), cả hai làm **cùng một bộ ảnh**; mỗi người chỉ làm một điều kiện. Chủ repo cũng muốn bấm giờ ngay trên trang (thay `facetimer.py` dòng lệnh), đo **cả phiên** từ lúc nạp ảnh lên tool đến lúc hoàn thành, và xuất một file kết quả để gửi nhóm trưởng tổng kết; trang Thống kê bốn nhóm số liệu thì quá nhiều số không dùng.
+- **Các phương án đã cân nhắc:**
+  1. *Giữ ghép cặp theo người và Thống kê bốn nhóm.* Loại: đội đã chia hai nhóm, không ai làm cả hai điều kiện; nhiều số không dùng.
+  2. *Hai nhóm độc lập, đồng hồ đo từng mặt như facetimer, Thống kê giữ cờ và số lượng.* Loại: bắt người gán bấm mỗi mặt (dễ quên, Ctrl+C mất mặt đang làm); số thừa.
+  3. *Hai nhóm độc lập, đồng hồ đo PHIÊN (bấm từng mặt chỉ là tuỳ chọn), Thống kê chỉ ba chỉ số, gói kết quả cho nhóm trưởng.* **Chọn.**
+- **Quyết định:**
+  - **Nhóm:** `config/nhom_thi_nghiem.json` (file mẫu trống, không đoán ai ở nhóm nào): `{"nhom": {"P1": "manual" | "assisted", ...}, "bo_anh": "<tên bộ ảnh chung>"}`. Người chưa có nhóm thì chọn tay ở tab Đồng hồ và được cảnh báo. Thống kê kiểm hai nhóm làm cùng tên ảnh, báo nếu lệch.
+  - **Tab Đồng hồ** (`tool/dong_ho.py`, `dong_ho_ui.py`): Bắt đầu, Tạm dừng/Tiếp tục, Hủy (hộp xác nhận gõ HUY), Xong (lưu & xuất). Nguồn sự thật là đồng hồ phía server (`time.monotonic`), trạng thái ghi nguyên tử ra file nên đóng tab không mất; đóng trang thì tự tạm dừng. Nối với tab Nạp ảnh (gợi ý sau khi nạp xong, hoặc ô tự bắt đầu khi nạp). Giây/mặt = giây phiên (không tính lúc tạm dừng) ÷ số mặt, đánh dấu `uoc_luong_chia_deu` trừ khi người gán bấm từng mặt. `outputs/timing/timing_<Pk>.csv` giữ đúng 12 cột facetimer, cột thêm nối cuối.
+  - **Xong** ghi gói `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (+ `.json`): người, nhóm, đợt, số mặt, giây phiên, số lần tạm dừng, giờ bắt đầu/kết thúc và KẾT QUẢ theo mặt (tên ảnh, nhãn cuối 50 điểm; nhóm assisted thêm nháp, điểm đã sửa, NME nháp-so-nhãn-cuối); không ảnh, token, email, tên máy, đường dẫn tuyệt đối; có sha256 và số phiên bản định dạng. `tool/tong_ket.py` của nhóm trưởng kiểm, loại gói hỏng/trùng, gộp và tính ba chỉ số (chỉ cần gói, không cần ảnh hay CVAT).
+  - **Ba chỉ số** (`m28core/so_sanh.py`): (1) NME của nháp, đáp án là nhãn gán tay của nhóm **manual** trên cùng ảnh (nhiều người thì trung bình theo tên điểm; ảnh chưa có đáp án thì không chấm), kèm NME của nhãn cuối nhóm assisted để kiểm "nhanh hơn mà nhãn không kém đi"; (2) tỉ lệ điểm phải sửa (nhóm assisted, ngưỡng mặc định 2% IOD, điểm xoá/ẩn tính là đã sửa); (3) giây/mặt mỗi nhóm (trung vị, trung bình nhân), % nhanh hơn của assisted so với manual (mục tiêu ≥ 20%), KTC 90% bằng cluster bootstrap (bốc người rồi bốc mặt trong người, seed 28, 2.000 lần); mỗi nhóm dưới 2 người thì chỉ có kết quả mô tả. Đạt khi cận dưới KTC ≥ 20%, Không đạt khi cận trên < 20%, còn lại Chưa kết luận. Mặt khởi động bị loại như P5; dòng gián đoạn, sửa tay, có cảnh báo, ngoại lai được đánh dấu và vẫn nằm trong chỉ số chính, kèm một dòng độ nhạy.
+  - **Hạn chế (ghi trên trang):** tốc độ từng người khác nhau lẫn vào kết quả (nên có một đợt khởi động chung hoặc chia nhóm cân tốc độ); ít người mỗi nhóm thì khoảng tin cậy rất rộng; giây/mặt là ước lượng chia đều nếu không bấm từng mặt; đáp án NME cũng là nhãn người.
+  - Tab **Lọc dữ liệu** và `bang_mat.py` giữ nguyên. `toc_do.py` (giao thức ghép cặp cũ của P5) không còn được trang dùng, chỉ giữ bộ đọc file và để đối chiếu với đoạn pandas của P5.
+- **Việc phải làm theo:**
+  - [ ] Đồng ý bỏ ghép cặp, luật Đạt/Không đạt mới, và quy ước giây/mặt ước lượng chia đều (@P5, mentor, trước 14/10)
+  - [ ] Điền `config/nhom_thi_nghiem.json` khi cả đội chốt ai ở nhóm nào và tên bộ ảnh chung (chủ repo, nhóm trưởng)
+  - [ ] Đổi câu hướng dẫn buổi thí nghiệm: "Đầu buổi khôi phục task của hôm nay, rồi mở tab Đồng hồ bấm Bắt đầu" và cho người gán gửi gói `outputs/ket_qua/*.zip` cho nhóm trưởng sau khi bấm Xong (@P5)
+  - [ ] Duyệt ngưỡng sửa 2% IOD và cách tính điểm xoá/ẩn là đã sửa (@P3)
+  - [ ] Xác nhận mẫu tên file theo job `<task>_<người>_<DDMM>_job<id>.xml` và task `demo-…` cho thí nghiệm (@P4)
+  - [ ] Duyệt tab Đồng hồ (@P2)
+  - [ ] Cập nhật `CLAUDE.md` (đã sửa đoạn Thí nghiệm) và bản Claude Docs: tab P5 còn ghi `facetimer.py` và ghép cặp, Kế hoạch còn "đủ 5 người" (chủ repo)
+- **Trạng thái:** Hiệu lực (chờ P5 và mentor đồng ý trước 14/10)
 
 ## Mẫu để copy
 

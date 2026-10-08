@@ -99,7 +99,7 @@ def stats_tab(gr, demo, store, ctx):
         c_ttest = gr.Checkbox(value=False, label="Gồm Ttest", info="Ttest là tập đo một lần của đề tài", elem_id="tk-ttest")
         t_timing = gr.Textbox(value="", label="Thư mục/file bấm giờ thêm (trong thư mục dự án, tuỳ chọn)", elem_id="tk-timing")
     f_goi = gr.File(label="Nạp các gói kết quả của nhóm (ketqua_*.zip hoặc .json; chỉ đọc, không lưu vào dự án)", file_count="multiple", file_types=[".zip", ".json"], type="filepath",
-                    elem_id="tk-goi")
+                    elem_id="tk-goi", height=120)
     with gr.Row(elem_id="tk-btns"):
         b_refresh = gr.Button("Làm mới", variant="primary", elem_id="tk-refresh")
         b_export = gr.Button("Xuất CSV + HTML", elem_id="tk-export")

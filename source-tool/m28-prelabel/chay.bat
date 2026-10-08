@@ -21,7 +21,7 @@ if errorlevel 1 goto :loi_model
 :menu
 echo.
 echo ================= M28 - Nhan nhap landmark khuon mat =================
-echo   1. Mo trang ra soat   (Nap anh keo tha, Cac dot, Ca kho, Cai dat)
+echo   1. Mo trang ra soat   (Nap anh keo tha, Cac dot, Ca kho, Dong ho, Thong ke, Cai dat)
 echo   2. Ra soat lai mot luot co san
 echo   3. Chay thu 5 mat F in-cabin (chi can goi du lieu giai nen vao data\)
 echo   4. Kiem tra nhanh CVAT   (tao roi xoa task demo-smoke, can CVAT dang chay)

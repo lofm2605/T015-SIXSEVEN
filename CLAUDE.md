@@ -64,8 +64,11 @@ trước khi nhập vào CVAT** (Gradio, chỉ chạy ở 127.0.0.1).
   chỉ có một CVAT chung: cùng công cụ, đổi `CVAT_URL` và token.
 - cvat-sdk và cvat-cli cùng bản 2.77.0 với server. Đăng nhập bằng Personal Access Token (biến môi
   trường `CVAT_ACCESS_TOKEN` hoặc nhập ở tab Cài đặt của trang rà soát), địa chỉ trong `CVAT_URL` (hoặc tab Cài đặt).
-- Thí nghiệm: mỗi Pk gán tay khối Xk và sửa nhãn nháp khối X(k+1) (P5 sửa X1); hai điều kiện tạo task
-  giống hệt nhau, nháp chỉ nằm trong task "assisted", task chỉ khôi phục đầu buổi của chính nó.
+- Thí nghiệm (đổi theo QĐ-006, 9/10/2026, chờ P5 và mentor đồng ý trước 14/10): **hai nhóm độc lập**, không ghép cặp theo người. Nhóm `manual` gán tay hoàn toàn, nhóm `assisted` dùng tool
+  (sửa nháp); cả hai làm cùng một bộ ảnh; mỗi người một nhóm (`source-tool/m28-prelabel/config/nhom_thi_nghiem.json`, để trống đến khi cả đội chốt, không đoán ai ở nhóm nào).
+  Hai điều kiện tạo task giống hệt nhau, nháp chỉ nằm trong task của nhóm assisted, task chỉ khôi phục đầu buổi của chính nó. Thời gian đo bằng tab **Đồng hồ** của trang rà soát (cả phiên,
+  từ lúc nạp ảnh đến lúc bấm Xong), mỗi người gửi nhóm trưởng gói `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (không ảnh), nhóm trưởng chạy `tool/tong_ket.py`. Đáp án NME của nháp là nhãn
+  gán tay của nhóm manual. Cách ghép cặp Pk/Xk/X(k+1) ở bản chụp `de-tai-m28/` là bản cũ.
 
 ## Quy tắc bắt buộc
 

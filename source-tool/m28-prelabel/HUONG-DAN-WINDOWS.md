@@ -121,14 +121,32 @@ Mở tab **Họp team** (không cần lượt), bấm **Tạo phiên mới hôm 
 Biên bản ở `outputs\ca_kho\hop_1610\bien_ban_1610.md`: **tự** chép các khối vào `problem-backlog.md` và `so-quyet-dinh.md` rồi commit hai file đó (trang không ghi vào hai file này).
 Sau họp xoá các gói zip đã nhận nếu không cần nữa.
 
-### Thống kê và lọc dữ liệu train
-Hai việc này **chỉ đọc** `runs\`, `raw\`, `final\`, `data\` và chỉ ghi dưới `outputs\`. Cần nhãn sửa tay trong `raw\` (P4 `collect` hoặc `export.py`) và, cho mục tốc độ, các file `timing_P1.csv` … `timing_P5.csv` do `facetimer.py` ghi.
+### Bấm giờ và thống kê (thí nghiệm hai nhóm, QĐ-006)
+Đội chia **hai nhóm độc lập**: `manual` (gán tay hoàn toàn) và `assisted` (dùng tool, sửa nháp), cùng một bộ ảnh. Ai ở nhóm nào do cả đội chốt, ghi vào `config\nhom_thi_nghiem.json` (file mẫu để trống; tool không đoán). Đồng hồ thay `facetimer.py`.
 
-**Xem số liệu (tab Thống kê):** `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`), chọn tab **Thống kê**; bấm **Làm mới**; **Xuất CSV + HTML** ghi `outputs\thong_ke\<ngày-giờ>\`. Ttest ẩn mặc định (tập đo một lần). Nhãn thí nghiệm (`m28-manual`, `m28-assisted`) chỉ có nháp khi chọn ô **Lượt chứa nháp**.
+**Quy trình một buổi (mỗi người):**
+1. Đầu buổi **khôi phục task của hôm nay** (file sao lưu P4 phát) rồi mở trang: `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`).
+2. Tab **Đồng hồ**: chọn người P1–P5 (và nhóm, nếu chưa có trong file nhóm), gõ tên **đợt** (ví dụ `NAP_001`), bấm **Bắt đầu**. Hoặc nạp ảnh ở tab Nạp ảnh rồi bấm gợi ý **Bắt đầu đồng hồ cho đợt này** (hoặc bật ô tự bắt đầu khi nạp).
+3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm **Tạm dừng**, quay lại bấm **Tiếp tục**. Muốn đo từng mặt thì bấm **Xong mặt này → mặt tiếp** sau mỗi mặt (tuỳ chọn); bấm nhầm thì **Hoàn tác mặt vừa xong**.
+4. Xong việc: `python tool\m28.py collect --task demo-<đợt> --reviewer P<số của bạn>`, rồi bấm **Xong (lưu & xuất)**. Trang ghi `outputs\timing\timing_P<số>.csv` và gói **`outputs\ket_qua\ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Bấm Xong trước khi collect thì gói chỉ có thời gian: sau khi collect dùng **Xuất lại gói**.
+5. Quên bấm, nghỉ lâu, qua nửa đêm: trang hiện cảnh báo vàng; chọn **Sửa thời gian** (nhập thời gian thật), **Giữ nguyên** hoặc **Hủy phiên…** (gõ `HUY`; không ghi dòng nào). Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, tab Đồng hồ, bấm Tiếp tục hoặc Xong.
+
+**Nhóm trưởng tổng kết** (chỉ cần các gói zip, không cần ảnh hay CVAT):
 ```bat
-python tool\thong_ke.py --luot-nhap <lượt chứa nháp của khối X> --timing .
+python tool\tong_ket.py --vao <thư mục chứa các gói> --ra outputs\tong_ket
 ```
-Chỗ đặt `timing_P*.csv`: thư mục `source-tool\m28-prelabel\` (hoặc `outputs\`, `raw\`, `final\`); file `timing_*.csv` đã bị `.gitignore` chặn. Định dạng là 12 cột của `facetimer.py` (`date, person, condition, task, job, block, seq, face_id, seconds, warmup, interrupted, note`), không đặt định dạng mới; thiếu cột thì báo rõ tên cột.
+Công cụ kiểm từng gói (loại gói hỏng hoặc trùng và nói lý do), gộp các người, tính ba chỉ số và ghi `outputs\tong_ket\<ngày-giờ>\thong_ke.html` + CSV. Trên trang cũng có nút **Nạp các gói kết quả của nhóm** ở tab Thống kê.
+
+**Ba chỉ số (tab Thống kê, `python tool\thong_ke.py`):** (1) NME của nháp so với nhãn gán tay của nhóm manual trên cùng ảnh; (2) tỉ lệ điểm phải sửa của nhóm assisted (ngưỡng 2% IOD, chỉnh được); (3) giây/mặt hai nhóm và % nhanh hơn của assisted (mục tiêu ≥ 20%, KTC 90% bằng cluster bootstrap; mỗi nhóm dưới 2 người thì chỉ có kết quả mô tả). **Hạn chế:** tốc độ từng người khác nhau lẫn vào kết quả (nên có một đợt khởi động chung hoặc chia nhóm cân tốc độ); giây/mặt là ước lượng chia đều nếu không bấm từng mặt.
+
+### Thống kê và lọc dữ liệu train
+Hai việc này **chỉ đọc** `runs\`, `raw\`, `final\`, `data\` và chỉ ghi dưới `outputs\`. Cần nhãn sửa tay trong `raw\` (P4 `collect`) và, cho mục thời gian, các gói kết quả hoặc `timing_P*.csv` do tab Đồng hồ ghi (xem mục "Bấm giờ và thống kê" ở trên).
+
+**Xem số liệu (tab Thống kê):** `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`), chọn tab **Thống kê** (chỉ còn ba chỉ số); bấm **Làm mới**; **Xuất CSV + HTML** ghi `outputs\thong_ke\<ngày-giờ>\`. Ttest ẩn mặc định (tập đo một lần). Nhãn trong `raw\` của task thí nghiệm chỉ có nháp khi chọn ô **Lượt chứa nháp** (task `demo-…` có `push.json` thì tự tìm lượt).
+```bat
+python tool\thong_ke.py --luot-nhap <lượt chứa nháp> [--nguong-sua 2] [--goi <thư mục gói>] [--timing .]
+```
+Chỗ đặt `timing_P*.csv`: `outputs\timing\` (tab Đồng hồ ghi ở đây), thư mục `source-tool\m28-prelabel\`, `outputs\`, `raw\`, `final\`; file `timing_*.csv` đã bị `.gitignore` chặn. File facetimer 12 cột (`date, person, condition, task, job, block, seq, face_id, seconds, warmup, interrupted, note`) vẫn đọc được; thiếu cột thì bỏ file đó và báo rõ tên cột.
 
 **Lọc dữ liệu train (tab Lọc dữ liệu hoặc lệnh):** bắt đầu bằng xem trước, không ghi gì:
 ```bat

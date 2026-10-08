@@ -131,7 +131,7 @@ cai_lai() {
 while true; do
   echo
   echo "================= M28 - Nhãn nháp landmark khuôn mặt ================="
-  echo "  1. Mở trang rà soát   (Nạp ảnh kéo thả, Các đợt, Ca khó, Cài đặt)"
+  echo "  1. Mở trang rà soát   (Nạp ảnh kéo thả, Các đợt, Ca khó, Đồng hồ, Thống kê, Cài đặt)"
   echo "  2. Rà lại một lượt có sẵn"
   echo "  3. Chạy thử 5 mặt F in-cabin (chỉ cần gói dữ liệu giải nén vào data/)"
   echo "  4. Kiểm tra nhanh CVAT   (tạo rồi xoá task demo-smoke, cần CVAT đang chạy)"
