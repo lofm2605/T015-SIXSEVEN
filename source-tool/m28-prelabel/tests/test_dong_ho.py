@@ -259,11 +259,11 @@ def test_state_restored_by_a_new_object_after_page_reload_and_server_restart(dh)
     assert d3.xem('P5')['trang_thai'] == 'tam_dung' and d3.xem('P5')['giay_phien'] == pytest.approx(12.0)
 
 
-def test_one_session_per_person_and_other_people_independent(dh):
+def test_one_session_per_person_and_dot_and_other_people_independent(dh):
     d, g, root = dh
     v = d.bat_dau('P5', 'assisted', dot='NAP_001', task='demo-NAP_001')
-    with pytest.raises(DongHoLoi, match='đã có một phiên'):
-        d.bat_dau('P5', 'manual', dot='X2', rev=0)
+    with pytest.raises(DongHoLoi, match='đã có đồng hồ của đợt NAP_001'):
+        d.bat_dau('P5', 'manual', dot='NAP_001', rev=0)                              # cùng đợt thì không bắt đầu lại (bấm Xong hoặc Hủy trước)
     d.bat_dau('P4', 'manual', dot='X3')
     assert d.xem('P4')['dieu_kien'] == 'manual' and d.xem('P5')['dieu_kien'] == 'assisted'
     d.tam_dung('P4', d.xem('P4')['rev'])
@@ -417,7 +417,7 @@ def test_closing_page_auto_pauses_running_sessions_only(dh):
     g.tick(25)
     assert d.dang_chay_ai() == ['P5']
     got = d.tu_tam_dung_tat_ca()
-    assert [n for n, _t in got] == ['P5'] and got[0][1] == '18:30:25'
+    assert [n for n, _t, _d in got] == ['P5'] and got[0][1] == '18:30:25' and got[0][2] == 'X1'            # (người, giờ, đợt)
     w = d.xem('P5')
     assert w['trang_thai'] == 'tam_dung' and 'tat_trang' in w['ma_canh_bao'] and w['giay_phien'] == pytest.approx(25.0)
     g.tick(900)
@@ -824,3 +824,173 @@ def test_module_imports_no_gradio_or_numpy_at_top():
     src = open(os.path.join(HERE, '..', 'tool', 'dong_ho.py'), encoding='utf-8').read()
     head = src.split('class DongHoLoi')[0]
     assert 'import gradio' not in src and 'import numpy' not in head and 'import torch' not in src
+
+
+# ---------- MỖI ĐỢT MỘT ĐỒNG HỒ (QĐ-007): giờ đợt này không lẫn vào đợt khác ----------
+def test_each_dot_keeps_its_own_seconds_and_only_one_clock_runs(dh):
+    """Ca thật: nạp đợt A, làm một lúc, nạp tiếp đợt B. Trước đây giờ của B bị cộng vào phiên của A (chip vẫn ghi đợt A)."""
+    d, g, root = dh
+    d.bat_dau('P5', 'assisted', dot='A', n_mat=3)
+    g.tick(60)
+    d.bat_dau('P5', 'assisted', dot='B', n_mat=2)                                     # nạp đợt B: A tự tạm dừng, giữ nguyên 60 giây
+    a, b = d.xem('P5', 'A'), d.xem('P5', 'B')
+    assert a['trang_thai'] == 'tam_dung' and a['giay_phien'] == pytest.approx(60.0) and b['chay'] and b['giay_phien'] == 0
+    g.tick(25)
+    a, b = d.xem('P5', 'A'), d.xem('P5', 'B')
+    assert a['giay_phien'] == pytest.approx(60.0) and b['giay_phien'] == pytest.approx(25.0)           # giờ không lẫn
+    assert [s['dot'] for s in d.liet_ke('P5')] == ['A', 'B'] and d.dang_chay_ai() == ['P5']
+    assert [c['dot'] for c in b['cac_dot']] == ['A'] and b['cac_dot'][0]['giay_phien'] == pytest.approx(60.0)       # chip ghi mờ đợt khác
+    d.tiep_tuc('P5', a['rev'], dot='A')                                              # chạy tiếp A thì B tự tạm dừng
+    g.tick(10)
+    a, b = d.xem('P5', 'A'), d.xem('P5', 'B')
+    assert a['chay'] and a['giay_phien'] == pytest.approx(70.0) and b['trang_thai'] == 'tam_dung' and b['giay_phien'] == pytest.approx(25.0)
+    assert sum(1 for s in d.liet_ke('P5') if s['chay']) == 1
+
+
+def test_calls_without_a_dot_need_exactly_one_session(dh):
+    d, g, root = dh
+    d.bat_dau('P5', 'manual', dot='A')
+    d.tam_dung('P5')                                                                 # một phiên: không cần nêu đợt
+    d.bat_dau('P5', 'manual', dot='B')
+    for fn in (lambda: d.tam_dung('P5'), lambda: d.tiep_tuc('P5'), lambda: d.huy_mo('P5'), lambda: d.xong_luu('P5')):
+        with pytest.raises(DongHoLoi, match='chỉ rõ đợt'):
+            fn()
+    with pytest.raises(DongHoLoi, match='chưa có đồng hồ cho đợt Z'):
+        d.tam_dung('P5', dot='Z')
+    assert d.xem('P5', 'Z')['co_phien'] is False and len(d.xem('P5', 'Z')['cac_dot']) == 2
+
+
+def test_view_follows_running_then_page_dot_and_never_borrows_another_dot(dh):
+    d, g, root = dh
+    d.bat_dau('P5', 'assisted', dot='A')
+    d.bat_dau('P5', 'assisted', dot='B')                                              # B chạy, A tạm dừng
+    assert d.chon_dot('P5', 'A') == 'B' and d.chon_dot('P5', None) == 'B'              # đang chạy luôn thắng
+    d.tam_dung('P5', d.xem('P5', 'B')['rev'], dot='B')
+    assert d.chon_dot('P5', 'A') == 'A' and d.chon_dot('P5', 'B') == 'B'               # không chạy: theo đợt của trang
+    assert d.chon_dot('P5', 'C') is None                                              # trang ở đợt C chưa có đồng hồ: KHÔNG mượn A hoặc B
+    v = d.xem_theo_trang('P5', 'C')
+    assert v['co_phien'] is False and sorted(c['dot'] for c in v['cac_dot']) == ['A', 'B']
+    assert d.chon_dot('P5', None) in ('A', 'B') and d.chon_dot('P4', 'A') is None
+
+
+def test_waiting_dot_does_not_count_time_and_starts_from_zero_when_resumed(dh):
+    """Upload & Continue lúc đang có đồng hồ ở đợt khác: đợt mới chờ ở 00:00, đồng hồ cũ không bị đụng tới."""
+    d, g, root = dh
+    d.bat_dau('P5', 'assisted', dot='A')
+    g.tick(30)
+    d.bat_dau('P5', 'assisted', dot='B', cho=True)
+    a, b = d.xem('P5', 'A'), d.xem('P5', 'B')
+    assert a['chay'] and a['giay_phien'] == pytest.approx(30.0) and b['cho'] and b['trang_thai'] == 'tam_dung' and b['giay_phien'] == 0
+    g.tick(500)
+    b = d.xem('P5', 'B')
+    assert b['giay_phien'] == 0 and b['giay_tam_dung'] == 0 and d.xem('P5', 'A')['chay']                 # chờ không phải tạm dừng, không tính giờ
+    d.tiep_tuc('P5', b['rev'], dot='B')                                              # chạy lần đầu: A tạm dừng, giờ bắt đầu thật là lúc này
+    g.tick(12)
+    a, b = d.xem('P5', 'A'), d.xem('P5', 'B')
+    assert b['chay'] and not b['cho'] and b['giay_phien'] == pytest.approx(12.0) and b['bat_dau'] > '2026-10-14T18:30:00+07:00'
+    assert a['trang_thai'] == 'tam_dung' and a['giay_phien'] == pytest.approx(530.0)                  # A chạy suốt lúc B chờ (30 + 500 giây), tạm dừng đúng lúc B chạy
+
+
+def test_save_one_dot_keeps_the_other_and_each_dot_gets_its_own_rows_and_package(dh):
+    d, g, root = dh
+    d.bat_dau('P5', 'assisted', dot='A', n_mat=2)
+    g.tick(40)
+    d.bat_dau('P5', 'assisted', dot='B', n_mat=3)
+    g.tick(90)
+    ra = d.xong_luu('P5', d.xem('P5', 'A')['rev'], dot='A')
+    assert ra['ok'] and ra['tom_tat']['dot'] == 'A' and d.xem('P5', 'A')['co_phien'] is False
+    assert d.xem('P5', 'B')['chay'] and d.xem('P5', 'B')['giay_phien'] == pytest.approx(90.0)        # B giữ nguyên, vẫn chạy
+    rows = doc_csv(root)
+    assert len(rows) == 2 and {r['dot'] for r in rows} == {'A'} and {r['seconds'] for r in rows} == {'20.0'} and {r['giay_phien'] for r in rows} == {'40.0'}
+    g.tick(10)
+    rb = d.xong_luu('P5', d.xem('P5', 'B')['rev'], dot='B')
+    rows = doc_csv(root)
+    assert len(rows) == 5 and [r['dot'] for r in rows] == ['A', 'A', 'B', 'B', 'B'] and {r['seconds'] for r in rows if r['dot'] == 'B'} == {'33.3'}
+    assert len({r['phien'] for r in rows}) == 2 and {r['task'] for r in rows} == {'demo-A', 'demo-B'}
+    pa, _w = goi_kq.doc_goi(os.path.join(root, ra['goi']['zip']))
+    pb, _w = goi_kq.doc_goi(os.path.join(root, rb['goi']['zip']))
+    assert ra['goi']['ten'] == 'ketqua_P5_1410_A' and rb['goi']['ten'] == 'ketqua_P5_1410_B'
+    assert (pa['dot'], pa['giay_phien'], pa['so_mat']) == ('A', 40.0, 2) and (pb['dot'], pb['giay_phien'], pb['so_mat']) == ('B', 100.0, 3) and pa['phien'] != pb['phien']
+    assert not os.path.exists(d.p_state('P5')) and d.liet_ke('P5') == []                # hết phiên: bỏ file trạng thái
+
+
+def test_cancel_one_dot_keeps_the_other_and_a_request_is_for_one_dot_only(dh):
+    d, g, root = dh
+    d.bat_dau('P5', 'manual', dot='A', n_mat=2)
+    d.bat_dau('P5', 'manual', dot='B', n_mat=2)
+    g.tick(20)
+    y = d.huy_mo('P5', dot='A')
+    with pytest.raises(DongHoLoi, match='hết hiệu lực'):
+        d.huy_xac_nhan('P5', y['ma'], 'HUY', dot='B')                                # mã mở cho A không huỷ được B
+    assert d.xem('P5', 'A')['co_phien'] and d.xem('P5', 'B')['co_phien']
+    y = d.huy_mo('P5', dot='A')
+    row = d.huy_xac_nhan('P5', y['ma'], 'HUY', dot='A')
+    assert row['task'] == 'demo-A' and d.xem('P5', 'A')['co_phien'] is False and d.xem('P5', 'B')['chay']
+    assert not os.path.exists(os.path.join(root, 'outputs', 'timing', 'timing_P5.csv'))
+
+
+def test_closing_pauses_only_the_running_dot_and_reports_which(dh):
+    d, g, root = dh
+    d.bat_dau('P5', 'assisted', dot='A')
+    d.bat_dau('P5', 'assisted', dot='B', cho=True)
+    g.tick(25)
+    got = d.tu_tam_dung_tat_ca()
+    assert got == [('P5', '18:30:25', 'A')]
+    a, b = d.xem('P5', 'A'), d.xem('P5', 'B')
+    assert a['trang_thai'] == 'tam_dung' and 'tat_trang' in a['ma_canh_bao'] and b['cho'] and 'tat_trang' not in b['ma_canh_bao']
+    assert d.dang_chay_ai() == [] and d.tu_tam_dung_tat_ca() == []
+
+
+def test_old_single_session_file_is_read_and_rewritten_in_the_new_format(dh):
+    """Tệp trạng thái cũ (một phiên ở đầu tệp, trước QĐ-007) vẫn đọc được; ghi lần đầu thì sang định dạng mới và thêm đợt khác được."""
+    d, g, root = dh
+    d.bat_dau('P5', 'assisted', dot='Nap1', n_mat=7)
+    g.tick(20)
+    d.tam_dung('P5', d.xem('P5')['rev'])
+    new = json.load(open(d.p_state('P5'), encoding='utf-8'))
+    assert new['phien_ban_tep'] == 2 and list(new['cac_dot']) == ['Nap1']
+    json.dump(new['cac_dot']['Nap1'], open(d.p_state('P5'), 'w', encoding='utf-8'), ensure_ascii=False)         # dạng cũ: chính phiên đó ở đầu tệp
+    d2 = DongHo(root, gio=g, pid=os.getpid())
+    w = d2.xem('P5')
+    assert w['co_phien'] and w['dot'] == 'Nap1' and w['trang_thai'] == 'tam_dung' and w['giay_phien'] == pytest.approx(20.0)
+    d2.bat_dau('P5', 'assisted', dot='NAP_002', n_mat=7)                              # thêm đợt thứ hai
+    g.tick(5)
+    now = json.load(open(d2.p_state('P5'), encoding='utf-8'))
+    assert now['phien_ban_tep'] == 2 and sorted(now['cac_dot']) == ['NAP_002', 'Nap1']
+    assert d2.xem('P5', 'Nap1')['giay_phien'] == pytest.approx(20.0) and d2.xem('P5', 'NAP_002')['giay_phien'] == pytest.approx(5.0)
+
+
+def test_mismatched_dot_key_or_bad_container_is_reported_as_corrupt_not_crash(dh):
+    d, g, root = dh
+    d.bat_dau('P5', 'manual', dot='A')
+    good = json.load(open(d.p_state('P5'), encoding='utf-8'))
+    bad = json.loads(json.dumps(good))
+    bad['cac_dot']['KHAC'] = bad['cac_dot'].pop('A')                                    # khoá đợt không khớp với đợt ghi trong phiên
+    for content in (bad, dict(good, phien_ban_tep=9), dict(good, cac_dot=[1, 2]), dict(good, cac_dot={'A': 'x'})):
+        json.dump(content, open(d.p_state('P5'), 'w', encoding='utf-8'))
+        w = d.xem('P5')
+        assert w['hong'] is True and w['co_phien'] is False and 'hỏng' in w['loi']
+    ten = d.bo_trang_thai_hong('P5')
+    assert ten.startswith('dang_chay_P5.hong-') and d.xem('P5')['hong'] is False
+
+
+def test_rev_is_per_dot_so_a_stale_tab_cannot_act_on_the_other_dot(dh):
+    d, g, root = dh
+    d.bat_dau('P5', 'manual', dot='A')
+    a_rev = d.xem('P5', 'A')['rev']
+    d.bat_dau('P5', 'manual', dot='B')                                                # A bị tạm dừng bởi thao tác này: rev của A đã đổi
+    assert d.xem('P5', 'A')['rev'] == a_rev + 1
+    with pytest.raises(DongHoLoi) as e:
+        d.tiep_tuc('P5', a_rev, dot='A')                                              # tab cũ còn rev cũ của A
+    assert e.value.cu and d.xem('P5', 'A')['trang_thai'] == 'tam_dung' and d.xem('P5', 'B')['chay']
+
+
+def test_heartbeat_touches_the_running_dot_without_changing_any_rev(dh):
+    d, g, root = dh
+    d.bat_dau('P5', 'manual', dot='A')
+    d.bat_dau('P5', 'manual', dot='B')
+    revs = {s['dot']: s['rev'] for s in d.liet_ke('P5')}
+    g.tick(70)
+    v = d.nhip('P5', 'B')
+    assert v['dot'] == 'B' and {s['dot']: s['rev'] for s in d.liet_ke('P5')} == revs
+    assert d.xem('P5', 'B')['lan_cuoi_thay'] > '2026-10-14T18:30:00+07:00' and d.xem('P5', 'B')['giay_phien'] == pytest.approx(70.0)

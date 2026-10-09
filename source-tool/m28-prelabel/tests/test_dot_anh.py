@@ -958,3 +958,44 @@ def test_guard_accepts_page_pid_from_env_when_parent_is_launcher(tmp_path, monke
 def test_review_app_main_marks_lock_owner():
     src = open(os.path.join(os.path.dirname(__file__), '..', 'tool', 'review_app.py'), encoding='utf-8').read()
     assert 'dang_chay.mark_owner()' in src
+
+
+# ---------- giờ RIÊNG của từng đợt trên thẻ đợt (QĐ-007) ----------
+def test_card_shows_each_dot_own_clock_chip_and_nothing_when_there_is_none(world):
+    i = dot_anh.run_info(make_dot_run(world, 'Khoi'), 'P2')
+    assert 'c-gio' not in dot_anh.card_html(i)                                                       # chưa có đồng hồ: không có chip (không hiện 00:00 giả)
+    g = [dict(nguoi='P2', giay=75, tt='chay'), dict(nguoi='P3', giay=42.2, tt='tam_dung'), dict(nguoi='P2', giay=0, tt='cho'), dict(nguoi='P2', giay=3725, tt='da_luu'), dict(nguoi='P9', giay=1, tt='la')]
+    h = dot_anh.card_html(dict(i, gio=g))
+    assert '⏱ P2 ▶ 01:15' in h and '⏱ P3 ⏸ 00:42' in h and '⏱ P2 ⏸ chờ bắt đầu' in h and '⏱ P2 ✓ đã lưu 1:02:05' in h and 'P9' not in h
+    assert '<script' not in dot_anh.card_html(dict(i, gio=[dict(nguoi='<script>', giay=1, tt='chay')]))      # tên người đi qua escape
+
+
+def test_batch_list_gives_every_dot_its_own_time(world):
+    pytest.importorskip('gradio')
+    import re
+
+    import dong_ho
+    from dh_fake import FakeGio
+    rd1 = make_dot_run(world, 'Khoi', decisions=ALL_DECIDED)
+    make_dot_run(world, 'Nam')
+    make_dot_run(world, 'Chua')                                                                      # đợt chưa có đồng hồ nào
+    ra.prepare_env(rd1)
+    ctx = ra.AppCtx(reviewer='P2', run_dir=rd1)
+    g = FakeGio()
+    d = ctx.dong_ho = dong_ho.DongHo(ctx.project_root, gio=g, pid=os.getpid())
+    d.bat_dau('P2', 'assisted', dot='Khoi', n_mat=3)
+    g.tick(75)
+    d.bat_dau('P2', 'assisted', dot='Nam', n_mat=2, cho=True)                                        # Upload & Continue: Nam chờ, Khoi vẫn chạy
+    demo, _ = ra.build_ui(ra.Store(rd1, 'P2'), ctx)
+    refresh = next(f.fn for f in demo.fns.values() if getattr(f.fn, '__name__', '') == 'on_load_or_refresh')
+
+    def cards():
+        parts = refresh(None)[0].split('<div class="dot-card"')[1:]
+        return {re.search(r'data-run="([^"]+)"', p).group(1): p for p in parts}
+    c = cards()
+    assert '⏱ P2 ▶ 01:15' in c['Khoi'] and '⏱ P2 ⏸ chờ bắt đầu' in c['Nam'] and 'c-gio' not in c['Chua']
+    assert '⏱' not in c['Nam'].replace('⏱ P2 ⏸ chờ bắt đầu', '') and '01:15' not in c['Nam']                  # giờ của Khoi không lẫn sang Nam
+    d.xong_luu('P2', d.xem('P2', 'Khoi')['rev'], dot='Khoi', so_mat=3)                               # lưu số đo của Khoi: thẻ ghi 'đã lưu' kèm giờ của riêng đợt đó
+    c = cards()
+    assert '⏱ P2 ✓ đã lưu 01:15' in c['Khoi'] and '▶' not in c['Khoi'] and '⏸ chờ bắt đầu' in c['Nam']
+    assert 'dong_ho_ui.gio_cac_dot(ctx)' in open(os.path.join(TOOL, 'dot_ui.py'), encoding='utf-8').read()

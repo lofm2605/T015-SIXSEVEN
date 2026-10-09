@@ -513,3 +513,21 @@ def test_han_che_va_nguon_luon_co_tren_trang(goi_world):
     assert 'tốc độ từng người khác nhau lẫn vào kết quả' in html and 'khởi động chung' in html and 'ước lượng chia đều' in html
     assert 'Người theo nhóm' in html and 'manual (gán tay): P1, P2' in html and 'assisted (dùng tool): P3, P4' in html
     assert 'Hai nhóm làm cùng bộ ảnh?' in html and 'khớp' in html
+
+
+def test_mot_nguoi_hai_dot_co_hai_goi_va_gio_moi_dot_tinh_rieng(tmp_path):
+    """QĐ-007: mỗi đợt một phiên và một gói. Một người làm hai đợt thì có hai gói: cả hai vào Thống kê, giờ đợt này không lẫn vào đợt kia, không bị coi là trùng."""
+    root = du_an(tmp_path)
+    g = FakeGio()
+    tao_phien(root, 'P1', 'manual', 40, g, dot='NAP_001', n=6, bo_anh='NAP_001')
+    g.tick(5)
+    tao_phien(root, 'P1', 'manual', 60, g, dot='NAP_002', n=6, bo_anh='NAP_001')
+    gois = sorted(f for f in os.listdir(os.path.join(root, 'outputs', 'ket_qua')) if f.endswith('.zip'))
+    assert [f.split('_', 3)[3] for f in gois] == ['NAP_001.zip', 'NAP_002.zip']
+    st = tk.tinh(root)
+    tg = st['thoi_gian']
+    assert tg['n_dong_goi'] == 8 and st['tg_loc']['khoi_dong'] == 4                                    # mỗi phiên 6 mặt, 2 mặt khởi động bị loại: 4 + 4 dòng tính giờ
+    m = tg['nhom']['manual']
+    assert m['n_mat'] == 8 and m['trung_vi'] == pytest.approx(50.0) and m['tb_nhan'] == pytest.approx((40 * 60) ** 0.5)         # 4 mặt 40 giây + 4 mặt 60 giây, không lẫn
+    assert st['nguon']['goi'] == ['ketqua_P1_1410_NAP_001.zip', 'ketqua_P1_1410_NAP_002.zip'] and not st['nguon']['goi_hong']       # cả hai đợt được dùng
+    assert all('cùng phiên' in why for _t, why in st['nguon']['goi_trung'])                                                       # chỉ bản .json của chính gói đó, không phải đợt này trùng đợt kia

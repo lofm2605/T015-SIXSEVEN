@@ -18,7 +18,8 @@ cũ được gán theo cách cũ.
 | [QĐ-003](#qđ-003) | Định nghĩa 50 điểm DMS (7 nhóm, không viền hàm), trái/phải theo ảnh, config v3 | 07/10/2026 | QĐ-002 | Bị thay một phần bởi QĐ-004 (cách dựng label CVAT: bảy label theo nhóm, màu theo nhóm); phần còn lại hiệu lực |
 | [QĐ-004](#qđ-004) | Tách label `face50` thành bảy label skeleton theo nhóm, mỗi nhóm một màu (bảng màu hình minh hoạ DMS) | 07/10/2026 | QĐ-003 | Hiệu lực |
 | [QĐ-005](#qđ-005) | Bộ lọc dữ liệu train chỉ chuẩn bị dữ liệu (chưa train), kèm trang Thống kê chỉ số model và tốc độ gán | 08/10/2026 | Chủ repo | Bị thay một phần bởi QĐ-006 (trang Thống kê chỉ còn ba chỉ số, thiết kế hai nhóm độc lập); bộ lọc vẫn hiệu lực |
-| [QĐ-006](#qđ-006) | Thí nghiệm hai nhóm độc lập (manual / assisted) thay cho ghép cặp; đồng hồ bấm giờ theo phiên thay facetimer; Thống kê chỉ ba chỉ số; gói kết quả cho nhóm trưởng | 09/10/2026 | Chủ repo | Hiệu lực (chờ P5 và mentor đồng ý trước 14/10) |
+| [QĐ-006](#qđ-006) | Thí nghiệm hai nhóm độc lập (manual / assisted) thay cho ghép cặp; đồng hồ bấm giờ theo phiên thay facetimer; Thống kê chỉ ba chỉ số; gói kết quả cho nhóm trưởng | 09/10/2026 | Chủ repo | Hiệu lực (chờ P5 và mentor đồng ý trước 14/10); phần đồng hồ bổ sung bởi QĐ-007 (mỗi đợt một phiên) |
+| [QĐ-007](#qđ-007) | Đồng hồ bấm giờ tính MỖI ĐỢT MỘT PHIÊN (giờ đợt này không lẫn vào đợt khác) | 09/10/2026 | Chủ repo | Hiệu lực (chờ P5 duyệt gói theo đợt) |
 
 **Trạng thái:** Hiệu lực · Bị thay bởi QĐ-xxx · Huỷ (ghi lý do)
 
@@ -181,6 +182,30 @@ cũ được gán theo cách cũ.
   - [ ] Duyệt chip đồng hồ ở đầu trang và hộp Đóng trang (@P2)
   - [ ] Cập nhật `CLAUDE.md` (đã sửa đoạn Thí nghiệm) và bản Claude Docs: tab P5 còn ghi `facetimer.py` và ghép cặp, Kế hoạch còn "đủ 5 người" (chủ repo)
 - **Trạng thái:** Hiệu lực (chờ P5 và mentor đồng ý trước 14/10)
+
+## QĐ-007
+
+**Đồng hồ bấm giờ tính MỖI ĐỢT MỘT PHIÊN (giờ đợt này không lẫn vào đợt khác)**
+
+- **Ngày:** 09/10/2026
+- **Người tham gia:** chủ repo (chốt), P5 (chờ đồng ý: dòng bấm giờ và gói kết quả theo đợt), P2 (chip, hộp Đóng trang, thẻ đợt)
+- **Xuất phát từ:** chủ repo dùng thử trang thật và báo "đồng hồ đang sai vì không phân ra cho mỗi đợt"
+- **Bối cảnh:** QĐ-006 đo "cả phiên" nhưng mỗi người chỉ có MỘT phiên: nạp đợt thứ hai khi phiên của đợt đầu còn đó thì phiên cũ được giữ nguyên, chip vẫn ghi đợt đầu và giờ làm đợt hai bị cộng vào đợt đầu (file trạng thái thật của chủ repo chỉ có một phiên "Nap1" dù đã có thêm đợt NAP_002). Gói kết quả đã đặt tên theo đợt (`ketqua_<Pk>_<DDMM>_<đợt>`), nháp và nhãn cũng lấy theo đợt, nên số đo phải theo đợt mới khớp.
+- **Các phương án đã cân nhắc:**
+  1. *Nạp đợt mới thì tự lưu phiên cũ.* Loại: lúc đó chưa chạy `collect` nên gói thiếu nhãn, và giao diện không còn nút xuất lại gói.
+  2. *Giữ MỘT phiên, chia giờ cho từng đợt bên trong theo mốc chuyển trang.* Loại: phải nhân đôi cảnh báo, tạm dừng, dòng CSV và gói theo đợt bên trong một phiên; mốc "chuyển" không rõ khi Upload & Continue.
+  3. *Mỗi (người, đợt) một phiên, một tệp trạng thái mỗi người, mỗi người chỉ một phiên chạy tại một lúc.* **Chọn.**
+- **Quyết định:**
+  - Phiên theo khoá **(người, đợt)**: mỗi đợt có giây, số lần tạm dừng, cảnh báo, dòng `timing_<Pk>.csv` (cột `dot`, `phien` riêng) và gói `ketqua_<Pk>_<DDMM>_<đợt>.zip` riêng. Bắt đầu hoặc tiếp tục một phiên thì phiên đang chạy ở đợt khác của người đó tự tạm dừng (giữ nguyên giây).
+  - **Upload & Open:** đồng hồ chuyển sang đợt mới ngay. **Upload & Continue** lúc người đó đã có đồng hồ ở đợt khác: đồng hồ cũ giữ nguyên, đợt mới **chờ** ở 00:00 (nút **Start**); chưa có đồng hồ nào thì chạy ngay như trước.
+  - **Chip** theo phiên đang chạy, không thì theo đợt của trang (không mượn giờ đợt khác), giờ các đợt khác ghi mờ cạnh chip và trên thẻ ở tab Các đợt. **Chuyển trang** sang đợt khác lúc đồng hồ đang chạy: đồng hồ cũ tạm dừng, đợt mới đã có phiên thì chạy tiếp, chưa có thì không tự tạo.
+  - **Hộp Đóng trang:** từ hai đợt trở lên có ô "Đợt cần lưu / bỏ"; **Save timing** và **Discard session** chỉ tác động đợt đang chọn, nhắc `collect` theo task của đợt đó.
+  - Tệp `outputs/timing/dang_chay_<Pk>.json` chứa các phiên theo đợt (`phien_ban_tep` 2); tệp cũ một phiên vẫn đọc được. Giờ đã cộng dồn trong phiên cũ không tách ngược được.
+- **Việc phải làm theo:**
+  - [ ] Đồng ý dòng bấm giờ và gói theo đợt (mỗi đợt một gói, nhóm trưởng nhận nhiều gói của một người) (@P5, mentor, trước 14/10)
+  - [ ] Duyệt chip có giờ đợt khác ghi mờ, ô chọn đợt trong hộp Đóng trang và chip giờ trên thẻ đợt (@P2)
+  - [ ] Kiểm `thong_ke` / `tong_ket` với một người có hai gói (hai đợt) khi có số đo thật (@P5)
+- **Trạng thái:** Hiệu lực (chờ P5 duyệt gói theo đợt)
 
 ## Mẫu để copy
 

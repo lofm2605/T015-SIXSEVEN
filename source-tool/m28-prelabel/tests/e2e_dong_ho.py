@@ -14,6 +14,7 @@ Kịch bản (app thật `review_app.py --nap P5`, cổng 7861, proxy chết đ�
   3  mở tab thứ hai bấm Pause; tab đầu (rev cũ) bấm nút bị từ chối, phiên vẫn tạm dừng
   4  hộp Đóng trang: có nút Save timing và Discard session; Discard session bấm hai lần: không có dòng CSV, có dòng huy_P5.csv
   5  phiên mới: Save timing (lần một nhắc collect, lần hai lưu): timing_P5.csv đúng 12 cột facetimer + cột thêm, có gói zip trong outputs/ket_qua
+  5b mỗi đợt một đồng hồ (QĐ-007): hai đợt cùng có phiên, chip theo phiên đang chạy và ghi mờ đợt khác; hộp Đóng trang liệt kê hai đợt và có ô chọn đợt (#dh-dot-dd)
   6  tab Thống kê với gói giả của 4 người (outputs/goi_nhom): có ba mục, KTC, không số nào khi thiếu dữ liệu
   7  không request nào ra ngoài 127.0.0.1; `lsof` thấy cổng chỉ bind 127.0.0.1
   8  ảnh chụp dongho_*.png, thongke_*.png vào --shots (desktop 1440x900 và hẹp 420 px)
@@ -42,6 +43,12 @@ REQ = []
 
 def mini(pg):
     return pg.locator('#dh-mini-time').inner_text().strip()
+
+
+def trang_thai(W, dot='NAP_001', nguoi='P5'):
+    """trang_thai của phiên đợt `dot` trong outputs/timing/dang_chay_<người>.json (định dạng tệp: {"cac_dot": {đợt: phiên}}; tệp cũ một phiên vẫn đọc được)."""
+    j = json.load(open(os.path.join(W, 'outputs', 'timing', f'dang_chay_{nguoi}.json'), encoding='utf-8'))
+    return (j['cac_dot'][dot] if 'cac_dot' in j else j)['trang_thai']
 
 
 def secs(txt):
@@ -117,8 +124,7 @@ def main():
             pg2.wait_for_selector('#dh-mini-time[data-chay="0"]')
             pg.locator('#dh-mini-btn').click()                       # tab đầu còn rev cũ: bị từ chối, không tiếp tục đè
             pg.wait_for_timeout(1200)
-            check(json.load(open(os.path.join(W, 'outputs', 'timing', 'dang_chay_P5.json'), encoding='utf-8'))['trang_thai'] == 'tam_dung',
-                  'tab cũ bị từ chối vì rev cũ: phiên vẫn tạm dừng')
+            check(trang_thai(W) == 'tam_dung', 'tab cũ bị từ chối vì rev cũ: phiên vẫn tạm dừng')
             pg2.close()
             # 4
             pg.reload()
@@ -150,6 +156,20 @@ def main():
                   '12 cột đầu đúng facetimer')
             check(glob.glob(os.path.join(W, 'outputs', 'ket_qua', 'ketqua_P5_*_NAP_001.zip')), 'có gói kết quả zip')
             pg.screenshot(path=os.path.join(shots, 'dongho_xong_1440.png'))
+            pg.locator('#close-confirm-cancel').click()
+            # 5b
+            dh2 = DongHo(W)
+            dh2.bat_dau('P5', 'assisted', dot='NAP_003', bo_anh='NAP_003', n_mat=3)
+            dh2.bat_dau('P5', 'assisted', dot='NAP_004', bo_anh='NAP_004', n_mat=3)             # đợt mới: NAP_003 tự tạm dừng, giữ nguyên giờ
+            pg.reload()
+            pg.wait_for_selector('#dh-mini-time[data-chay="1"]')
+            chip = pg.locator('#dh-mini').inner_text()
+            check('NAP_004' in chip and 'đợt khác: NAP_003' in chip, 'chip theo phiên đang chạy (NAP_004) và ghi mờ giờ riêng của đợt khác (NAP_003)')
+            check(trang_thai(W, 'NAP_003') == 'tam_dung' and trang_thai(W, 'NAP_004') == 'chay', 'mỗi người một phiên chạy: đợt cũ tạm dừng')
+            pg.locator('#btn-dong').click()
+            pg.wait_for_selector('#dh-dot-dd', state='visible')
+            check('2 đợt' in pg.locator('#close-body').inner_text() and 'NAP_003' in pg.locator('#close-body').inner_text(), 'hộp Đóng trang liệt kê hai đợt, mỗi đợt giờ riêng')
+            pg.screenshot(path=os.path.join(shots, 'dongho_hai_dot_1440.png'))
             pg.locator('#close-confirm-cancel').click()
             # 6
             open_tab(pg, 'Thống kê')

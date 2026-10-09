@@ -94,9 +94,9 @@ def test_nhan_nut_dong_trong_hop_xac_nhan_va_nut_doi_chu():
     assert {'Delete permanently', 'Push to CVAT', 'Delete image', 'Delete batch', 'Delete CVAT task', 'Delete'} <= set(ok), ok
     assert not [t for t in ok if co_dau(t)], ok
     import dong_ho_ui
-    for t in (dong_ho_ui.NUT_DUNG, dong_ho_ui.NUT_TIEP, dong_ho_ui.NUT_BO, dong_ho_ui.NUT_BO_LAN_2):
+    for t in (dong_ho_ui.NUT_DUNG, dong_ho_ui.NUT_TIEP, dong_ho_ui.NUT_BAT_DAU, dong_ho_ui.NUT_BO, dong_ho_ui.NUT_BO_LAN_2):
         assert not co_dau(t), t
-    assert (dong_ho_ui.NUT_DUNG, dong_ho_ui.NUT_TIEP) == ('Pause', 'Resume')
+    assert (dong_ho_ui.NUT_DUNG, dong_ho_ui.NUT_TIEP, dong_ho_ui.NUT_BAT_DAU) == ('Pause', 'Resume', 'Start')           # Start: đợt đang chờ bắt đầu (Upload & Continue lúc đã có đồng hồ ở đợt khác)
     ca_kho = src('ca_kho.py')
     dong = re.findall(r'gr\.update\([^)]*value="([^"]+)"', ca_kho)
     assert {'Unmark', 'Click again to unmark'} <= set(dong), dong

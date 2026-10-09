@@ -10,7 +10,7 @@ Sửa điểm không làm ở đây (làm trong CVAT).
 Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
 ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi "Upload & Open" tự chuyển trang sang lượt mới (hoặc "Review batch" ở tab Các đợt) mà
 không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team",
-Đồng hồ bấm giờ (dong_ho.py + dong_ho_ui.py, KHÔNG có tab riêng): chip ⏱ ở đầu trang thấy ở mọi tab, tự chạy khi bấm Nạp ảnh, MỘT nút Pause/Resume; Save timing (dòng `outputs\\timing\\timing_<Pk>.csv`
+Đồng hồ bấm giờ (dong_ho.py + dong_ho_ui.py, KHÔNG có tab riêng): chip ⏱ ở đầu trang thấy ở mọi tab, MỖI ĐỢT MỘT ĐỒNG HỒ (QĐ-007: giờ đợt này không lẫn đợt khác), tự chạy khi bấm Nạp ảnh, MỘT nút Pause/Resume; Save timing (dòng `outputs\\timing\\timing_<Pk>.csv`
 đúng định dạng facetimer và gói kết quả `outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip` gửi nhóm trưởng) hoặc Discard session nằm trong hộp "Đóng trang rà soát?"; nguồn sự thật là đồng hồ phía server, trạng thái ghi ra file nên đóng tab không mất; đóng trang thì tự tạm dừng),
 "Thống kê" (thong_ke.py + thong_ke_html.py + thong_ke_ui.py: CHỈ BA chỉ số của thí nghiệm hai nhóm độc lập (QĐ-006): NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa, so sánh thời gian manual với
 assisted; đọc gói kết quả, nhãn raw\\ và timing; chỉ đọc, tính khi chọn tab, xuất CSV + HTML tĩnh không ảnh mặt; nhóm trưởng dùng tool\\tong_ket.py với các gói của thành viên), "Lọc dữ liệu" (loc_du_lieu.py + loc_ui.py: bộ lọc ảnh đã có nhãn sửa tay thành bộ train/val/test cho model landmark khác sau này, chỉ chuẩn bị
@@ -1708,7 +1708,7 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
             job.start(run, ctx.runs_root, ctx.project_root)
         except RunError as e:
             return refuse(str(e))
-        dong_ho_ui.auto_start(gr, ctx, run, len(plan_st["plan"]["ok"]))     # bấm Nạp ảnh là đồng hồ bắt đầu chạy (đã có phiên thì giữ nguyên)
+        dong_ho_ui.auto_start(gr, ctx, run, len(plan_st["plan"]["ok"]), open_after)     # bấm Nạp ảnh là đồng hồ CỦA ĐỢT MỚI bắt đầu (Open: chuyển sang đợt mới; Continue: đợt cũ giữ nguyên)
         ctx.auto_open = run if open_after else None
         text = (f"Đã nạp {len(plan_st['plan']['ok'])} ảnh vào runs\\{run}\\inbox, đang chạy prepare"
                 + (": xong thì trang tự mở rà soát lượt này." if open_after else "."))
@@ -2035,6 +2035,9 @@ def main(argv=None):
             store, first = new_store, False
             ctx = AppCtx(reviewer=new_store.reviewer, run_dir=new_dir)      # job mới, ctx mới; tên người rà là tên của lượt mới (cài đặt ở tab Cài đặt)
             reviewer = ctx.reviewer
+            note = dong_ho_ui.theo_trang(ctx)                               # đồng hồ đang chạy ở đợt cũ thì đi theo trang sang đợt mới (mỗi đợt một đồng hồ)
+            if note:
+                print(note, flush=True)
     except KeyboardInterrupt:
         dong_ho_ui.tu_tam_dung(ctx)                       # Ctrl+C: đồng hồ đang chạy tự tạm dừng, không mất số đo
         if store is not None and os.path.exists(store.done_path):

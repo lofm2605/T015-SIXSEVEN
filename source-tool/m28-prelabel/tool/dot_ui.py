@@ -19,6 +19,7 @@ import re
 import threading
 
 import day_cvat
+import dong_ho_ui
 import dot_anh
 import nap_anh
 from m28core import dang_chay
@@ -382,6 +383,9 @@ def dot_tab(gr, demo, store, ctx, deps):
                 return dot_anh.grid_html(info, dot_anh.image_rows(run_dir, reviewer), s["page"], dot_anh.list_trash(run_dir),
                                          active=is_active(s["run"]))
         infos = [dot_anh.run_info(os.path.join(ctx.runs_root, r), reviewer) for r in dot_anh.list_runs(ctx.runs_root)]
+        gio = dong_ho_ui.gio_cac_dot(ctx)                   # giờ RIÊNG của từng đợt (đồng hồ ở đầu trang tính mỗi đợt một phiên)
+        for i in infos:
+            i["gio"] = gio.get(i["name"], [])
         ready = {}
         for i in infos:
             if i["state"] == dot_anh.S_DONE and not (i["push"] or {}).get("trang_thai") == "xong":

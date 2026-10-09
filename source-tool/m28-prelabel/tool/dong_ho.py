@@ -1,13 +1,17 @@
 """Đồng hồ bấm giờ gán nhãn M28 (logic thuần, chỉ thư viện chuẩn; giao diện ở dong_ho_ui.py). Thay facetimer dòng lệnh của P5.
 
-Đơn vị đo là PHIÊN (QĐ-006): từ lúc bắt đầu nạp ảnh lên tool đến lúc hoàn thành. Thao tác: bắt đầu (tự chạy khi bấm Nạp ảnh), tạm dừng/tiếp tục (nút Pause/Resume ở đầu trang), hủy (có xác nhận; hộp Đóng trang: Discard session), xong (lưu & xuất; hộp Đóng trang: Lưu số đo).
+Đơn vị đo là PHIÊN (QĐ-006) và MỖI ĐỢT MỘT PHIÊN (QĐ-007): từ lúc bắt đầu nạp ảnh của đợt đó lên tool đến lúc hoàn thành. Một người có thể có phiên của nhiều đợt cùng lúc
+(khoá (người, đợt), mỗi phiên giây riêng, gói kết quả riêng ketqua_<Pk>_<DDMM>_<đợt>), nhưng tại một thời điểm chỉ MỘT phiên của người đó chạy (bắt đầu hoặc tiếp tục phiên này
+thì phiên đang chạy ở đợt khác tự tạm dừng, giữ nguyên giây của nó). Thao tác: bắt đầu (tự chạy khi bấm Nạp ảnh; Upload & Continue lúc đang có phiên ở đợt khác thì đợt mới "chờ" ở 00:00),
+tạm dừng/tiếp tục (nút Pause/Resume ở đầu trang), hủy (có xác nhận; hộp Đóng trang: Discard session), xong (lưu & xuất; hộp Đóng trang: Save timing).
 Bấm từng mặt ("Xong mặt này → mặt tiếp") chỉ là TUỲ CHỌN cho ai muốn đo chi tiết; nếu chỉ đo cả phiên thì giây/mặt = giây phiên (không tính lúc tạm dừng) ÷ số mặt
 và cột `uoc_luong_chia_deu` = 1 để thống kê biết đây là ước lượng chứ không phải đo từng mặt.
 
 Nguồn sự thật là đồng hồ phía server (`time.monotonic`, cộng dồn các đoạn không tạm dừng). Trạng thái ghi NGUYÊN TỬ ra `outputs/timing/dang_chay_<người>.json` sau
-mọi thao tác (đóng tab, đóng trình duyệt, tải lại trang không mất gì); mỗi người một phiên; mỗi thao tác kèm `rev` đã thấy (tab cũ bị từ chối); khoá luồng + file
+mọi thao tác (đóng tab, đóng trình duyệt, tải lại trang không mất gì); một tệp mỗi người, chứa các phiên theo đợt (`cac_dot`; tệp cũ một phiên ở đầu tệp vẫn đọc được);
+mỗi thao tác kèm `rev` đã thấy của phiên đó (tab cũ bị từ chối); khoá luồng + file
 `.khoa_<người>` (O_EXCL) chống ghi chồng giữa hai tiến trình. Máy khởi động lại (`moc_mono` lệch) thì đoạn đang chạy tính lại bằng giờ thật; trang đã tắt khi đồng hồ
-đang chạy thì mở lại hỏi trừ khoảng tắt hay giữ.
+đang chạy thì mở lại hỏi trừ khoảng tắt hay giữ. Thao tác không nêu `dot` chỉ chạy khi người đó có đúng một phiên (nhiều phiên thì phải chỉ rõ đợt).
 
 Xong (lưu & xuất) ghi (1) gói kết quả `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` + `.json` (xem m28core/goi_kq.py) để gửi nhóm trưởng, (2) các dòng vào
 `outputs/timing/timing_<người>.csv`: 12 cột đầu ĐÚNG tên, thứ tự, nghĩa của facetimer (date, person, condition, task, job, block, seq, face_id, seconds, warmup,
@@ -36,7 +40,8 @@ import dot_anh  # noqa: E402  (Pending: yêu cầu xác nhận dùng một lần
 from m28core import collect as collect_mod  # noqa: E402  (latest_raw_files)
 from m28core import dang_chay, goi_kq, nhom as nhom_mod  # noqa: E402
 
-PHIEN_BAN = 1
+PHIEN_BAN = 1                          # định dạng MỘT phiên (khoá phien_ban bên trong mỗi phiên)
+PHIEN_BAN_TEP = 2                      # định dạng tệp dang_chay_<người>.json: {"phien_ban_tep": 2, "cac_dot": {đợt: phiên}}; bản 1 = một phiên ở đầu tệp
 NGUOI_OK = ("P1", "P2", "P3", "P4", "P5")
 DIEU_KIEN = ("manual", "assisted")
 THU_MUC = os.path.join("outputs", "timing")
@@ -66,6 +71,12 @@ CANH_BAO_VI = {
     "khoang_tat": "Trang đã tắt khi đồng hồ đang chạy.",
 }
 HANH_DONG = {"qua_dem": ("giu", "sua"), "phien_lau": ("sua", "giu"), "mat_lau": ("sua", "giu"), "khoi_dong_lai": ("sua", "giu"), "khoang_tat": ("tru", "giu")}
+
+
+class Phien(dict):
+    """Trạng thái MỘT phiên (một đợt) vừa đọc từ tệp. `.tep` là dict {đợt: Phien} của cả tệp người đó, để _ghi ghi lại nguyên tệp (các phiên khác giữ nguyên).
+    json.dumps xem như dict thường; `.tep` không vào tệp."""
+    tep = None
 
 
 class DongHoLoi(Exception):
@@ -199,20 +210,58 @@ class DongHo:
             bad("danh sách mặt sai")
         return st
 
-    def doc_trang_thai(self, nguoi):
-        """Nội dung file trạng thái hoặc None nếu chưa có phiên. Hỏng thì DongHoLoi(hong=True)."""
+    def _doc_tep(self, nguoi):
+        """{đợt: Phien} của người, {} nếu chưa có tệp. Mỗi lần đọc dựng đối tượng mới (không chia sẻ trạng thái giữa các thao tác). Tệp cũ (MỘT phiên ở đầu tệp, trước QĐ-007)
+        được bọc lại thành {đợt của phiên đó: phiên} và lần ghi đầu tiên sẽ ghi sang định dạng mới. Hỏng thì DongHoLoi(hong=True)."""
         p = self.p_state(nguoi)
         if not os.path.exists(p):
-            return None
+            return {}
         try:
             with open(p, encoding="utf-8") as f:
-                st = json.load(f)
+                raw = json.load(f)
         except (OSError, ValueError) as e:
             raise DongHoLoi(f"File trạng thái đồng hồ của {nguoi} không đọc được ({type(e).__name__}). Bấm \"Bỏ trạng thái hỏng\" (file chỉ đổi tên, không xoá).", hong=True)
-        st.setdefault("mat", []) if isinstance(st, dict) else None
-        return self._kiem_trang_thai(st, nguoi)
+        if isinstance(raw, dict) and "cac_dot" in raw:
+            if raw.get("phien_ban_tep") != PHIEN_BAN_TEP or not isinstance(raw["cac_dot"], dict):
+                self._hong(nguoi, "tệp sai định dạng")
+            cac = raw["cac_dot"]
+        elif isinstance(raw, dict) and "phien" in raw:                       # định dạng cũ: một phiên duy nhất
+            cac = {str(raw.get("dot") or ""): raw}
+        else:
+            self._hong(nguoi, "không phải đối tượng JSON" if not isinstance(raw, dict) else "không có phiên nào")
+        tep = {}
+        for dot, st in cac.items():
+            if not isinstance(st, dict):
+                self._hong(nguoi, "một phiên không phải đối tượng JSON")
+            st.setdefault("mat", [])
+            self._kiem_trang_thai(st, nguoi)
+            if str(st.get("dot") or "") != dot:
+                self._hong(nguoi, "khoá đợt không khớp")
+            ph = Phien(st)
+            ph.tep = tep
+            tep[dot] = ph
+        return tep
+
+    def _hong(self, nguoi, why):
+        raise DongHoLoi(f"File trạng thái đồng hồ của {nguoi} hỏng ({why}). Bấm \"Bỏ trạng thái hỏng\" (file chỉ đổi tên, không xoá) rồi Bắt đầu lại.", hong=True)
+
+    def doc_trang_thai(self, nguoi, dot=None):
+        """Một phiên của người (xem _chon cho cách chọn khi dot=None) hoặc None nếu chưa có. Hỏng thì DongHoLoi(hong=True)."""
+        return self._chon(self._doc_tep(nguoi), nguoi, dot, False)
+
+    def _viet_tep(self, nguoi, tep):
+        """Ghi nguyên tệp của người (nguyên tử); không còn phiên nào thì xoá tệp."""
+        if not tep:
+            try:
+                os.remove(self.p_state(nguoi))
+            except FileNotFoundError:
+                pass
+            return
+        os.makedirs(self.dir, exist_ok=True)
+        ca_kho._atomic_write(self.p_state(nguoi), json.dumps(dict(phien_ban_tep=PHIEN_BAN_TEP, cac_dot=tep), ensure_ascii=False, indent=1).encode("utf-8"))
 
     def _ghi(self, st, nguoi, tang_rev=True, heartbeat=True):
+        """Cập nhật mốc của phiên `st` rồi ghi cả tệp của người (các phiên khác trong tệp được ghi nguyên như lúc đọc)."""
         if tang_rev:
             st["rev"] = int(st.get("rev", 0)) + 1
         st["pid"] = self.pid
@@ -220,14 +269,32 @@ class DongHo:
             st["lan_cuoi_thay"] = ca_kho.iso(self.gio.now())
             st["lan_cuoi_epoch"] = self.gio.epoch()
         st["moc_mono"] = self.gio.epoch() - self.gio.mono()
-        os.makedirs(self.dir, exist_ok=True)
-        ca_kho._atomic_write(self.p_state(nguoi), json.dumps(st, ensure_ascii=False, indent=1).encode("utf-8"))
+        tep = st.tep if getattr(st, "tep", None) is not None else {}
+        tep[str(st.get("dot") or "")] = st
+        self._viet_tep(nguoi, tep)
 
-    def _xoa_trang_thai(self, nguoi):
-        try:
-            os.remove(self.p_state(nguoi))
-        except FileNotFoundError:
-            pass
+    def _xoa_phien(self, st, nguoi):
+        """Bỏ phiên `st` khỏi tệp của người (xong hoặc hủy); phiên của đợt khác giữ nguyên, hết phiên thì xoá tệp."""
+        tep = st.tep if getattr(st, "tep", None) is not None else {}
+        tep.pop(str(st.get("dot") or ""), None)
+        self._viet_tep(nguoi, tep)
+
+    def _chon(self, tep, nguoi, dot, bat_buoc):
+        """Chọn một phiên trong tệp. dot cụ thể: phiên của đợt đó. dot=None: phiên duy nhất; nhiều phiên thì từ chối (phải chỉ rõ đợt). Không có: raise nếu bat_buoc, không thì None."""
+        if dot is None:
+            if not tep:
+                if bat_buoc:
+                    raise DongHoLoi(f"{nguoi} chưa có phiên nào đang chạy (tab này có thể đã cũ): bấm Bắt đầu.", cu=True)
+                return None
+            if len(tep) == 1:
+                return next(iter(tep.values()))
+            raise DongHoLoi(f"{nguoi} có đồng hồ của {len(tep)} đợt ({', '.join(k or '(không tên)' for k in tep)}): phải chỉ rõ đợt nào.")
+        dot = str(dot or "")
+        if dot in tep:
+            return tep[dot]
+        if bat_buoc:
+            raise DongHoLoi(f"{nguoi} chưa có đồng hồ cho đợt {dot or '(không tên)'} (tab này có thể đã cũ): bấm Bắt đầu.", cu=True)
+        return None
 
     # ---------- tính giờ ----------
     def _giay_doan(self, g, mono, epoch):
@@ -245,6 +312,8 @@ class DongHo:
         """Tổng giây tạm dừng (khoảng giữa các đoạn chạy, và từ cuối đoạn cuối đến bây giờ nếu đang tạm dừng)."""
         mono = self.gio.mono() if mono is None else mono
         tong = 0.0
+        if st.get("cho"):                                   # phiên chờ (chưa chạy lần nào): thời gian chờ không phải tạm dừng
+            return 0.0
         segs = st["doan"]
         for p, n in zip(segs, segs[1:]):
             tong += max(0.0, (n["ea"] - (p["eb"] if p.get("eb") is not None else n["ea"])))
@@ -297,12 +366,10 @@ class DongHo:
             changed = True
         return changed
 
-    def _nap(self, nguoi, bat_buoc=True):
-        """(st, đã_đổi). st None nếu chưa có phiên (bat_buoc=False)."""
-        st = self.doc_trang_thai(nguoi)
+    def _nap(self, nguoi, bat_buoc=True, dot=None):
+        """(st, đã_đổi) của phiên đợt `dot` (None: phiên duy nhất của người; nhiều phiên thì phải chỉ rõ). st None nếu chưa có phiên (bat_buoc=False)."""
+        st = self._chon(self._doc_tep(nguoi), nguoi, dot, bat_buoc)
         if st is None:
-            if bat_buoc:
-                raise DongHoLoi(f"{nguoi} chưa có phiên nào đang chạy (tab này có thể đã cũ): bấm Bắt đầu.", cu=True)
             return None, False
         return st, self._dong_bo(st)
 
@@ -343,25 +410,73 @@ class DongHo:
         return [c for c in self.canh_bao(st) if not c["xu_ly"]]
 
     # ---------- khung nhìn cho giao diện ----------
-    def xem(self, nguoi):
-        """dict mô tả phiên của `nguoi` cho giao diện (không đổi gì). co_phien=False nếu chưa có phiên; lỗi file hỏng -> dict(hong=True, loi=...)."""
-        out = dict(co_phien=False, nguoi=nguoi, rev=0, hong=False, loi="")
+    @staticmethod
+    def _dot_noi_bat(tep, uu_tien=None):
+        """Đợt mà giao diện nên theo trong tệp `tep`: phiên ĐANG CHẠY (mỗi người tối đa một); không có thì phiên của đợt `uu_tien` (đợt của trang, KHÔNG mượn phiên đợt khác để
+        khỏi tính giờ nhầm đợt); uu_tien=None (trang chưa mở đợt nào) thì phiên chạm gần nhất. None nếu không có."""
+        chay = [k for k, st in tep.items() if st["trang_thai"] == "chay"]
+        if chay:
+            return max(chay, key=lambda k: (float(tep[k]["doan"][-1].get("ea") or 0), k))
+        if uu_tien is not None:
+            k = str(uu_tien or "")
+            return k if k in tep else None
+        if tep:
+            return max(tep, key=lambda k: (float(tep[k].get("lan_cuoi_epoch") or 0), k))
+        return None
+
+    def chon_dot(self, nguoi, uu_tien=None):
+        """Đợt mà chip nên theo cho `nguoi` (xem _dot_noi_bat); None nếu không có phiên hoặc tệp hỏng."""
         try:
-            st, changed = self._nap(nguoi, bat_buoc=False)
+            return self._dot_noi_bat(self._doc_tep(nguoi), uu_tien)
+        except DongHoLoi:
+            return None
+
+    def _tom_tat_dot(self, st):
+        return dict(dot=str(st.get("dot") or ""), phien=st["phien"], trang_thai=st["trang_thai"], chay=st["trang_thai"] == "chay", cho=bool(st.get("cho")),
+                    giay_phien=self.giay_hieu_luc(st), n_mat=st["n_mat"], dieu_kien=st["dieu_kien"], task=st.get("task", ""), rev=st["rev"], bat_dau=st["bat_dau"])
+
+    def xem(self, nguoi, dot=None):
+        """dict mô tả MỘT phiên của `nguoi` cho giao diện (không đổi gì). dot=None: phiên đang chạy, không có thì phiên chạm gần nhất. co_phien=False nếu chưa có phiên;
+        lỗi file hỏng -> dict(hong=True, loi=...). cac_dot = tóm tắt các phiên KHÁC của người này (đợt khác)."""
+        return self._xem(nguoi, lambda tep: self._dot_noi_bat(tep) if dot is None else (str(dot or "") if str(dot or "") in tep else None))
+
+    def xem_theo_trang(self, nguoi, dot_trang):
+        """Như xem, cho chip của trang đang ở đợt `dot_trang` (None: chưa mở đợt nào): phiên đang chạy > phiên của đợt đó. Không có thì co_phien=False kèm cac_dot."""
+        return self._xem(nguoi, lambda tep: self._dot_noi_bat(tep, uu_tien=dot_trang))
+
+    def liet_ke(self, nguoi):
+        """Khung nhìn của MỌI phiên (mỗi đợt một) của người, phiên bắt đầu sớm nhất trước; [] nếu không có hoặc tệp hỏng."""
+        try:
+            keys = list(self._doc_tep(nguoi))
+        except DongHoLoi:
+            return []
+        out = [v for v in (self.xem(nguoi, k) for k in keys) if v.get("co_phien")]
+        return sorted(out, key=lambda v: (str(v["bat_dau"]), v["dot"]))
+
+    def _xem(self, nguoi, chon):
+        out = dict(co_phien=False, nguoi=nguoi, rev=0, hong=False, loi="", cac_dot=[])
+        try:
+            tep = self._doc_tep(nguoi)
         except DongHoLoi as e:
             out.update(hong=e.hong, loi=str(e))
             return out
-        if st is None:
+        dot = chon(tep) if tep else None
+        if dot is None:
+            out["cac_dot"] = [self._tom_tat_dot(o) for o in tep.values()]
             return out
-        if changed:
+        st = tep[dot]
+        if self._dong_bo(st):
             try:
                 with self._khoa(nguoi):
-                    st2, _c = self._nap(nguoi, bat_buoc=False)
+                    tep2 = self._doc_tep(nguoi)
+                    st2 = tep2.get(dot)
                     if st2 is not None:
+                        self._dong_bo(st2)
                         self._ghi(st2, nguoi, tang_rev=False)
-                        st = st2
+                        st, tep = st2, tep2
             except (DongHoLoi, OSError):
                 pass
+        out["cac_dot"] = [self._tom_tat_dot(o) for k, o in tep.items() if k != dot]
         mono, epoch = self.gio.mono(), self.gio.epoch()
         tong = self.tong_chay(st, mono, epoch)
         mat_hien = max(0.0, tong - st["cat_active"] - st.get("tru_giay", 0.0))
@@ -370,7 +485,7 @@ class DongHo:
         out.update(co_phien=True, rev=st["rev"], phien=st["phien"], dieu_kien=st["dieu_kien"], dot=st.get("dot", ""), bo_anh=st.get("bo_anh", ""), task=st.get("task", ""),
                    job=st.get("job", ""), khoi=st.get("khoi", ""), n_mat=st["n_mat"], seq=seq, trang_thai=st["trang_thai"], theo_mat=theo_mat,
                    face_id=f"{st.get('khoi', '')}_{seq:02d}", giay_phien=self.giay_hieu_luc(st, tong), giay_mat=mat_hien, giay_hien_thi=(mat_hien if theo_mat else self.giay_hieu_luc(st, tong)),
-                   chay=st["trang_thai"] == "chay", so_lan_tam_dung=st["so_lan_tam_dung"], giay_tam_dung=self.tong_tam_dung(st),
+                   chay=st["trang_thai"] == "chay", cho=bool(st.get("cho")), so_lan_tam_dung=st["so_lan_tam_dung"], giay_tam_dung=self.tong_tam_dung(st),
                    mat=[dict(seq=m["seq"], face_id=m["face_id"], giay=m["giay"], tam_dung=m.get("tam_dung", 0), ghi_chu=m.get("ghi_chu", ""), sua_tay=int(m.get("sua_tay", 0)))
                         for m in st["mat"]],
                    canh_bao=self.canh_bao(st), bat_dau=st["bat_dau"], ghi_chu_phien=st.get("ghi_chu_phien", ""), sua_tay=int(bool(st.get("sua_tay"))),
@@ -379,9 +494,11 @@ class DongHo:
         return out
 
     # ---------- thao tác ----------
-    def bat_dau(self, nguoi, dieu_kien, dot="", task="", job="", khoi="", n_mat=N_MAT_MAC_DINH, seq_dau=None, bo_anh="", ghi_chu="", rev=0):
-        """Bắt đầu phiên. Từ chối nếu người này đã có phiên (chạy hoặc tạm dừng), ô sai, hoặc task/điều kiện lệch (m28-manual với assisted...). Seq sắp ghi đã có dòng
-        cho cùng người/task/khối thì lần bấm đầu chỉ cảnh báo, bấm lần hai (cùng ô) mới bắt đầu."""
+    def bat_dau(self, nguoi, dieu_kien, dot="", task="", job="", khoi="", n_mat=N_MAT_MAC_DINH, seq_dau=None, bo_anh="", ghi_chu="", rev=0, cho=False):
+        """Bắt đầu phiên của đợt `dot` (mỗi đợt một phiên). Từ chối nếu người này đã có phiên CỦA ĐỢT NÀY (chạy hoặc tạm dừng), ô sai, hoặc task/điều kiện lệch (m28-manual với
+        assisted...). Phiên đang chạy ở đợt KHÁC của người này tự tạm dừng (mỗi người một phiên chạy), giữ nguyên giây của nó. cho=True: tạo phiên CHỜ (tạm dừng, 00:00, chưa tính giờ):
+        giờ bắt đầu thật là lúc tiếp tục lần đầu; phiên đang chạy ở đợt khác không bị đụng tới. Seq sắp ghi đã có dòng cho cùng người/task/khối thì lần bấm đầu chỉ cảnh báo,
+        bấm lần hai (cùng ô) mới bắt đầu."""
         self._chan_dong()
         self._nguoi(nguoi)
         if dieu_kien not in DIEU_KIEN:
@@ -416,10 +533,11 @@ class DongHo:
         if seq0 < 1:
             raise DongHoLoi("Seq bắt đầu phải từ 1.")
         with self._khoa(nguoi):
-            cu = self.doc_trang_thai(nguoi) if os.path.exists(self.p_state(nguoi)) else None
+            tep = self._doc_tep(nguoi)
+            cu = tep.get(dot)
             if cu is not None:
-                raise DongHoLoi(f"{nguoi} đã có một phiên ({cu['dieu_kien']} · {cu.get('task') or cu.get('dot') or '?'} · bắt đầu {str(cu['bat_dau'])[11:16]}): "
-                                "bấm Xong (lưu) hoặc Hủy phiên đó trước khi bắt đầu phiên mới.", cu=True)
+                raise DongHoLoi(f"{nguoi} đã có đồng hồ của đợt {dot or '(không tên)'} ({cu['dieu_kien']} · {cu.get('task') or '?'} · bắt đầu {str(cu['bat_dau'])[11:16]}): "
+                                "bấm Xong (lưu) hoặc Hủy phiên đó trước khi bắt đầu lại đợt này.", cu=True)
             if rev is not None and rev != 0:
                 raise DongHoLoi("Đồng hồ vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm lại.", cu=True)
             canh = []
@@ -439,14 +557,32 @@ class DongHo:
             if trung:
                 canh.append("trung_seq")
             now = self.gio.now()
-            st = dict(phien_ban=PHIEN_BAN, rev=0, phien=f"{nguoi}-{now.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}", nguoi=nguoi, dieu_kien=dieu_kien,
-                      dot=dot, bo_anh=bo_anh or cfg.get("bo_anh", ""), task=task, job=job, khoi=khoi, n_mat=n_mat, seq_dau=seq0, ghi_chu_phien=ghi_chu,
-                      bat_dau=ca_kho.iso(now), trang_thai="chay", doan=[], so_lan_tam_dung=0, mat=[], cat_active=0.0, cat_tam_dung=0, cat_iso=ca_kho.iso(now),
-                      tru_giay=0.0, sua_tay=0, canh_bao_ma=list(canh), quyet_dinh={}, khoang_tat=None, nhom_cau_hinh=g or "")
-            self._mo_doan(st)
+            st = Phien(phien_ban=PHIEN_BAN, rev=0, phien=f"{nguoi}-{now.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}", nguoi=nguoi, dieu_kien=dieu_kien,
+                       dot=dot, bo_anh=bo_anh or cfg.get("bo_anh", ""), task=task, job=job, khoi=khoi, n_mat=n_mat, seq_dau=seq0, ghi_chu_phien=ghi_chu,
+                       bat_dau=ca_kho.iso(now), trang_thai="chay", doan=[], so_lan_tam_dung=0, mat=[], cat_active=0.0, cat_tam_dung=0, cat_iso=ca_kho.iso(now),
+                       tru_giay=0.0, sua_tay=0, canh_bao_ma=list(canh), quyet_dinh={}, khoang_tat=None, nhom_cau_hinh=g or "")
+            st.tep = tep
+            if cho:
+                self._mo_doan(st)
+                self._dong_doan(st)                                         # đoạn dài 0 giây: giữ đúng cấu trúc phiên, giờ thật bắt đầu ở lần tiếp tục đầu tiên
+                st["trang_thai"], st["cho"] = "tam_dung", True
+            else:
+                self._tam_dung_cac_phien_khac(tep, st)
+                self._mo_doan(st)
             st["moc_mono"] = self.gio.epoch() - self.gio.mono()
             self._ghi(st, nguoi)
-            return self.xem(nguoi)
+            return self.xem(nguoi, dot)
+
+    def _tam_dung_cac_phien_khac(self, tep, st):
+        """Mỗi người chỉ một phiên chạy: tạm dừng (giữ nguyên giây) các phiên ĐANG CHẠY khác `st` trong tệp; tăng rev để tab cũ biết. Trả [đợt đã tạm dừng]."""
+        out = []
+        for k, o in tep.items():
+            if o is not st and o["trang_thai"] == "chay":
+                self._dong_bo(o)
+                self._tam_dung_trong(o)
+                o["rev"] = int(o.get("rev", 0)) + 1
+                out.append(k)
+        return out
 
     def seq_goi_y(self, nguoi, task, khoi):
         """seq lớn nhất đã ghi cho cùng người/task/khối + 1 (chưa có thì 1): buổi bù thì mặt đầu tự thành khởi động."""
@@ -472,17 +608,18 @@ class DongHo:
                     have.add(s)
         return sorted(have)
 
-    def tam_dung(self, nguoi, rev=None):
+    def tam_dung(self, nguoi, rev=None, dot=None):
         self._chan_dong()
         self._nguoi(nguoi)
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             if st["trang_thai"] != "chay":
                 raise DongHoLoi("Đồng hồ không đang chạy nên không tạm dừng được." if st["trang_thai"] == "tam_dung" else "Đã đủ mặt: bấm Xong (lưu).")
             self._tam_dung_trong(st)
             self._ghi(st, nguoi)
-        return self.xem(nguoi)
+            k = str(st.get("dot") or "")
+        return self.xem(nguoi, k)
 
     def _tam_dung_trong(self, st, ma=None):
         self._dong_doan(st)
@@ -491,28 +628,35 @@ class DongHo:
         if ma and ma not in st.setdefault("canh_bao_ma", []):
             st["canh_bao_ma"].append(ma)
 
-    def tiep_tuc(self, nguoi, rev=None):
+    def tiep_tuc(self, nguoi, rev=None, dot=None):
+        """Chạy tiếp phiên (hoặc chạy lần đầu nếu là phiên chờ). Phiên đang chạy ở đợt khác của người này tự tạm dừng (mỗi người một phiên chạy)."""
         self._chan_dong()
         self._nguoi(nguoi)
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             if st["trang_thai"] == "chay":
                 raise DongHoLoi("Đồng hồ đang chạy rồi.")
             if st["trang_thai"] == "du_mat":
                 raise DongHoLoi("Đã đủ mặt: bấm Xong (lưu), hoặc Hoàn tác mặt vừa xong để làm tiếp.")
+            self._tam_dung_cac_phien_khac(st.tep, st)
+            if st.get("cho"):                                               # phiên chờ: giờ bắt đầu thật là bây giờ (thời gian chờ không tính)
+                now = self.gio.now()
+                st["doan"], st["bat_dau"], st["cat_iso"] = [], ca_kho.iso(now), ca_kho.iso(now)
+                st.pop("cho")
             self._mo_doan(st)
             st["trang_thai"] = "chay"
             self._ghi(st, nguoi)
-        return self.xem(nguoi)
+            k = str(st.get("dot") or "")
+        return self.xem(nguoi, k)
 
-    def xong_mat(self, nguoi, rev=None, ghi_chu=""):
+    def xong_mat(self, nguoi, rev=None, ghi_chu="", dot=None):
         """(Tuỳ chọn) khép mặt đang làm, mở mặt kế. Mặt < 2 giây thì từ chối (chống bấm đúp). Đang tạm dừng thì phải Tiếp tục trước."""
         self._chan_dong()
         self._nguoi(nguoi)
         ghi_chu = _clean(ghi_chu, 200, "Ghi chú mặt")
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             if st["trang_thai"] == "tam_dung":
                 raise DongHoLoi("Đang tạm dừng: bấm Tiếp tục trước khi bấm Xong mặt.")
@@ -534,14 +678,15 @@ class DongHo:
                 self._dong_doan(st)
                 st["trang_thai"] = "du_mat"
             self._ghi(st, nguoi)
-        return self.xem(nguoi)
+            k = str(st.get("dot") or "")
+        return self.xem(nguoi, k)
 
-    def hoan_tac_mat(self, nguoi, rev=None):
+    def hoan_tac_mat(self, nguoi, rev=None, dot=None):
         """Gộp mặt vừa khép trở lại thành mặt đang làm (giây, số lần tạm dừng cộng dồn, seq lùi một)."""
         self._chan_dong()
         self._nguoi(nguoi)
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             if not st["mat"]:
                 raise DongHoLoi("Chưa có mặt nào đã khép trong phiên này để hoàn tác.")
@@ -552,9 +697,10 @@ class DongHo:
                 st["trang_thai"] = "tam_dung"
                 st["so_lan_tam_dung"] += 1
             self._ghi(st, nguoi)
-        return self.xem(nguoi)
+            k = str(st.get("dot") or "")
+        return self.xem(nguoi, k)
 
-    def sua_thoi_gian(self, nguoi, giay, rev=None):
+    def sua_thoi_gian(self, nguoi, giay, rev=None, dot=None):
         """Sửa thời gian của đơn vị đang đo (mặt đang làm nếu có bấm từng mặt, không thì cả phiên) xuống `giay` thật (2 giây <= giá trị <= số đo được). Đặt sua_tay = 1."""
         self._chan_dong()
         self._nguoi(nguoi)
@@ -562,7 +708,7 @@ class DongHo:
         if v is None:
             raise DongHoLoi("Nhập thời gian dạng mm:ss (ví dụ 12:30) hoặc h:mm:ss.")
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             do = self.tong_chay(st) - st["cat_active"]
             if v < MAT_TOI_THIEU_GIAY:
@@ -578,28 +724,30 @@ class DongHo:
                 if c["ma"] in ("phien_lau", "mat_lau", "khoi_dong_lai", "qua_dem"):
                     qd[c["ma"]] = "sua"
             self._ghi(st, nguoi)
-        return self.xem(nguoi)
+            k = str(st.get("dot") or "")
+        return self.xem(nguoi, k)
 
-    def giu_canh_bao(self, nguoi, ma, rev=None):
+    def giu_canh_bao(self, nguoi, ma, rev=None, dot=None):
         self._chan_dong()
         self._nguoi(nguoi)
         if ma not in HANH_DONG:
             raise DongHoLoi("Cảnh báo không hợp lệ.")
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             st.setdefault("quyet_dinh", {})[ma] = "giu"
             if ma not in st.setdefault("canh_bao_ma", []):
                 st["canh_bao_ma"].append(ma)
             self._ghi(st, nguoi)
-        return self.xem(nguoi)
+            k = str(st.get("dot") or "")
+        return self.xem(nguoi, k)
 
-    def tru_khoang_tat(self, nguoi, rev=None):
+    def tru_khoang_tat(self, nguoi, rev=None, dot=None):
         """Trừ khoảng trang tắt (coi như tạm dừng từ lần cuối thấy trang): đóng đoạn chạy tại thời điểm đó; người dùng bấm Resume để chạy lại."""
         self._chan_dong()
         self._nguoi(nguoi)
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             kt = st.get("khoang_tat")
             if not kt:
@@ -613,7 +761,8 @@ class DongHo:
                 st["so_lan_tam_dung"] += 1
             st.setdefault("quyet_dinh", {})["khoang_tat"] = "tru"
             self._ghi(st, nguoi)
-        return self.xem(nguoi)
+            k = str(st.get("dot") or "")
+        return self.xem(nguoi, k)
 
     def bo_trang_thai_hong(self, nguoi):
         """Đổi tên file trạng thái hỏng thành dang_chay_<người>.hong-<YYYYMMDD-HHMMSS>.json (không xoá)."""
@@ -623,7 +772,7 @@ class DongHo:
             if not os.path.exists(p):
                 raise DongHoLoi("Không có file trạng thái nào để bỏ.")
             try:
-                self.doc_trang_thai(nguoi)
+                self._doc_tep(nguoi)
                 raise DongHoLoi("File trạng thái vẫn đọc được (không hỏng): dùng Xong hoặc Hủy phiên.")
             except DongHoLoi as e:
                 if not e.hong:
@@ -633,25 +782,26 @@ class DongHo:
             return os.path.basename(dst)
 
     # ---------- Hủy (có xác nhận) ----------
-    def huy_mo(self, nguoi):
-        """Mở yêu cầu hủy: trả dict(ma, tom_tat). Mở yêu cầu mới thì yêu cầu cũ hết hiệu lực."""
+    def huy_mo(self, nguoi, dot=None):
+        """Mở yêu cầu hủy phiên của đợt `dot`: trả dict(ma, tom_tat). Mở yêu cầu mới thì yêu cầu cũ hết hiệu lực."""
         self._chan_dong()
         self._nguoi(nguoi)
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             tong = self.tong_chay(st)
             tt = (f"Bỏ phiên {nguoi} · {st.get('task') or st.get('dot') or '?'} · {st['dieu_kien']}: {len(st['mat'])} mặt đã khép, {fmt_giay(tong)}. "
                   f"KHÔNG ghi dòng nào vào timing_{nguoi}.csv.")
             it = self._huy.setdefault(nguoi, dot_anh.Pending()).open(nguoi=nguoi, phien=st["phien"])
             return dict(ma=it["token"], tom_tat=tt, rev=st["rev"])
 
-    def huy_xac_nhan(self, nguoi, ma, chu, ly_do="", rev=None):
-        """Hủy phiên nếu mã yêu cầu còn hiệu lực VÀ chữ gõ là HUY (không phân biệt hoa thường, nhận HỦY/HUỶ). Không ghi dòng nào vào timing_<người>.csv."""
+    def huy_xac_nhan(self, nguoi, ma, chu, ly_do="", rev=None, dot=None):
+        """Hủy phiên của đợt `dot` nếu mã yêu cầu còn hiệu lực (đúng phiên đó) VÀ chữ gõ là HUY (không phân biệt hoa thường, nhận HỦY/HUỶ). Không ghi dòng nào vào timing_<người>.csv.
+        Phiên của đợt khác giữ nguyên."""
         self._chan_dong()
         self._nguoi(nguoi)
         ly_do = _clean(ly_do, 200, "Lý do")
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             it = self._huy.get(nguoi)
             req = it.take(ma) if it else None
@@ -663,7 +813,7 @@ class DongHo:
             row = dict(thoi_diem=ca_kho.iso(self.gio.now()), nguoi=nguoi, dieu_kien=st["dieu_kien"], task=st.get("task", ""), job=st.get("job", ""), khoi=st.get("khoi", ""),
                        phien=st["phien"], so_mat_bo=len(st["mat"]), giay_bo=round(tong, 1), ly_do=ly_do)
             self._noi_huy(nguoi, row)
-            self._xoa_trang_thai(nguoi)
+            self._xoa_phien(st, nguoi)
             self._cho_xong.pop(nguoi, None)
         return row
 
@@ -681,13 +831,14 @@ class DongHo:
         ca_kho._atomic_write(p, (old + buf.getvalue()).encode("utf-8"))
 
     # ---------- Xong (lưu & xuất) ----------
-    def xong_luu(self, nguoi, rev=None, tinh_mat_dang_lam=True, so_mat=None, nhan_file="auto", ghi_chu_phien=None, ngay=None):
-        """Khép phiên, ghi gói kết quả và các dòng vào timing_<người>.csv một lần, nguyên tử; ghi xong mới xoá file trạng thái. Lỗi ghi thì giữ nguyên trạng thái.
+    def xong_luu(self, nguoi, rev=None, tinh_mat_dang_lam=True, so_mat=None, nhan_file="auto", ghi_chu_phien=None, ngay=None, dot=None):
+        """Khép phiên của đợt `dot`, ghi gói kết quả và các dòng vào timing_<người>.csv một lần, nguyên tử; ghi xong mới bỏ phiên đó khỏi file trạng thái (phiên của đợt khác giữ
+        nguyên). Lỗi ghi thì giữ nguyên trạng thái.
         Còn cảnh báo chưa xử lý thì lần bấm đầu từ chối (cho=True), bấm lần hai (không đổi gì ở giữa) mới lưu. Trả dict(ok, tom_tat, csv, goi, canh_bao, thong_bao)."""
         self._chan_dong()
         self._nguoi(nguoi)
         with self._khoa(nguoi):
-            st, _c = self._nap(nguoi)
+            st, _c = self._nap(nguoi, dot=dot)
             self._kiem_rev(st, rev)
             pend = self._chua_xu_ly(st)
             if pend and self._cho_xong.get(nguoi) != (st["phien"], st["rev"]):
@@ -731,7 +882,7 @@ class DongHo:
             except goi_kq.GoiLoi as e:
                 raise DongHoLoi(str(e))
             self._ghi_csv(nguoi, rows)
-            self._xoa_trang_thai(nguoi)
+            self._xoa_phien(st, nguoi)
             self._cho_xong.pop(nguoi, None)
             tom.update(canh_bao=nd["canh_bao"], co_nhan=nd.get("co_nhan", False), co_nhap=nd.get("co_nhap", False), n_ket_qua=len(nd["ket_qua"]),
                        nhan_file=nd.get("nhan_file", ""))
@@ -778,7 +929,7 @@ class DongHo:
             for c in ("task", "job", "block", "note", "ghi_chu_phien", "dot", "bo_anh"):
                 r[c] = ca_kho._formula_safe(_clean(r.get(c, ""), 200, "Ô chữ"))
         tg_mat = [r["seconds"] for r in rows if r["warmup"] == 0]
-        tom = dict(phien=st["phien"], n_mat=n_rows, n_tinh_gio=len(tg_mat), giay_tong=round(giay_dem, 1), phut_moi_mat=round((sum(tg_mat) / len(tg_mat)) / 60, 2) if tg_mat else None,
+        tom = dict(phien=st["phien"], dot=st.get("dot", ""), n_mat=n_rows, n_tinh_gio=len(tg_mat), giay_tong=round(giay_dem, 1), phut_moi_mat=round((sum(tg_mat) / len(tg_mat)) / 60, 2) if tg_mat else None,
                    giay_moi_mat=round(sum(tg_mat) / len(tg_mat), 1) if tg_mat else None, uoc_luong=uoc, so_lan_tam_dung=so_lan, giay_tam_dung=gtd)
         return rows, tom
 
@@ -889,7 +1040,7 @@ class DongHo:
             raise DongHoLoi(f"Không ghi được {self.rel(p)} ({type(e).__name__}: file đang mở ở LibreOffice/Excel, hết chỗ hoặc không có quyền?). Chưa mất gì: đóng file rồi bấm Xong (lưu) lại.")
 
     def gan_day(self, nguoi, k=5):
-        """k phiên lưu gần nhất của người (đọc từ CSV): [dict(date, task, khoi, n_mat, giay_tong, giay_moi_mat, uoc_luong)] mới nhất trước."""
+        """k phiên lưu gần nhất của người (đọc từ CSV): [dict(date, dot, task, khoi, n_mat, giay_tong, giay_moi_mat, uoc_luong)] mới nhất trước."""
         _cols, rows = self._doc_csv(nguoi)
         by = {}
         for r in rows:
@@ -904,7 +1055,7 @@ class DongHo:
                 except ValueError:
                     pass
             tinh = [s for s, w in sec if w == 0]
-            out.append(dict(phien=key, date=rs[-1].get("date", ""), task=rs[0].get("task", ""), khoi=rs[0].get("block", ""), n_mat=len(rs),
+            out.append(dict(phien=key, date=rs[-1].get("date", ""), dot=rs[0].get("dot", ""), task=rs[0].get("task", ""), khoi=rs[0].get("block", ""), n_mat=len(rs),
                             giay_tong=round(sum(s for s, _w in sec), 1), giay_moi_mat=round(sum(tinh) / len(tinh), 1) if tinh else None,
                             uoc_luong=str(rs[0].get("uoc_luong_chia_deu", "")) == "1"))
         out.sort(key=lambda d: (d["date"], d["phien"]), reverse=True)
@@ -912,19 +1063,20 @@ class DongHo:
 
     # ---------- đóng trang ----------
     def tu_tam_dung_tat_ca(self, ly_do="tat_trang"):
-        """Tự tạm dừng mọi phiên ĐANG CHẠY trong outputs/timing (đóng trang rà soát, Ctrl+C). Trả [(người, giờ)] để in ra terminal. Bỏ qua phiên hỏng."""
+        """Tự tạm dừng mọi phiên ĐANG CHẠY trong outputs/timing (đóng trang rà soát, Ctrl+C). Trả [(người, giờ, đợt)] để in ra terminal. Bỏ qua phiên hỏng."""
         out = []
         for nguoi in NGUOI_OK:
             if not os.path.exists(self.p_state(nguoi)):
                 continue
             try:
                 with self._khoa(nguoi):
-                    st, _c = self._nap(nguoi, bat_buoc=False)
-                    if st is None or st["trang_thai"] != "chay":
-                        continue
-                    self._tam_dung_trong(st, ma=ly_do)
-                    self._ghi(st, nguoi)
-                    out.append((nguoi, ca_kho.iso(self.gio.now())[11:19]))
+                    for st in self._doc_tep(nguoi).values():
+                        self._dong_bo(st)
+                        if st["trang_thai"] != "chay":
+                            continue
+                        self._tam_dung_trong(st, ma=ly_do)
+                        self._ghi(st, nguoi)
+                        out.append((nguoi, ca_kho.iso(self.gio.now())[11:19], str(st.get("dot") or "")))
             except (DongHoLoi, OSError):
                 continue
         return out
@@ -934,30 +1086,32 @@ class DongHo:
         out = []
         for nguoi in NGUOI_OK:
             try:
-                st = self.doc_trang_thai(nguoi)
+                tep = self._doc_tep(nguoi)
             except DongHoLoi:
                 continue
-            if st is not None and st["trang_thai"] == "chay":
+            if any(st["trang_thai"] == "chay" for st in tep.values()):
                 out.append(nguoi)
         return out
 
-    def nhip(self, nguoi):
-        """Nhịp đồng bộ (gọi từ gr.Timer): cập nhật lan_cuoi_thay tối đa 60 giây một lần, KHÔNG tăng rev. Trả khung nhìn."""
+    def nhip(self, nguoi, dot=None):
+        """Nhịp đồng bộ (gọi từ gr.Timer): cập nhật lan_cuoi_thay của phiên đang chạy (tối đa 60 giây một lần), KHÔNG tăng rev. Trả khung nhìn của phiên `dot`
+        (None: phiên đang chạy hoặc chạm gần nhất)."""
         try:
-            st, changed = self._nap(nguoi, bat_buoc=False)
+            tep = self._doc_tep(nguoi)
         except DongHoLoi:
-            return self.xem(nguoi)
-        if st is not None and not self.closing:
-            moi = self.gio.epoch() - float(st.get("lan_cuoi_epoch") or 0) >= NHIP_DONG_BO_GIAY
+            return self.xem(nguoi, dot)
+        if tep and not self.closing:
+            changed = any([self._dong_bo(st) for st in tep.values()])
+            moi = any(st["trang_thai"] == "chay" and self.gio.epoch() - float(st.get("lan_cuoi_epoch") or 0) >= NHIP_DONG_BO_GIAY for st in tep.values())
             if moi or changed:
                 try:
                     with self._khoa(nguoi):
-                        st2, _c = self._nap(nguoi, bat_buoc=False)
-                        if st2 is not None:
-                            self._ghi(st2, nguoi, tang_rev=False)
+                        for st2 in self._doc_tep(nguoi).values():
+                            if self._dong_bo(st2) or st2["trang_thai"] == "chay":
+                                self._ghi(st2, nguoi, tang_rev=False)
                 except (DongHoLoi, OSError):
                     pass
-        return self.xem(nguoi)
+        return self.xem(nguoi, dot)
 
     # ---------- xuất lại gói (khi lúc Xong chưa có nhãn) ----------
     def goi_da_luu(self, nguoi):

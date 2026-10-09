@@ -663,6 +663,23 @@ def _counts_html(i):
     return out
 
 
+def _mmss(s):
+    s = max(0, int(round(float(s or 0))))
+    h, r = divmod(s, 3600)
+    return f"{h}:{r // 60:02d}:{r % 60:02d}" if h else f"{r // 60:02d}:{r % 60:02d}"
+
+
+def _gio_html(i):
+    """Chip giờ RIÊNG của đợt (đồng hồ ở đầu trang tính mỗi đợt một phiên): i['gio'] = [dict(nguoi, giay, tt)], tt: chay | tam_dung | cho | da_luu."""
+    out = ""
+    for g in i.get("gio") or []:
+        tt = g.get("tt")
+        txt = {"chay": f"▶ {_mmss(g.get('giay'))}", "tam_dung": f"⏸ {_mmss(g.get('giay'))}", "cho": "⏸ chờ bắt đầu", "da_luu": f"✓ đã lưu {_mmss(g.get('giay'))}"}.get(tt, "")
+        if txt:
+            out += f'<span class="m28-chip c-gio" title="Giờ riêng của đợt này; giờ các đợt khác không lẫn vào">⏱ {_e(g.get("nguoi", ""))} {txt}</span>'
+    return out
+
+
 def _state_cls(code):
     return {S_DONE: "ok", S_PUSHED: "ok", S_PARTIAL: "warn", S_PREPARING: "info", S_PUSHING: "info", S_DELETING: "info",
             S_NOT_READY: "warn"}.get(code, "")
@@ -697,7 +714,7 @@ def card_html(i, *, active=False, push_ready=None):
     return (f'<div class="dot-card" data-state="{i["state"]}"><div class="dot-card-head">'
             f'<button type="button" class="dot-name" data-act="open" data-run="{n}" aria-label="View images of batch {n}">{n}</button>{opened}'
             f'<span class="dot-state st-{_state_cls(i["state"])}">{_e(i["state_text"])}</span></div>'
-            f'<div class="dot-meta">{meta}</div>{note}<div class="dot-counts">{_counts_html(i)}</div>{ex}'
+            f'<div class="dot-meta">{meta}</div>{note}<div class="dot-counts">{_counts_html(i)}{_gio_html(i)}</div>{ex}'
             f'<div class="dot-actions">{ra}{push}<button type="button" class="dot-btn" data-act="open" data-run="{n}">View images</button></div></div>')
 
 
