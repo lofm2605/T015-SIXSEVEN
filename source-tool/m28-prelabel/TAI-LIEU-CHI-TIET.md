@@ -94,6 +94,63 @@ Với DrivFace, `gender` và `glasses` là `unknown`: readme chỉ nói "2 nữ,
 
 **Cách dùng với `--list`, `--set`, `--box`:** xem mục "Các lệnh" bên dưới. Người chỉ có gói (không có `data\frames`) chạy `--images data\crops --box crop` (dùng chính ảnh cắt); người dựng gói chạy `--images data\frames --box auto`
 (ảnh cắt pipeline sinh ra trùng ảnh cắt của gói: sai khác điểm ảnh trung bình <= 0,0002).
+## Bộ 200 ảnh chung cho hai nhóm thử gán (`tool\tao_bo200.py`, 9/10/2026, QĐ-008)
+**Để làm gì.** Đội chia hai nhóm: MANUAL gán tay hoàn toàn, ASSISTED dùng tool (sửa nháp). Cả hai làm **cùng 200 ảnh** (`bo_anh = bo200_v1`), phủ mọi độ khó khi gán 50 điểm DMS (QĐ-003/004). Hai gói zip: **gói A** (nhóm MANUAL: ảnh thô,
+`face50_label.json`, README, NOTICE, `bo200_info.json`, sha256; không nháp) và **gói B** (nhóm ASSISTED: cùng ảnh giải nén thẳng vào `source-tool\m28-prelabel\`: `data\bo200\{anh,manifest.csv,prelabel.xml,...}` + lượt chạy sẵn `runs\bo200\`).
+Số thứ tự 001-200 xáo theo seed, 001 và 002 là ảnh dễ khởi động. Ánh xạ số -> khung gốc/tài xế/camera/mức khó/thẻ/nháp **chỉ** nằm trong file bí mật cho nhóm trưởng (`bo200_bi_mat.csv`, `.md`, `phan_bo.csv`). Dữ liệu ra **ngoài repo** (`--out` trong repo bị từ chối).
+
+**Lệnh** (bash; đứng ở `source-tool/m28-prelabel`; cmd thì đổi `/` thành `\`). `--out` là thư mục dựng ngoài repo:
+```bash
+python tool/tao_bo200.py do   --out $O --candidates $INC/cache/candidates.csv --manifest616 $INC/manifest.csv --drivface $DF --model face_landmarker.task --hand-model hand_landmarker.task   # đo trên ảnh cắt, chạy nền, làm tiếp được
+python tool/tao_bo200.py them --out $O --yawdd "$YAWDD" --model face_landmarker.task --hand-model hand_landmarker.task --sua-the $O/sua_the.csv --cho-the yaw_manh_trai,pitch_len,pitch_xuong,che_tay,mat_nham,sang_chay
+python tool/tao_bo200.py do   (lại như trên: đo khung mới)
+python tool/tao_bo200.py luoi --out $O --ten kram --the kinh_ram --sample 30 --seed 5 --sua-the $O/sua_the.csv      # lưới ảnh có số/thẻ ở dải dưới ô; --overlay vẽ 50 điểm nháp; --nguon chon --muc de cho bộ cuối
+python tool/tao_bo200.py chon --out $O --sua-the $O/sua_the.csv --seed 7 [--dry-run] [--table1 t1.txt --table2 t2.txt]   # thuần, tất định; --dry-run chỉ in bảng
+python tool/tao_bo200.py goi  --out $O --model face_landmarker.task --sua-the $O/sua_the.csv     # ghi ảnh, chạy m28.py sinh nháp, đóng zip A, B, bí mật, SHA256SUMS_bo200.txt
+python tool/tao_bo200.py kiem --out $O --model face_landmarker.task                               # giải nén sạch + kiểm (kiem/bao_cao_kiem.txt)
+```
+`all` = `do -> chon -> goi -> kiem` (không gồm `them`, `luoi` và việc xem lưới). Mọi lệnh ghi `nhat_ky.txt` trong `--out`. Tham số: `--seed`, `--k` (ảnh/tài xế, mặc định 6), `--quota "de=40,vua=70,kho=60,rat_kho=30"`, `--min-the 8`, `--limit-bytes` (zip, mặc định 28 MiB),
+`--sua-the`, `--hand-model` (tuỳ chọn). Tải `hand_landmarker.task` (Apache-2.0) từ `storage.googleapis.com/mediapipe-models/hand_landmarker/...`; file ngoài git, chỉ dùng trong `tao_bo200.py` để GỢI Ý ảnh tay che, không bao giờ vào `tool\m28.py`.
+
+**Đo (`do`).** Với mỗi ứng viên: cắt 512 bằng `cat_mat.square_crop` (hộp `x0..y1` như `inc_ingest.split`), chạy MediaPipe trên ảnh cắt và ảnh cắt lật ngang (như bước `mediapipe` của tool; `outputs=True` không đổi toạ độ điểm, đã kiểm lệch 0), ghi:
+`mp_ok` (bắt buộc cho bộ 200), blendshape `eyeBlinkLeft/Right`, `jawOpen`; `flip_nme` (lệch trung bình giữa hai bộ 50 điểm gốc/lật, % IOD, như `steps.flags` so sánh; đại lượng thay cho "nháp tệ" khi chưa có đáp án); `box_iou` (hộp mặt MediaPipe trên
+ảnh cắt so với hộp ứng viên, để nghi bắt nhầm mặt); sai số 5 điểm mốc DrivFace (chỉ tham khảo); dHash; `hand_cov` (phần hộp mặt bị bàn tay của hand landmarker phủ). Yaw, pitch, roll, luma, contrast, bright_frac, lap_var, pad_frac giữ nguyên từ khung gốc (cùng nghĩa manifest 616).
+Chạy 3 tiến trình: 3169 ứng viên mất ~2 phút; cache theo từng ứng viên (`cache/do.jsonl`). Kết quả hợp nhất vào `cache/bang_do.csv` (đầu vào của `chon`).
+**Trích thêm khung (`them`).** Chỉ cho thẻ còn thiếu (thẻ hiếm có < 40 ứng viên ngoài 616, cộng `che_tay`): quét video Dash và Mirror ngáp (144 video) đọc tuần tự, lấy mẫu 0,5 giây (không trần 150 giây; video dài nhất chỉ 121 giây), mã hoá JPEG rồi đọc lại,
+giữ khung đạt >= 1 thẻ đang thiếu, cách mọi khung đã có của cùng video >= 2 giây và dHash khác >= 6 bit, tối đa 6 khung/video. Kết quả thật: chỉ 20 khung mới (hầu hết khung mang thẻ cần đã là ứng viên cũ) nhưng đủ nâng `yaw_manh_trai` từ 4 lên 8 ứng viên.
+
+**Thẻ và mức** (hằng số ở đầu `tao_bo200.py`; ngưỡng hiệu chỉnh một lần bằng mắt, 9/10/2026). Điểm: `yaw_vua` (20 <= |yaw| < 32) 1, `yaw_lon` (32..40) 2, `yaw_manh_trai/phai` (|yaw| >= 40) 3; `pitch_vua` (15..20) 1, `pitch_len/xuong` (>= 20) 2; `nghieng_dau` (|roll| >= 15) 0,5;
+`kinh_can` 1, `kinh_ram` 3; `che_tay` 3 (`che_tay_mat` che mắt: rất khó), `che_khac` 1, `che_khac_nhieu` 2, `toc_che_may` 1 (các thẻ che chỉ gán bằng mắt); `noi` (jaw 0,15..0,5) 0,5, `ngap_rong` (>= 0,5) 1; `lim_dim` (eyeBlink 0,35..0,6) 1, `mat_nham` (>= 0,6) 1,5;
+`toi` (luma < 70) 1,5, `sang_chay` (luma > 170 hoặc bright_frac > 0,08) 1,5, `tuong_phan_thap` (< 28) 1, `mo` (lap_var < 170 YawDD / 75 DrivFace) 1,5, `mat_nho` (cạnh mặt < 130 px) 1, `rau` 0,5, `sat_mep` (pad_frac > 0,05) 0,5; `cam_*` 0.
+Mức theo tổng S: dễ <= 0,5, vừa 1-2,5, khó 3-4,5, rất khó >= 5 hoặc tay che mắt hoặc |yaw| >= 45 hoặc kính râm cộng yếu tố >= 1,5. Yaw/pitch theo **hệ camera** (không trừ +23 độ của Mirror). Bảng đầy đủ, kèm cách đo, nằm trong `bo200_bi_mat.md`.
+Điều rút ra khi hiệu chỉnh bằng mắt trên lưới: (1) yaw > 0 là mặt quay về phía PHẢI ảnh; pitch > 0 là CÚI xuống, pitch < 0 là NGẨNG lên; (2) eyeBlink báo ~0,8 ở mặt nghiêng |yaw| >= 40 dù mắt mở nên bỏ thẻ mắt ở đó; (3) hand landmarker báo nhầm khoảng một nửa
+(chỉ gợi ý, từng ảnh đều được xem trước khi ghi `che_tay`); (4) kính râm theo tên video đúng 30/30 mẫu; (5) DrivFace: df_01, df_03, df_04 đeo kính thuốc ở mọi ảnh (ghi `subject:df_01` ... trong `sua_the.csv`); (6) ảnh `sang_chay` (luma > 170) phần lớn vẫn rõ nét: thẻ đánh giá hơi cao độ khó;
+(7) mặt nghiêng >= ~40 độ đều có nháp sai rõ (mắt, mày bên xa dồn cục), nên ảnh nháp tệ chủ yếu là mặt nghiêng mạnh và ảnh có tay che; `flip_nme` chỉ là gợi ý (trung vị 1,5% IOD, phân vị 99 là 6%, chỉ 5/3160 ứng viên >= 12% IOD), nên mọi ảnh nháp tệ đều phải xem ảnh chồng.
+
+**Sửa thẻ bằng mắt (`sua_the.csv`, đầu vào của `chon`).** Cột `ung_vien, the_them, the_bo, quyet_dinh (giu|loai), ghi_chu`; `ung_vien` là tên ứng viên hoặc `subject:<mã tài xế>`; dòng bắt đầu bằng `#` bị bỏ; thẻ `nhap_te` (nháp sai rõ, đã xem ảnh chồng) và `che_tay`, `che_khac`, ... chỉ gán bằng mắt;
+ghi chú bắt đầu bằng `NGHI:` vào danh sách ảnh nghi ngờ. File nằm ngoài git (có tên khung gốc); chạy lại `chon` với đúng file này ra đúng bộ ảnh.
+
+**Chọn (`chon`)** là phần thuần (không đọc ảnh, không MediaPipe). Với mỗi seed: (1) chọn ảnh nháp tệ (tối đa 10), (2) phủ từng thẻ hiếm tới mục tiêu 10 (thẻ ít ứng viên nhất trước; ứng viên phủ thẻ khan hiếm được ưu tiên), (3) lấp từng mức tới hạn mức; ở mỗi bước chọn ứng viên có điểm cao nhất
+= ngẫu nhiên theo seed + phủ thẻ + cân bằng giới/camera/tài xế - phạt nặng ứng viên trùng 616. **Luật cứng:** đúng hạn mức mức; mỗi thẻ hiếm >= 8 (nếu nhóm ứng viên đủ; nếu không thì ghi vào "thẻ thiếu" kèm số có/cần/lý do); >= 8 ảnh nháp tệ; mỗi tài xế <= 6 ảnh;
+mỗi video <= 3 ảnh và cách nhau >= 2 giây (DrivFace: >= 3 số ảnh); dHash khác >= 6 bit giữa hai ảnh cùng tài xế (kể cả khác video). Thử `seed, seed + 1, ...` (tối đa 400 lần), lấy 12 lần đạt luật cứng đầu tiên rồi chọn lần có điểm phạt cân bằng nhỏ nhất
+(giới 45-55% nữ, camera Mirror 65-75%/Dash 12-20%/DrivFace 8-12%, >= 40 tài xế, DrivFace 16-24 ảnh, mỗi mức có cả hai giới và >= 2 camera, ≥ 80% ngoài 616). In seed khởi đầu và seed thực dùng.
+**Đánh số:** hai ảnh khởi động (dễ nhất: S = 0, không kính, |yaw| < 15, |pitch| < 10, đủ sáng; khác tài xế, khác giới nếu được; chọn ngẫu nhiên theo seed); 198 ảnh còn lại chia thành 9 khối liên tiếp bằng cách sắp theo mức rồi chia vòng (mỗi mức rải đều, lệch tối đa 1 ảnh mỗi khối),
+mỗi khối <= 2 ảnh nháp tệ, xáo trong khối, không hai ảnh liền nhau cùng tài xế (kể cả giữa hai khối). Lý do: người gán nhanh dần theo thời gian và có thể không làm hết nên độ khó không được dồn về một đầu.
+
+**Đóng gói (`goi`).** Ảnh = `square_crop` trên khung gốc, PNG nén mức 6, không metadata (chỉ chunk IHDR/IDAT/IEND). 200 ảnh = 41,0 MiB, chia hai phần ảnh (<= 28 MiB, `inc_ingest.plan_parts`) + một phần meta; mỗi phần là zip độc lập; zip **tất định** (mục sắp theo tên, ngày cố định, quyền 0644, không nén): dựng lại ra cùng sha256.
+Gói B: `manifest.csv` chỉ các cột `m28.py` cần (`file,image,face_idx,x0,y0,x1,y1,left,top,k`), hộp vuông giữa ảnh chọn sao cho `crop_geometry` cho đúng left = top = 0, k = 1 nên bước `crop` cắt lại ra **đúng ảnh cũ từng pixel**. Nháp chung:
+`goi` chạy chính `m28.py` bằng dòng lệnh (`prepare --box crop` -> `review --review auto` -> `push --review auto --dry-run`; thoát mã khác 0 ở push là thiết kế) trong thư mục tạm, kiểm đủ 200 mặt có nháp, rồi đưa `runs/bo200/{mediapipe,map50,flags,autoqc}` và `prelabel.xml` vào gói B.
+Thành viên chạy `m28.py prepare --run bo200 ...`: `crop` và `overlays` chạy trên máy họ, bốn bước còn lại được bỏ qua (có `done.txt`) nên nháp ở mọi máy giống nhau; `--force mediapipe` hoặc xoá `runs\bo200` thì MediaPipe chạy lại và nháp có thể lệch nhẹ; khi `t_flip` được chốt phải thêm `--force flags autoqc overlays`.
+Quét rò rỉ trên mọi mục của A và B: không mã tài xế (`yd_..`, `df_..`), tên video, `.avi`, Mirror/Dash, yawdd/drivface (trừ `NOTICE.txt`), tên khung gốc, thẻ, mức khó, đường dẫn tuyệt đối, tên máy.
+
+**Kiểm (`kiem`, 42 mục, kết quả 9/10/2026: đạt hết).** Giải nén sạch từng gói bằng `unzip` và bằng `zipfile`, `unzip -t` và `7z t` từng phần, đúng 200 ảnh 512 x 512, sha256 khớp, ảnh A = ảnh B từng byte, không metadata, không rò rỉ; gói B với **code của HEAD** (`git archive`) + model:
+`prepare` dùng lượt chạy sẵn (crop xong; mediapipe/map50/flags/autoqc bỏ qua; overlays xong, crop giống từng pixel), `review --review auto` + `push --dry-run` ra `prelabel.xml` trùng từng byte, lệnh chạy thử trong README_B, `eval50.py` NME 0, chạy lại từ đầu bằng lượt tên khác (cùng máy: lệch 0,0000 px);
+thêm bước tuỳ chọn mở trang rà soát lượt này bằng Chromium headless chỉ ở 127.0.0.1 (đủ 200 mặt). Cuối cùng `git status` không có ảnh, zip, csv/xml dữ liệu trong repo.
+
+**Hạn chế.** Độ khó là ước lượng heuristic; mọi ảnh đều là ảnh MediaPipe thấy mặt (ca khó nhất, MediaPipe bỏ cuộc, không có trong bộ); ít tài xế (YawDD 90 người, DrivFace 4); ảnh 640 x 480 phóng lên 512; camera Mirror lệch +23 độ; nháp sinh trên Linux (Python 3.11, MediaPipe 1.0.1);
+`low_conf` đều `false` (`t_flip` chưa chốt); quy ước điểm bị che chưa được chốt (gói A, B ghi cùng đề xuất "ước lượng + bật occluded, không dùng outside"); `ca_kho.py` coi lượt `bo200` là nguồn `khong_ro` (tên mặt không có trong `data\manifest.csv`); hai nhóm khác người nên tốc độ từng người lẫn vào kết quả.
+**Chưa thử:** CVAT thật (tạo task tay, dán label Raw, nhập `prelabel.xml`, `push`, `collect` cho bộ 200); Windows/cmd (`tar -xf` mở zip, Python 3.14); WinRAR; nháp trên máy khác.
+
 ## 50 điểm DMS trên đỉnh MediaPipe (giai đoạn 3, 7/10/2026; QĐ-003 thay định nghĩa 50 điểm của QĐ-002, chờ P3/P2/P4/P5 duyệt)
 Phương pháp của QĐ-002 giữ nguyên: **mỗi điểm trong 50 điểm là MỘT đỉnh của lưới 478 điểm MediaPipe** (`mp_idx` trong `config\m28_config.json`), không có số học nào ở giữa, không cần đáp án. Chỉ đổi **tập điểm, tên và quy ước bên**:
 chủ repo chốt định nghĩa "DMS" (Driver Monitoring System: mắt, miệng, lông mày, sống mũi), **không có viền hàm/cằm, không có cánh mũi/chân mũi, không có khung đầu**.

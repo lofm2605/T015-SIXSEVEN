@@ -44,6 +44,13 @@ Hai việc đọc dữ liệu đã có (không sửa `runs\`, `raw\`, `final\`, 
 - **Luật cứng của bộ lọc:** mặt nguồn không rõ (lượt Nạp ảnh, có thể là ảnh khách hàng), mặt xoá mềm, mặt chưa có nhãn sửa tay, mặt `Bỏ` luôn bị loại. Gói xuất chứa ảnh mặt người lái xe: chỉ dùng nội bộ nhóm, không git, không chat AI.
 - **Giới hạn:** chưa thử với nhãn bảy skeleton xuất thật từ CVAT, file bấm giờ thật (14–15/10), `final\`, lượt `--box auto` có ảnh gốc khác tên; tab chưa được chụp trên Windows thật. Chi tiết cách tính từng số: [`TAI-LIEU-CHI-TIET.md`](TAI-LIEU-CHI-TIET.md), mục "Thống kê và lọc dữ liệu train".
 
+## Bộ 200 ảnh thử gán nhãn (`tool/tao_bo200.py`, QĐ-008)
+Công cụ ngoài pipeline: dựng **một bộ 200 ảnh in-cabin chung** cho hai nhóm thí nghiệm (MANUAL gán tay hoàn toàn, ASSISTED dùng tool và sửa nháp), chọn theo độ khó khi gán 50 điểm DMS, và đóng hai gói zip:
+**gói A** (ảnh thô, không nháp) cho nhóm MANUAL; **gói B** (cùng ảnh + `manifest.csv` + `prelabel.xml` + lượt chạy sẵn `runs/bo200`) cho nhóm ASSISTED, giải nén thẳng vào thư mục này (nằm trong `data/` và `runs/`, `.gitignore` chặn).
+Ảnh đánh số 001-200 (001, 002 là ảnh dễ khởi động); ánh xạ số -> tài xế/camera/mức khó/thẻ chỉ có trong file bí mật cho nhóm trưởng. Lệnh con: `do` (đo trên ảnh cắt), `them` (trích thêm khung), `chon` (chọn, đánh số, `--dry-run`), `luoi` (lưới kiểm bằng mắt),
+`goi` (ảnh + nháp bằng chính `m28.py` + zip A/B/bí mật), `kiem`, `all`. Dữ liệu ra **ngoài repo** (`--out`, bị từ chối nếu nằm trong repo). Cách dùng, bảng thẻ, thuật toán chọn: [`TAI-LIEU-CHI-TIET.md`](TAI-LIEU-CHI-TIET.md), mục "Bộ 200 ảnh chung";
+quyết định: QĐ-008; nguồn và điều khoản: [`nguon-du-lieu.md`](nguon-du-lieu.md). Người nhận gói B làm theo `README_B.txt` trong gói (luôn chạy với `--manifest data/bo200/manifest.csv`).
+
 ## Cài đặt và chạy
 Windows (cmd, Python 3.14), từ thư mục `source-tool\m28-prelabel`:
 ```bat
@@ -71,7 +78,8 @@ Ubuntu: dùng `chay.sh` và [`HUONG-DAN-UBUNTU.md`](HUONG-DAN-UBUNTU.md); Window
   `push --dry-run`, `eval50.py`, ra XML đủ 50 điểm/mặt đúng tên và đúng thứ tự.
 - Trang rà soát: Gradio 6.29.1 trên Chromium headless, 616 mặt, mỗi quyết định trung vị 0,11 giây.
 - Bộ test trong `tests/` (CVAT giả).
-- **Chưa thử:** `push` và `collect` trên **CVAT thật** v2.77.0 (kể cả nhập XML skeleton), Windows/cmd thật, Python 3.14.
+- Bộ 200 ảnh chung (9/10/2026, cloud Linux, Python 3.11, MediaPipe 1.0.1): `tool/tao_bo200.py` đo 3169 ứng viên (3149 cũ + 20 khung trích thêm), chọn 200 ảnh (seed 7 -> 14), dựng gói A, gói B và file bí mật; `kiem` 42/42 mục (giải nén sạch, sha256, không rò rỉ, `m28.py prepare` dùng lượt chạy sẵn và `prelabel.xml` trùng từng byte với code HEAD, trang rà soát mở đủ 200 mặt ở 127.0.0.1).
+- **Chưa thử:** `push` và `collect` trên **CVAT thật** v2.77.0 (kể cả nhập XML skeleton), Windows/cmd thật, Python 3.14. Riêng bộ 200 ảnh: tạo task tay và nhập `prelabel.xml` trên CVAT thật, `push`/`collect` cho bộ 200, `tar -xf` mở zip trên Windows, WinRAR, nháp trên máy khác.
 - **Chưa có:** số đo thời gian trước/sau và số nháp hỏng bắt được; sẽ cập nhật sau thí nghiệm 14–15/10.
 
 ## Giới hạn
