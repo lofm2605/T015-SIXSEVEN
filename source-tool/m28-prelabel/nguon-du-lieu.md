@@ -33,6 +33,17 @@ Lưu ý: mốc DrivFace có định nghĩa riêng và lệch hệ thống (xem �
 
 Lệnh tải DrivFace (cmd): `curl -L -O https://archive.ics.uci.edu/static/public/378/drivface.zip` (bên trong có `DrivImages.zip`, `drivPoints.txt`, `readme.txt`; tên file ảnh có **dấu cách trước `.jpg`**).
 
+## Bộ 200 ảnh thử gán nhãn (bo200, dựng 9/10/2026, QĐ-005)
+Bộ 200 ảnh chung cho hai nhóm thử gán 50 điểm (MANUAL gán tay, ASSISTED sửa nháp) lấy **từ hai bộ trên: YawDD (184 ảnh) và DrivFace (16 ảnh)**, do `tool\tao_bo200.py` chọn từ 3149 ứng viên của gói in-cabin cộng 20 khung trích thêm
+từ chính các video YawDD đó (9 trong số này vào bộ). Không có nguồn nào khác, không có ảnh khách hàng, không có ảnh đồng đội.
+- **Điều khoản (không đổi so với phần trên):** YawDD chỉ cho mục đích phi thương mại và nghiên cứu, bắt buộc trích dẫn (Abtahi và cộng sự, ACM MMSys 2014); chỉ được đăng ảnh chụp màn hình của video có cột
+  "Allow Researchers to use picture in their paper" = **Yes** trong `Table1.pdf` (Mirror) / `Table2.pdf` (Dash). DrivFace "free for academic usage" (Diaz-Chito và cộng sự, Applied Soft Computing 2016). Dự án phi thương mại.
+- **Chỉ dùng nội bộ nhóm, phi thương mại. Không phát tán, không đăng lại, không đưa vào báo cáo hay slide công khai, không đưa vào chat AI ngoài phiên đã được chủ repo cho phép, không commit.** Gói A và gói B chứa `NOTICE.txt`
+  nêu tên hai bộ và điều khoản nhưng **không** ghi nguồn của từng ảnh (ảnh đánh số 001-200).
+- **Trước khi đưa bất kỳ ảnh nào ra ngoài nhóm** phải tra file bí mật của nhóm trưởng (`bo200_bi_mat.csv`: số ảnh -> tài xế, video, khung gốc; cột `duoc_dang_anh` đã đối chiếu `Table1.pdf`/`Table2.pdf`: trong bộ này 140 ảnh YawDD ở video
+  "Yes", 43 ảnh ở video "No" tuyệt đối không được đưa vào bài báo hay ấn phẩm, 1 ảnh chưa đối chiếu được; ảnh DrivFace ghi `khong_ap_dung`) rồi đối chiếu lại trực tiếp với hai file PDF của bộ YawDD.
+- Ảnh trong bộ đã bị cắt vuông 512 x 512 quanh mặt và chỉ có trong zip nội bộ nhóm (`m28_bo200_A_*`, `m28_bo200_B_*`) và trong thư mục dựng ngoài repo; `.gitignore` chặn `data\`, `runs\`, `*.png`, `*.zip`.
+
 ---
 
 Gộp từ lượt tìm ngày 05/10/2026 (bản gốc nằm ở phiên Claude của một thành viên, file `du_lieu_face_landmark.md`).

@@ -17,6 +17,7 @@ cũ được gán theo cách cũ.
 | [QĐ-002](#qđ-002) | Ánh xạ 478→50 bằng chọn đỉnh MediaPipe trực tiếp | 06/10/2026 | QĐ-001 | Bị thay một phần bởi QĐ-003 (định nghĩa 50 điểm, config v2); chọn đỉnh trực tiếp vẫn hiệu lực |
 | [QĐ-003](#qđ-003) | Định nghĩa 50 điểm DMS (7 nhóm, không viền hàm), trái/phải theo ảnh, config v3 | 07/10/2026 | QĐ-002 | Bị thay một phần bởi QĐ-004 (cách dựng label CVAT: bảy label theo nhóm, màu theo nhóm); phần còn lại hiệu lực |
 | [QĐ-004](#qđ-004) | Tách label `face50` thành bảy label skeleton theo nhóm, mỗi nhóm một màu (bảng màu hình minh hoạ DMS) | 07/10/2026 | QĐ-003 | Hiệu lực |
+| [QĐ-005](#qđ-005) | Bộ 200 ảnh chung cho hai nhóm MANUAL / ASSISTED: chọn theo độ khó khi gán 50 điểm DMS, hai gói A/B, nháp thống nhất, PNG | 09/10/2026 | Chủ repo | Hiệu lực |
 
 **Trạng thái:** Hiệu lực · Bị thay bởi QĐ-xxx · Huỷ (ghi lý do)
 
@@ -122,6 +123,37 @@ cũ được gán theo cách cũ.
   - [ ] Chạy mục kiểm tra nhanh CVAT (`chay.bat`, mục 4) trên CVAT thật: lần đầu thử bảy label, nhập XML bảy skeleton và xuất lại (@P4)
   - [ ] Cập nhật guideline gán tay: mỗi mặt chọn lần lượt bảy label, mỗi lần đặt đủ điểm của nhóm (@P5)
 - **Trạng thái:** Hiệu lực
+
+## QĐ-005
+
+**Bộ 200 ảnh chung cho hai nhóm MANUAL / ASSISTED: chọn theo độ khó khi gán 50 điểm DMS, hai gói A/B, nháp thống nhất, PNG**
+
+- **Ngày:** 09/10/2026
+- **Người tham gia:** chủ repo (chốt), nhóm trưởng, P5, P4 (chờ duyệt)
+- **Xuất phát từ:** yêu cầu chủ repo ngày 09/10/2026: đội thử gán 50 điểm (định nghĩa DMS, QĐ-003, bảy label skeleton QĐ-004) và thử tool trên một bộ ảnh mới; đội chia hai nhóm, MANUAL gán tay hoàn toàn và ASSISTED dùng tool (sửa nháp).
+- **Bối cảnh:** gói 616 mặt của đội đã có kèm manifest ghi nguồn và cờ; thành viên có thể đã gán thử vài mặt trong đó (quen mặt thì làm nhanh hơn), và ảnh cắt trùng từng byte thì tra ngược được nguồn. Muốn so hai nhóm thì phải cùng ảnh; muốn thử gán thì phải phủ mọi độ khó, kể cả kiểu hiếm (mặt nghiêng mạnh, tay che, kính râm, ảnh tối, ngáp rộng).
+- **Các phương án đã cân nhắc:**
+  1. *Lấy 200 mặt trong gói 616.* Nhanh, nhưng thành viên quen ảnh và ảnh tra ngược được; các kiểu khó hiếm. Loại.
+  2. *Mỗi nhóm một bộ ảnh riêng.* Thời gian và chất lượng phụ thuộc ảnh nên không so được hai nhóm. Loại.
+  3. *Một bộ 200 ảnh chung, chọn từ 3149 ứng viên đã đo (YawDD + DrivFace) cộng khung trích thêm từ video, theo độ khó ước lượng; hai gói A (ảnh thô, không nháp) và B (cùng ảnh + manifest + `prelabel.xml` + lượt chạy sẵn).* **Chọn.**
+  4. *Ảnh JPEG thay PNG.* Nhỏ hơn, nhưng ở chế độ `--box crop` thì `push` luôn tải `<tên>.png` lên CVAT; chỉ PNG mới cho cùng tên ảnh ở task của cả hai nhóm và trong `prelabel.xml` (không phải sửa `steps.py`). Loại.
+- **Quyết định:**
+  - **Bộ ảnh:** 200 ảnh PNG 512 x 512 (`square_crop`, nén mức 6, không metadata), số 001..200, tên không lộ nguồn/tài xế/độ khó; `bo_anh = "bo200_v1"`. Hai ảnh 001 và 002 là ảnh dễ khởi động (không tính vào số đo). 003..200 xáo theo seed, chia 9 khối liên tiếp, mỗi khối có tỉ lệ mức gần tỉ lệ chung (lệch tối đa 1), tối đa 2 ảnh nháp tệ, không hai ảnh liền nhau cùng tài xế. Ánh xạ số -> khung gốc/tài xế/camera/mức/thẻ/nháp chỉ nằm trong **file bí mật cho nhóm trưởng** (`bo200_bi_mat.csv`, `.md`), không nằm trong gói A hay B.
+  - **Độ khó (heuristic, khó khi gán 50 điểm DMS):** mỗi ảnh có các thẻ yếu tố với điểm (góc mặt theo hệ camera `yaw_vua` 1, `yaw_lon` 2, `yaw_manh_*` 3; `pitch_vua` 1, `pitch_len/xuong` 2; kính thuốc 1, kính râm 3; tay che 3; miệng nói 0,5, ngáp rộng 1; mắt lim dim 1, nhắm 1,5; tối, sáng chói, mờ 1,5; tương phản thấp, mặt nhỏ 1; râu, sát mép 0,5; nghiêng đầu 0,5...). Tổng S: **dễ** S <= 0,5, **vừa** 1..2,5, **khó** 3..4,5, **rất khó** S >= 5 hoặc tay che mắt hoặc |yaw| >= 45 hoặc kính râm cộng yếu tố >= 1,5. Ngưỡng và trọng số ghi cứng ở đầu `tool/tao_bo200.py` sau khi hiệu chỉnh bằng mắt trên lưới ảnh (dấu yaw: yaw > 0 = quay về phía PHẢI ảnh; dấu pitch: pitch > 0 = cúi, pitch < 0 = ngẩng). Bảng đầy đủ: `TAI-LIEU-CHI-TIET.md`, mục "Bộ 200 ảnh chung".
+  - **Hạn mức và ràng buộc:** dễ 40, vừa 70, khó 60, rất khó 30; mỗi thẻ hiếm (`yaw_manh_trai/phai`, `pitch_len/xuong`, `kinh_ram`, `che_tay`, `ngap_rong`, `mat_nham`, `toi`, `sang_chay`, `mo`) tối thiểu 8; 8-10 ảnh nháp tệ (xác nhận bằng ảnh chồng nháp); mỗi tài xế <= 6 ảnh, mỗi video <= 3 ảnh cách nhau >= 2 giây, không hai ảnh gần trùng (dHash) trong cùng tài xế; ưu tiên ứng viên NGOÀI 616 mặt của gói đội (>= 80%); mục tiêu mềm về giới, camera, số tài xế. Chọn bằng thử seed liên tiếp, lấy lần đạt luật cứng có điểm phạt cân bằng nhỏ nhất.
+  - **Kết quả dựng ngày 09/10/2026** (seed khởi đầu 7, seed thực dùng 14): 3169 ứng viên (3149 cũ + 20 khung trích thêm từ video Dash và Mirror ngáp), 91 tài xế (nhiều nhất 6 ảnh), 92 nữ / 92 nam / 16 `unknown` (DrivFace), camera Mirror 149 / Dash 35 / DrivFace 16, YawDD 184 / DrivFace 16, 198/200 ngoài gói 616, 10 ảnh nháp tệ, mọi thẻ hiếm >= 8, không thẻ thiếu.
+  - **Gói A (nhóm MANUAL):** ảnh thô + `face50_label.json` + README + NOTICE + `bo200_info.json` + sha256; không nháp, không thông tin độ khó/nguồn. Tạo task CVAT thủ công với sorting Lexicographical, **Image quality 95**, **Segment size 8** (cùng cách chia job và chất lượng ảnh với task mà `m28.py push` tạo cho nhóm ASSISTED).
+  - **Gói B (nhóm ASSISTED):** cùng ảnh (giống từng byte gói A) giải nén thẳng vào `source-tool/m28-prelabel/`: `data/bo200/{anh,manifest.csv,prelabel.xml,...}` và lượt chạy sẵn `runs/bo200/{mediapipe,map50,flags,autoqc}`; `manifest.csv` có hộp mặt đặt để bước `crop` cắt lại ra **đúng ảnh cũ từng pixel**. Luôn chạy với `--manifest data/bo200/manifest.csv` (không ghi đè `data/manifest.csv` của gói 616). Nháp CHUNG sinh một lần bằng chính `m28.py` (MediaPipe 1.0.1, Linux, Python 3.11): thành viên dùng lượt chạy sẵn hoặc nhập `prelabel.xml` thì nháp giống nhau ở mọi máy; `low_conf` đều `false` vì `t_flip` chưa chốt.
+  - **Tool tái lập:** `tool/tao_bo200.py` (do, them, chon, luoi, goi, kiem, all), đầu ra ngoài repo; test `tests/test_tao_bo200.py` dùng dữ liệu giả. Dựng lại cần `sua_the.csv` (mọi sửa thẻ bằng mắt) và cache đo, cả hai ngoài git.
+- **Hạn chế:** độ khó là **ước lượng heuristic** (ví dụ `sang_chay` đánh giá hơi cao với vài tài xế nắng gắt mà mặt vẫn rõ); mọi ảnh đều là ảnh MediaPipe thấy mặt nên ca khó nhất (MediaPipe bỏ cuộc) không có trong bộ; ít tài xế (YawDD 90 người, DrivFace 4); ảnh 640 x 480 phóng lên 512; camera Mirror lệch +23 độ nên ảnh "dễ" hiếm hơn ở Mirror (dễ chỉ chiếm ~14% ứng viên Mirror, ~19% Dash, ~4% DrivFace); nháp sinh trên Linux (máy khác chạy lại MediaPipe có thể lệch nhẹ); `low_conf` chưa bật; một số khung YawDD có vệt xám quanh miệng do nén video; hai nhóm làm cùng ảnh nhưng khác người nên tốc độ từng người lẫn vào kết quả; lượt `bo200` bị `ca_kho.py` coi là nguồn `khong_ro` (tên mặt không có trong `data/manifest.csv`).
+- **Việc phải làm theo:**
+  - [ ] Nhóm trưởng chốt **quy ước điểm bị che** (kính râm, tay, tóc) trước khi phát gói; bản chụp kế hoạch 5/10 chỉ ghi dạng "Đề xuất" (ước lượng + bật `occluded`, không dùng `outside`) và gói A, gói B đều ghi cùng đề xuất đó
+  - [ ] P5 xác nhận cách loại hai ảnh khởi động (001, 002) khỏi số đo, và cách báo kết quả theo mức khó và riêng nhóm nháp tệ
+  - [ ] P4 thử tạo task tay (project bảy label, Image quality 95, Segment size 8) và nhập `prelabel.xml` trên CVAT thật; thử `push` và `collect` với bộ 200 (chưa thử CVAT thật)
+  - [ ] Điền `"bo_anh": "bo200_v1"` vào `config/nhom_thi_nghiem.json` khi máy làm tool đồng hồ/thống kê gộp code (file đó không sửa ở phiên này)
+- **Trạng thái:** Hiệu lực
+
+---
 
 ## Mẫu để copy
 
