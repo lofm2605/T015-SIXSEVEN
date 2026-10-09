@@ -696,3 +696,80 @@ def test_the_can_them_dem_ung_vien_ngoai_616():
     assert 'kinh_ram' not in got                      # 50 ứng viên ngoài 616 >= 40
     assert 'yaw_manh_trai' in got                     # 60 ứng viên nhưng đều trùng 616
     assert 'pitch_len' in got and 'che_tay' in got    # che_tay luôn trích
+
+
+# ---------- goi: dựng gói A / B từ ảnh GIẢ (nháp giả, không MediaPipe) ----------
+def _dung_thu_muc_goi(tmp_path):
+    rows = fake_rows()
+    _ghi_bang(tmp_path, rows)
+    sua = tmp_path / 'sua.csv'
+    bad = sorted((r for r in rows if abs(r['yaw']) > 40), key=lambda r: -abs(r['yaw']))[:12]
+    tay = [r for r in rows if r['subject'].startswith('yd_')][::37][:14]
+    sua.write_text('ung_vien,the_them,the_bo,quyet_dinh,ghi_chu\n' + ''.join(f'{r["name"]},nhap_te,,,nháp sai\n' for r in bad)
+                   + ''.join(f'{r["name"]},che_tay,,,tay che\n' for r in tay), encoding='utf-8')
+    frames = tmp_path / 'frames'
+    frames.mkdir()
+    grad = np.tile(np.linspace(0, 255, 320, dtype=np.uint8), (240, 1))
+    for i, r in enumerate(rows):                                       # khung giả nén rất nhỏ, mỗi khung hơi khác nhau
+        cv2.imwrite(str(frames / (r['name'] + '.jpg')), np.dstack([np.roll(grad, i, 1)] * 3))
+    a = tb.build_parser().parse_args(['chon', '--out', str(tmp_path), '--sua-the', str(sua), '--seed', '4', '--frames', str(frames)])
+    a.project = PROJECT
+    return a
+
+
+def test_goi_dung_goi_a_b_tu_anh_gia(tmp_path, monkeypatch):
+    a = _dung_thu_muc_goi(tmp_path)
+    monkeypatch.setattr(tb, 'SEEDS_GOOD', 1)
+    tb.cmd_chon(a)
+
+    def fake_nhap(a_, img_dir, log):
+        return dict(files={'runs/bo200/map50/mp50.json': b'{"001": {}}', 'runs/bo200/map50/done.txt': b'ok'}, xml=b'<?xml version="1.0"?><annotations></annotations>', n=200, autoqc={}, mp50={})
+
+    monkeypatch.setattr(tb, 'sinh_nhap', fake_nhap)
+    a.cmd, a.limit_bytes = 'goi', 150 * 1024
+    zips1 = tb.cmd_goi(a)
+    sums1 = [tb.sha256_file(z) for z in zips1]
+    zips2 = tb.cmd_goi(a)                                              # dựng lại: cùng sha256
+    assert [tb.sha256_file(z) for z in zips2] == sums1
+    names = [os.path.basename(z) for z in zips1]
+    assert names[0] == 'm28_bo200_A_part00_meta.zip' and any(n.startswith('m28_bo200_B_part01_of_') for n in names) and 'bo200_bi_mat.zip' in names
+    for kind, root in (('A', 'bo200_A'), ('B', 'data/bo200')):
+        parts = sorted(glob_zip(tmp_path / kind))
+        assert len(parts) >= 3                                         # meta + >= 2 phần ảnh với giới hạn nhỏ
+        ents = {}
+        for p in parts:
+            assert os.path.getsize(p) <= a.limit_bytes or p.endswith('part00_meta.zip')
+            with zipfile.ZipFile(p) as z:
+                assert z.testzip() is None
+                ents.update({zi.filename: z.read(zi) for zi in z.infolist()})
+        imgs = sorted(n for n in ents if n.startswith(root + '/anh/'))
+        assert imgs == [f'{root}/anh/{i:03d}.png' for i in range(1, 201)]
+        assert not tb.quet_ro_ri(list(ents.items()), hostname='maychu01'), kind
+        info = json.loads(ents[root + '/bo200_info.json'])
+        assert info['bo_anh'] == 'bo200_v1' and info['so_anh'] == 200 and all(hashlib.sha256(ents[f'{root}/anh/{n}']).hexdigest() == h for n, h in info['sha256'].items())
+        if kind == 'B':
+            mrows = list(csv.DictReader(ents[root + '/manifest.csv'].decode('utf-8').splitlines()))
+            assert [r['file'] for r in mrows] == [f'{i:03d}.png' for i in range(1, 201)] and list(mrows[0]) == tb.MANIFEST_B_COLS
+            assert root + '/prelabel.xml' in ents and 'runs/bo200/map50/mp50.json' in ents
+    # ảnh A = ảnh B từng byte
+    za = {n.split('/anh/')[1]: b for n, b in doc_zip(tmp_path / 'A').items() if '/anh/' in n}
+    zb = {n.split('/anh/')[1]: b for n, b in doc_zip(tmp_path / 'B').items() if '/anh/' in n}
+    assert za == zb and len(za) == 200
+    sums = open(tmp_path / 'SHA256SUMS_bo200.txt', encoding='utf-8').read().splitlines()
+    lines = [ln for ln in sums if ln and not ln.startswith('#')]
+    assert sorted(ln.split('  ')[1] for ln in lines) == sorted(names) and sorted(ln.split('  ')[0] for ln in lines) == sorted(sums1)
+    assert 'luoi' not in ''.join(names)                                # không có lưới thì không có bo200_luoi.zip
+    with zipfile.ZipFile(tmp_path / 'bi_mat' / 'bo200_bi_mat.zip') as z:
+        assert sorted(z.namelist()) == ['bo200_bi_mat.csv', 'bo200_bi_mat.md', 'nhat_ky_chon.txt', 'phan_bo.csv', 'sua_the.csv']
+
+
+def glob_zip(d):
+    return sorted(os.path.join(d, f) for f in os.listdir(d) if f.endswith('.zip'))
+
+
+def doc_zip(d):
+    out = {}
+    for p in glob_zip(d):
+        with zipfile.ZipFile(p) as z:
+            out.update({zi.filename: z.read(zi) for zi in z.infolist()})
+    return out
