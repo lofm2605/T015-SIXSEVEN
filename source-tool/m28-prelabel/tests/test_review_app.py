@@ -1,6 +1,6 @@
 """Thử tool/review_app.py (trang rà soát) bằng dữ liệu GIẢ dựng trong tmp_path. Không cần trình duyệt, không cần gradio.
 
-Phần giao diện Gradio (bố cục, phím tắt, nút Xong khoá quyết định, nút Đóng trang rà soát) kiểm riêng bằng tests/e2e_review_ui.py (tuỳ chọn).
+Phần giao diện Gradio (bố cục, phím tắt, nút Xong khoá quyết định, nút Close page) kiểm riêng bằng tests/e2e_review_ui.py (tuỳ chọn).
 """
 import csv
 import html
@@ -879,7 +879,7 @@ def test_decision_without_reason_gets_soft_hint(five):
     s = ra.Store(five, 'P2', clock=FakeClock())
     ses = ra.new_session(s)
     msg, level, _ = ra.act_decide(s, ses, 'gan_tay', '', 'F_004')
-    assert level == 'ok' and 'Chưa có lý do' in msg and 'Hoàn tác' in msg
+    assert level == 'ok' and 'Chưa có lý do' in msg and 'Undo' in msg
     msg, level, _ = ra.act_decide(s, ses, 'bo', 'MO_NHO', 'F_002')
     assert 'Chưa có lý do' not in msg
     assert 'TRƯỚC' in open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()     # nhãn nói rõ thứ tự
@@ -897,8 +897,8 @@ def test_finished_blocks_decisions_in_all_tabs_and_shows_done_bar_not_overlay(fi
     assert 'done.txt' in msg and 'tự tắt' not in msg                   # Xong không còn tắt trang; e2e chờ #msg chứa done.txt
     v = ra.make_view(s, ses)
     assert 'class="m28-done-bar"' in v['header'] and 'role="status"' in v['header'] and not v['nhan_ok'] and not v['xong_ok']
-    assert ("Đã ghi xong. Bạn có thể Đẩy lên CVAT, xem Các đợt, xuất Ca khó. "
-            "Xong việc bấm 'Đóng trang rà soát' để quay lại cmd.") in html.unescape(v['header'])
+    assert ("Đã ghi xong. Bạn có thể Push to CVAT, xem Các đợt, xuất Ca khó. "
+            "Xong việc bấm 'Close page' để quay lại cmd.") in html.unescape(v['header'])
     # không còn lớp phủ chặn toàn màn hình (class cũ m28-done không còn nghĩa nào, lớp phủ chỉ có sau khi đóng)
     assert 'class="m28-done"' not in v['header'] and 'm28-closed' not in v['header']
     assert 'm28-done-bar' in ra.make_view(s, other)['header']          # tab kia cũng thấy dải xanh
@@ -975,7 +975,7 @@ def test_had_done_is_not_locked_and_no_green_bar_until_done_in_this_session(five
     assert not os.path.exists(s2.done_path)
 
 
-# ---------- nút Đóng trang rà soát (logic thuần) ----------
+# ---------- nút Close page (logic thuần) ----------
 def busy_job(run='NAP_001'):
     return types.SimpleNamespace(running=True, run=run, snapshot=lambda: {'state': 'dang_chay', 'run': run}, cancel=lambda: None)
 
@@ -1042,7 +1042,7 @@ def test_close_prompt_three_cases_plus_nap_and_had_done(five):
     assert 'm28 sẽ dừng ở bước review' in warn and 'gõ lại đúng lệnh' in warn
     decide_all(s)                                                      # chưa Xong nhưng đã rà hết
     kind, q, warn = ra.close_prompt(s)
-    assert kind == 'chua_het' and 'chưa bấm Xong: m28 sẽ coi như chưa rà xong; bấm Huỷ rồi bấm Xong trước nếu muốn đi tiếp' in warn
+    assert kind == 'chua_het' and 'chưa bấm Xong: m28 sẽ coi như chưa rà xong; bấm Cancel rồi bấm Xong trước nếu muốn đi tiếp' in warn
     ra.act_finish(s, ra.new_session(s))                                # đã Xong
     kind, q, warn = ra.close_prompt(s)
     assert kind == 'xong' and q == 'Đóng trang rà soát? Lệnh m28 trong cmd sẽ đi tiếp.' and not warn

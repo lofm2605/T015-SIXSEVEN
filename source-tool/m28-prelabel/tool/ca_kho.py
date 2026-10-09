@@ -3,7 +3,7 @@
 Luồng:
   1. Tab "Rà soát": phím K (nút "Ca khó") ghi mặt đang xem là ca khó vào runs/<lượt>/ca_kho.csv
      (không đụng triage_<người>.csv, done.txt, hàng đợi hay hoàn tác).
-  2. Tab "Ca khó": thành viên xem/sửa/xoá ca của mình rồi "Xuất gói họp" ra outputs/ca_kho/ca_kho_<người>_<ddmm>.zip.
+  2. Tab "Ca khó": thành viên xem/sửa/xoá ca của mình rồi "Export meeting pack" ra outputs/ca_kho/ca_kho_<người>_<ddmm>.zip.
   3. Tab "Họp team": người tổ chức nhập các gói zip, họp trên lưới ảnh, đặt trạng thái / quyết định, rồi xuất biên bản
      markdown điền sẵn theo mẫu problem-backlog.md (P-NNN) và so-quyet-dinh.md (QĐ-NNN) để TỰ dán vào repo.
      Code này chỉ ĐỌC hai file đó (để đánh số tiếp), không bao giờ ghi vào chúng.
@@ -1580,9 +1580,9 @@ def mark_panel(gr, demo, store, ctx, shown):
                            elem_id="ck-diem")
         note = gr.Textbox(label=f"Ghi chú (tối đa {NOTE_MAX} ký tự)", lines=2, max_lines=4, max_length=NOTE_MAX, elem_id="ck-note")
         with gr.Row(elem_id="ck-btns"):
-            b_save = gr.Button("Lưu", variant="primary", elem_id="ck-save")
-            b_cancel = gr.Button("Huỷ", elem_id="ck-cancel")
-            b_unmark = gr.Button("Bỏ đánh dấu", elem_id="ck-unmark", visible=False)
+            b_save = gr.Button("Save", variant="primary", elem_id="ck-save")
+            b_cancel = gr.Button("Cancel", elem_id="ck-cancel")
+            b_unmark = gr.Button("Unmark", elem_id="ck-unmark", visible=False)
         msg = gr.HTML(elem_id="ck-msg", apply_default_css=False)
     armed = gr.State(False)
 
@@ -1597,7 +1597,7 @@ def mark_panel(gr, demo, store, ctx, shown):
         return f'<span class="m28-chip c-gan_tay">Đã đánh dấu: {e(r["loai"])}</span>' if r else ""
 
     def hide(m="", level="info", name=""):
-        return (gr.update(visible=False), badge_for(name), "", False, gr.update(value="Bỏ đánh dấu", elem_classes=[]), msg_html(m, level))
+        return (gr.update(visible=False), badge_for(name), "", False, gr.update(value="Unmark", elem_classes=[]), msg_html(m, level))
 
     hide_outs = [panel, badge, opened, armed, b_unmark, msg]
     keep = gr.update()
@@ -1614,7 +1614,7 @@ def mark_panel(gr, demo, store, ctx, shown):
         r = get_mark(store.run_dir, ctx.reviewer, f.file)
         vals = [x for x in (r["diem"].split(";") if r else []) if x]
         choices = list(dict.fromkeys(points + vals)) if points else vals
-        return (gr.update(visible=True), badge_for(sh), sh, False, gr.update(visible=bool(r), value="Bỏ đánh dấu", elem_classes=[]), "",
+        return (gr.update(visible=True), badge_for(sh), sh, False, gr.update(visible=bool(r), value="Unmark", elem_classes=[]), "",
                 f'<b>{e(f.file)}</b> · lượt {e(run_label(store.run_dir))}' + (' · <span class="ck-sub">đã đánh dấu, đang sửa</span>' if r else ""),
                 gr.update(value=r["loai"] if r else None), gr.update(choices=choices, value=vals), gr.update(value=r["ghi_chu"] if r else ""))
 
@@ -1651,13 +1651,13 @@ def mark_panel(gr, demo, store, ctx, shown):
         if not op or sh != op:
             return hide("Ảnh đã đổi, mở lại Ca khó.", "warn", sh)
         if not arm:
-            return (keep, badge_for(op), op, True, gr.update(value="Bấm lần nữa để bỏ", elem_classes=["armed"]), "")
+            return (keep, badge_for(op), op, True, gr.update(value="Click again to unmark", elem_classes=["armed"]), "")
         f = face_of(op)
         try:
             ok = delete_mark(store.run_dir, ctx.reviewer, f.file, runs_root=ctx.runs_root) if f else False
         except RunError as ex:
             gr.Warning(str(ex), title="Chưa bỏ được")
-            return (keep, badge_for(op), op, False, gr.update(value="Bỏ đánh dấu", elem_classes=[]), msg_html(str(ex), "warn"))
+            return (keep, badge_for(op), op, False, gr.update(value="Unmark", elem_classes=[]), msg_html(str(ex), "warn"))
         return hide(f"Đã bỏ đánh dấu {f.file}." if ok else "Mặt này chưa có đánh dấu.", "ok" if ok else "info", op)
 
     def on_shown(sh, op):
@@ -1682,7 +1682,7 @@ def member_tab(gr, demo, store, ctx):
     gr.HTML(warn_html(), elem_id="ck-warn", apply_default_css=False)
     with gr.Row():
         run_dd = gr.Dropdown(choices=[("Tất cả lượt", "")], value="", label="Lọc theo lượt", elem_id="ck-run", scale=3)
-        b_refresh = gr.Button("Làm mới", elem_id="ck-refresh", scale=1, min_width=120)
+        b_refresh = gr.Button("Refresh", elem_id="ck-refresh", scale=1, min_width=120)
     note_html = gr.HTML(elem_id="ck-m-msg", apply_default_css=False)
     list_view = gr.HTML(elem_id="ck-list", apply_default_css=False)
     pick = gr.Dropdown(choices=[], value=None, label="Chọn ca để sửa hoặc xoá (lượt/ảnh)", elem_id="ck-pick-member", filterable=True)
@@ -1691,17 +1691,17 @@ def member_tab(gr, demo, store, ctx):
         m_diem = gr.Dropdown(choices=points, value=[], multiselect=True, allow_custom_value=not points, label="Điểm liên quan", elem_id="ck-m-diem")
         m_note = gr.Textbox(label=f"Ghi chú (tối đa {NOTE_MAX} ký tự)", lines=2, max_lines=4, max_length=NOTE_MAX, elem_id="ck-m-note")
         with gr.Row(elem_id="ck-m-btns"):
-            m_save = gr.Button("Lưu", variant="primary", elem_id="ck-m-save")
-            m_del = gr.Button("Xoá", variant="stop", elem_id="ck-m-del")
-            m_ok = gr.Button("Xác nhận xoá", elem_id="ck-m-del-ok", visible=False)
-            m_no = gr.Button("Không", elem_id="ck-m-del-no", visible=False)
+            m_save = gr.Button("Save", variant="primary", elem_id="ck-m-save")
+            m_del = gr.Button("Delete", variant="stop", elem_id="ck-m-del")
+            m_ok = gr.Button("Confirm delete", elem_id="ck-m-del-ok", visible=False)
+            m_no = gr.Button("Cancel", elem_id="ck-m-del-no", visible=False)
     gr.Markdown("### Xuất gói họp")
     kem = gr.Checkbox(value=True, label="Kèm ảnh chồng (lượt YawDD/DrivFace)", elem_id="ck-kem-anh")
     ngoai_box = gr.HTML(elem_id="ck-ngoai", apply_default_css=False)
     kem_ngoai = gr.Checkbox(value=False, label="Kèm cả ảnh của lượt không rõ nguồn", elem_id="ck-kem-ngoai")
-    b_export = gr.Button("Xuất gói họp", variant="primary", elem_id="ck-export")
+    b_export = gr.Button("Export meeting pack", variant="primary", elem_id="ck-export")
     summary = gr.HTML(elem_id="ck-sum", apply_default_css=False)
-    download = gr.DownloadButton("Tải gói về", visible=False, elem_id="ck-download")
+    download = gr.DownloadButton("Download pack", visible=False, elem_id="ck-download")
 
     def sources(luots):
         return {l: run_source(os.path.join(ctx.runs_root, l), ctx.project_root) for l in luots}
@@ -1834,10 +1834,10 @@ def meeting_tab(gr, demo, ctx):
     gr.HTML(warn_html(), elem_id="hop-warn", apply_default_css=False)
     with gr.Row():
         sess = gr.Dropdown(choices=session_choices(), value=None, label="Phiên họp", elem_id="hop-session", scale=3)
-        b_new = gr.Button("Tạo phiên mới hôm nay", elem_id="hop-new", scale=1, min_width=170)
+        b_new = gr.Button("New session today", elem_id="hop-new", scale=1, min_width=170)
     msg = gr.HTML(elem_id="hop-msg", apply_default_css=False)
     drop = gr.File(label="Gói họp (.zip)", file_count="multiple", file_types=[".zip"], type="filepath", elem_id="hop-drop", height=150)
-    b_import = gr.Button("Nhập các gói", variant="primary", elem_id="hop-import")
+    b_import = gr.Button("Import packs", variant="primary", elem_id="hop-import")
     report = gr.HTML(elem_id="hop-report", apply_default_css=False)
     counts = gr.HTML(elem_id="hop-counts", apply_default_css=False)
     with gr.Row(elem_id="hop-filters"):
@@ -1853,9 +1853,9 @@ def meeting_tab(gr, demo, ctx):
             stage = gr.HTML(elem_id="ck-stage", apply_default_css=False)
             gr.HTML('<div id="ck-present-hint">← → đổi ca · Esc thoát</div>', apply_default_css=False)
             with gr.Row(elem_id="hop-nav"):
-                b_prev = gr.Button("← Ca trước", elem_id="hop-prev")
-                b_next = gr.Button("Ca sau →", elem_id="hop-next")
-                b_present = gr.Button("Trình chiếu", elem_id="hop-present")
+                b_prev = gr.Button("← Previous case", elem_id="hop-prev")
+                b_next = gr.Button("Next case →", elem_id="hop-next")
+                b_present = gr.Button("Present", elem_id="hop-present")
             with gr.Group(elem_id="hop-form"):
                 tt = gr.Radio(choices=[(t, c) for c, t, _i in TRANG_THAI], value="mo", label="Trạng thái", elem_id="hop-tt")
                 qd = gr.Textbox(label=f"Quyết định (tối đa {QD_MAX} ký tự)", lines=2, max_lines=4, max_length=QD_MAX, elem_id="hop-qd")
@@ -1865,10 +1865,10 @@ def meeting_tab(gr, demo, ctx):
                 gb = gr.Checkbox(value=True, label="Ghi vào backlog", elem_id="hop-gb")
                 mg = gr.Textbox(label="Mục guideline (§)", max_lines=1, max_length=40, elem_id="hop-mg")
                 with gr.Row(elem_id="hop-btns"):
-                    b_save = gr.Button("Lưu", variant="primary", elem_id="hop-save")
-                    b_save_next = gr.Button("Lưu & sang ca sau", elem_id="hop-save-next")
+                    b_save = gr.Button("Save", variant="primary", elem_id="hop-save")
+                    b_save_next = gr.Button("Save & next", elem_id="hop-save-next")
             form_msg = gr.HTML(elem_id="hop-form-msg", apply_default_css=False)
-    b_min = gr.Button("Xuất biên bản", variant="primary", elem_id="hop-minutes")
+    b_min = gr.Button("Export minutes", variant="primary", elem_id="hop-minutes")
     min_msg = gr.HTML(elem_id="hop-min-msg", apply_default_css=False)
     with gr.Row():
         f_md = gr.File(label="Biên bản (.md)", interactive=False, visible=False, elem_id="hop-file-md")
@@ -1926,7 +1926,7 @@ def meeting_tab(gr, demo, ctx):
             return view(None, "", loai, nguoi, ttf, q, group or "loai", msg_text=f"Không tạo được phiên mới: {ex}", level="warn")
         registry[m.name] = m
         up = gr.update(choices=session_choices(), value=m.name)
-        return view(m.name, "", loai, nguoi, ttf, q, group or "loai", msg_text=f"Đã tạo phiên {m.name}. Kéo thả các gói .zip vào ô bên dưới rồi bấm Nhập.",
+        return view(m.name, "", loai, nguoi, ttf, q, group or "loai", msg_text=f"Đã tạo phiên {m.name}. Kéo thả các gói .zip vào ô bên dưới rồi bấm Import packs.",
                     level="ok", sess_update=up, fill_form=False)
 
     def on_import(files, name, key, loai, nguoi, ttf, q, group):

@@ -120,7 +120,7 @@ def list_runs(runs_root):
 def valid_run(runs_root, run):
     """Đường dẫn runs/<run> nếu `run` là đợt trong danh sách do server tính, không thì RunError."""
     if not isinstance(run, str) or not RUN_RE.fullmatch(run) or run not in list_runs(runs_root):
-        raise RunError(f"Đợt {run!r} không có trong danh sách đợt: bấm Làm mới.")
+        raise RunError(f"Đợt {run!r} không có trong danh sách đợt: bấm Refresh.")
     p = os.path.join(runs_root, run)
     if not _inside(p, runs_root):
         raise RunError(f"Đợt {run} nằm ngoài thư mục runs: từ chối.")
@@ -476,7 +476,7 @@ def restore_image(run_dir, folder, *, reviewer=""):
     nên lượt có lại mặt chưa rà (review/done.txt bị xoá). Đích đã có file thì RunError và không chuyển gì."""
     items = {d["folder"]: d for d in list_trash(run_dir)}
     if folder not in items:
-        raise RunError("Mục thùng rác này không còn (đã khôi phục hoặc đã dọn): bấm Làm mới.")
+        raise RunError("Mục thùng rác này không còn (đã khôi phục hoặc đã dọn): bấm Refresh.")
     busy = run_busy(run_dir)
     if busy:
         raise RunError(f"Lượt {os.path.basename(run_dir)} đang có việc chạy ({busy[0]}): chờ xong rồi khôi phục.")
@@ -590,7 +590,7 @@ def list_deleted_runs(runs_root):
 def _deleted_entry(runs_root, entry):
     found = {d["entry"]: d for d in list_deleted_runs(runs_root)}
     if entry not in found:
-        raise RunError("Mục này không còn trong thùng rác đợt: bấm Làm mới.")
+        raise RunError("Mục này không còn trong thùng rác đợt: bấm Refresh.")
     path = os.path.join(runs_trash(runs_root), entry)
     if not _inside(path, runs_trash(runs_root)):
         raise RunError("Đường dẫn nằm ngoài thùng rác đợt: từ chối.")
@@ -688,17 +688,17 @@ def card_html(i, *, active=False, push_ready=None):
     why = "Đợt đang mở ở tab Rà soát" if active else ("Chưa có flags.json (prepare chưa xong)" if not i["ready"] else
                                                          "Đang có việc chạy" if not can_ra else "")
     ra = (f'<button type="button" class="dot-btn dot-btn-ra" data-act="ra" data-run="{n}"' + ("" if can_ra else ' disabled')
-          + (f' title="{_e(why)}"' if why else "") + '>Rà đợt này</button>')
+          + (f' title="{_e(why)}"' if why else "") + '>Review batch</button>')
     push = ""
     if push_ready is not None:
         push = (f'<button type="button" class="dot-btn dot-btn-push" data-act="push" data-run="{n}"' + ("" if push_ready else " disabled")
-                + '>Đẩy lên CVAT</button>')
+                + '>Push to CVAT</button>')
     opened = ' <span class="dot-active">đang mở</span>' if active else ""
     return (f'<div class="dot-card" data-state="{i["state"]}"><div class="dot-card-head">'
-            f'<button type="button" class="dot-name" data-act="open" data-run="{n}" aria-label="Xem ảnh của đợt {n}">{n}</button>{opened}'
+            f'<button type="button" class="dot-name" data-act="open" data-run="{n}" aria-label="View images of batch {n}">{n}</button>{opened}'
             f'<span class="dot-state st-{_state_cls(i["state"])}">{_e(i["state_text"])}</span></div>'
             f'<div class="dot-meta">{meta}</div>{note}<div class="dot-counts">{_counts_html(i)}</div>{ex}'
-            f'<div class="dot-actions">{ra}{push}<button type="button" class="dot-btn" data-act="open" data-run="{n}">Xem ảnh</button></div></div>')
+            f'<div class="dot-actions">{ra}{push}<button type="button" class="dot-btn" data-act="open" data-run="{n}">View images</button></div></div>')
 
 
 def deleted_runs_html(rows):
@@ -707,8 +707,8 @@ def deleted_runs_html(rows):
     items = "".join(
         f'<div class="dot-del-row"><span><b>{_e(d["ten"])}</b> · xoá lúc {_e(fmt_date(d["luc"]))}'
         + (f' · task {_e(d["task"])} vẫn còn trên CVAT' if d["task"] else "") + '</span>'
-        f'<span><button type="button" class="dot-btn" data-act="restore_run" data-entry="{_e(d["entry"])}">Khôi phục</button>'
-        f'<button type="button" class="dot-btn dot-btn-danger" data-act="purge_run" data-entry="{_e(d["entry"])}">Xoá vĩnh viễn…</button></span></div>'
+        f'<span><button type="button" class="dot-btn" data-act="restore_run" data-entry="{_e(d["entry"])}">Restore</button>'
+        f'<button type="button" class="dot-btn dot-btn-danger" data-act="purge_run" data-entry="{_e(d["entry"])}">Delete permanently…</button></span></div>'
         for d in rows)
     return f'<div class="dot-section"><div class="dot-section-title">Đợt đã xoá ({len(rows)})</div>{items}</div>'
 
@@ -735,7 +735,7 @@ def grid_html(info, rows, page, trash, *, active=False, push=None):
         cells.append(
             f'<div class="dot-thumb st-{r["status"] or "chua"}"><img alt="{nm}" loading="lazy" src="{thumb_data_uri(r["src"])}">'
             f'<span class="dot-badge">{_e(r["status_text"])}</span>'
-            f'<button type="button" class="dot-trash" data-act="delimg" data-run="{n}" data-name="{nm}" aria-label="Xoá ảnh {nm}" title="Xoá ảnh {nm}">'
+            f'<button type="button" class="dot-trash" data-act="delimg" data-run="{n}" data-name="{nm}" aria-label="Delete image {nm}" title="Delete image {nm}">'
             '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" '
             'stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/>'
             '<path d="M10 11v6"/><path d="M14 11v6"/></svg></button>'
@@ -744,16 +744,16 @@ def grid_html(info, rows, page, trash, *, active=False, push=None):
     pager = ""
     if n_pages > 1:
         pager = (f'<div class="dot-pager"><button type="button" class="dot-btn" data-act="page" data-run="{n}" data-page="{page - 1}"'
-                 + ("" if page > 0 else " disabled") + f'>‹ Trang trước</button><span>Trang <b>{page + 1}</b>/{n_pages}</span>'
+                 + ("" if page > 0 else " disabled") + f'>‹ Prev page</button><span>Trang <b>{page + 1}</b>/{n_pages}</span>'
                  f'<button type="button" class="dot-btn" data-act="page" data-run="{n}" data-page="{page + 1}"'
-                 + ("" if page < n_pages - 1 else " disabled") + '>Trang sau ›</button></div>')
-    head = (f'<div class="dot-gridhead"><button type="button" class="dot-btn" data-act="back">‹ Danh sách đợt</button>'
+                 + ("" if page < n_pages - 1 else " disabled") + '>Next page ›</button></div>')
+    head = (f'<div class="dot-gridhead"><button type="button" class="dot-btn" data-act="back">‹ Batch list</button>'
             f'<span class="dot-gridtitle">Đợt <b>{n}</b> · {_e(info["state_text"])}</span></div>'
             f'<div class="dot-counts">{_counts_html(info)}</div>')
     cvat = push_section_html(info) if info.get("push") else ""
     danger = (f'<div class="dot-danger"><button type="button" class="dot-btn dot-btn-danger" data-act="delrun" data-run="{n}"'
               + (' disabled title="Đợt đang mở ở tab Rà soát: chuyển sang đợt khác trước"' if active else "")
-              + '>Xoá cả đợt…</button></div>')
+              + '>Delete batch…</button></div>')
     return (f'<div class="dot-detail">{head}{cvat}<div class="dot-grid" role="list">{grid}</div>{pager}{trash_html(info["name"], trash)}{danger}</div>')
 
 
@@ -792,7 +792,7 @@ def push_section_html(info):
     open_btn = open_task_button(url) if st in ("xong", "da_tao", "da_nhap") else ""
     warn = ('<div class="dot-warn">Xoá ảnh ở đây KHÔNG xoá ảnh trong task trên CVAT. Muốn bỏ ảnh khỏi CVAT phải xoá trong CVAT hoặc xoá task.</div>')
     can_del = st in ("xong", "da_tao", "da_nhap")
-    btn = (f'<button type="button" class="dot-btn dot-btn-danger" data-act="deltask" data-run="{n}">Xoá task trên CVAT…</button>' if can_del else "")
+    btn = (f'<button type="button" class="dot-btn dot-btn-danger" data-act="deltask" data-run="{n}">Delete CVAT task…</button>' if can_del else "")
     return (f'<div class="dot-section dot-cvat"><div><b>CVAT:</b> {txt} · task <b>{name}</b> (id {tid}){link}</div>'
             + (f'<div class="push-open">{open_btn}</div>' if open_btn else "") + f'{warn}{btn}</div>')
 
@@ -804,7 +804,7 @@ def trash_html(run, items):
     rows = "".join(
         f'<div class="dot-del-row"><span><b>{_e(t["ten"])}</b> · xoá lúc {_e(fmt_date(t["thoi_diem"]))}'
         + (f' · quyết định {_e(DECISION_VI.get(t["quyet_dinh"], t["quyet_dinh"]))}' if t["quyet_dinh"] else "") + '</span>'
-        f'<button type="button" class="dot-btn" data-act="restore" data-run="{n}" data-trash="{_e(t["folder"])}">Khôi phục</button></div>'
+        f'<button type="button" class="dot-btn" data-act="restore" data-run="{n}" data-trash="{_e(t["folder"])}">Restore</button></div>'
         for t in items)
     return (f'<div class="dot-section"><div class="dot-section-title">Thùng rác của đợt ({len(items)})</div>{rows}'
-            f'<button type="button" class="dot-btn dot-btn-danger" data-act="empty" data-run="{n}">Dọn thùng rác…</button></div>')
+            f'<button type="button" class="dot-btn dot-btn-danger" data-act="empty" data-run="{n}">Empty trash…</button></div>')

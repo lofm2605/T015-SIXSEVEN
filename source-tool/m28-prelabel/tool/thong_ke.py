@@ -233,7 +233,7 @@ def mat_tu_goi(nd):
 def _thong_bao_trong_nme(co_manual, co_nhap_assisted, co_assisted):
     if not co_manual:
         return _trong("Chưa có nhãn gán tay của nhóm manual: đây là ĐÁP ÁN để đo nháp (cả hai nhóm làm cùng bộ ảnh).",
-                      "gói kết quả của người nhóm manual (outputs\\ket_qua\\ketqua_<Pk>_*.zip) hoặc raw\\<task>_<Pk>_<DDMM>.xml; điền config\\nhom_thi_nghiem.json", "người nhóm manual (bấm Lưu số đo ở hộp Đóng trang rồi gửi gói cho nhóm trưởng)")
+                      "gói kết quả của người nhóm manual (outputs\\ket_qua\\ketqua_<Pk>_*.zip) hoặc raw\\<task>_<Pk>_<DDMM>.xml; điền config\\nhom_thi_nghiem.json", "người nhóm manual (bấm Save timing ở hộp Đóng trang rồi gửi gói cho nhóm trưởng)")
     if not co_assisted:
         return _trong("Chưa có nháp của nhóm assisted để đo.", "gói kết quả của người nhóm assisted (có nháp và nhãn cuối)", "người nhóm assisted")
     if not co_nhap_assisted:
@@ -338,7 +338,7 @@ def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False,
     cap = [dict(nguoi=m["nguoi"], anh=m["anh"], nhap=m["nhap"], nhan=m["nhan"]) for m in assisted if m["nhap"]]
     if not cap:
         st["sua"] = dict(trong=_trong("Chưa có mặt nào của nhóm assisted có CẢ nháp đã nhập và nhãn cuối.",
-                                      "gói kết quả nhóm assisted có nháp (Lưu số đo ở hộp Đóng trang, sau khi collect), hoặc raw\\<task>_<Pk>_<DDMM>.xml của task demo-… cùng lượt trong runs\\", "người nhóm assisted"))
+                                      "gói kết quả nhóm assisted có nháp (Save timing ở hộp Đóng trang, sau khi collect), hoặc raw\\<task>_<Pk>_<DDMM>.xml của task demo-… cùng lượt trong runs\\", "người nhóm assisted"))
     else:
         st["sua"] = dict(trong=None, **so_sanh.ti_le_sua(cap, cfg, nguong))
         st["meta"]["canh_bao"] += kiem_hop_ly_nhap(cap, cfg, nguong)
@@ -363,7 +363,7 @@ def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False,
     st["thoi_gian"] = so_sanh.thoi_gian(t)
     if not t:
         st["thoi_gian"]["trong"] = _trong("Chưa có dòng bấm giờ nào dùng được (đã bỏ khởi động, giây trống/≤ 0" + (f", dòng ngoài bộ ảnh {bo_cfg}" if chi_bo_anh and bo_cfg else "") + ").",
-                                          "gói kết quả (hộp Đóng trang: Lưu số đo) hoặc outputs\\timing\\timing_<Pk>.csv", "mọi thành viên (đo bằng đồng hồ ở đầu trang)")
+                                          "gói kết quả (hộp Đóng trang: Save timing) hoặc outputs\\timing\\timing_<Pk>.csv", "mọi thành viên (đo bằng đồng hồ ở đầu trang)")
     else:
         st["thoi_gian"]["trong"] = None
     st["thoi_gian"]["n_dong_goi"] = sum(1 for r in t if r.get("nguon") == "goi")

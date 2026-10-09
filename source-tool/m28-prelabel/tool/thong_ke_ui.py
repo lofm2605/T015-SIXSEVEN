@@ -3,7 +3,7 @@ tỉ lệ điểm phải sửa, so sánh thời gian manual với assisted. Tab 
 
 Quy ước (giống ca_kho.py):
   * Đầu module KHÔNG nạp gradio (nhận `gr` làm tham số); chỉ thư viện chuẩn và các module tool/ chỉ thư viện chuẩn + numpy nạp lười. Không gọi mạng, không đọc token.
-  * Tính KHI CHỌN TAB (tab.select) hoặc bấm Làm mới, không tính lúc mở trang; chỉ ĐỌC runs\\, raw\\, data\\, outputs\\. Chỉ ghi khi bấm "Xuất CSV + HTML" và chỉ dưới outputs\\thong_ke.
+  * Tính KHI CHỌN TAB (tab.select) hoặc bấm Refresh, không tính lúc mở trang; chỉ ĐỌC runs\\, raw\\, data\\, outputs\\. Chỉ ghi khi bấm "Export CSV + HTML" và chỉ dưới outputs\\thong_ke.
   * Giá trị từ trình duyệt (lượt chứa nháp, đường dẫn bấm giờ) được kiểm lại ở server: lượt phải là phần tử của danh sách do server tính; đường dẫn bấm giờ phải nằm trong thư mục dự án;
     gói kết quả tải lên (nút "Nạp các gói kết quả của nhóm") được đọc từ file tạm của Gradio, kiểm sha256 và cấu trúc trước khi tin, không lưu vào dự án.
   * Handler: api_visibility="private", concurrency_id riêng, không chặn tab khác; lỗi -> gr.Warning và thông báo tiếng Việt, không traceback lên trang.
@@ -73,7 +73,7 @@ def clean_args(runs_root, luot_nhap):
     """Kiểm giá trị từ trình duyệt: lượt chứa nháp phải có trong danh sách server. Trả luot_nhap|None; sai thì RunError."""
     runs = dot_anh.list_runs(runs_root)
     if luot_nhap and luot_nhap not in runs:
-        raise nap_anh.RunError(f"Lượt chứa nháp {luot_nhap!r} không có trong danh sách lượt: bấm Làm mới.")
+        raise nap_anh.RunError(f"Lượt chứa nháp {luot_nhap!r} không có trong danh sách lượt: bấm Refresh.")
     return luot_nhap or None
 
 
@@ -101,10 +101,10 @@ def stats_tab(gr, demo, store, ctx):
     f_goi = gr.File(label="Nạp các gói kết quả của nhóm (ketqua_*.zip hoặc .json; chỉ đọc, không lưu vào dự án)", file_count="multiple", file_types=[".zip", ".json"], type="filepath",
                     elem_id="tk-goi", height=120)
     with gr.Row(elem_id="tk-btns"):
-        b_refresh = gr.Button("Làm mới", variant="primary", elem_id="tk-refresh")
-        b_export = gr.Button("Xuất CSV + HTML", elem_id="tk-export")
+        b_refresh = gr.Button("Refresh", variant="primary", elem_id="tk-refresh")
+        b_export = gr.Button("Export CSV + HTML", elem_id="tk-export")
     msg = gr.HTML(elem_id="tk-msg", apply_default_css=False)
-    download = gr.DownloadButton("Tải thong_ke.html", visible=False, elem_id="tk-download")
+    download = gr.DownloadButton("Download thong_ke.html", visible=False, elem_id="tk-download")
     view = gr.HTML(elem_id="tk-view", apply_default_css=False, elem_classes=["tk-root"])
     inputs = [d_nhap, s_nguong, c_task, c_bo, c_ttest, t_timing, f_goi]
     outs = [d_nhap, msg, view]

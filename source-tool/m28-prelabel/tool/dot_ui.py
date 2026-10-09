@@ -10,7 +10,7 @@ An toàn:
     token không bao giờ hiện trên trang.
   * Tên đợt/ảnh từ trình duyệt chỉ dùng khi là phần tử của danh sách do server tính; mọi lần xoá phải qua hộp xác nhận kèm mã ngẫu nhiên
     (dot_anh.Pending): bấm xác nhận của hộp cũ/trễ không xoá nhầm.
-  * Nút Huỷ của hộp xác nhận là nút mặc định (có focus khi hộp mở), Esc = Huỷ; xoá task phải gõ lại đúng tên và tick ô hiểu hậu quả.
+  * Nút Cancel của hộp xác nhận là nút mặc định (có focus khi hộp mở), Esc = Cancel; xoá task phải gõ lại đúng tên và tick ô hiểu hậu quả.
 """
 import html
 import json
@@ -152,7 +152,7 @@ JS_BODY = r"""
         m.dataset.m28 = '1';
         m.setAttribute('role', 'dialog');
         m.setAttribute('aria-modal', 'true');
-        setTimeout(() => {                                  // nút Huỷ là mặc định: có focus khi hộp mở (tìm sau khi con đã dựng xong)
+        setTimeout(() => {                                  // nút Cancel là mặc định: có focus khi hộp mở (tìm sau khi con đã dựng xong)
           const t = m.querySelector('.modal-title');
           if (t && t.id) { m.setAttribute('aria-labelledby', t.id); }
           const cancel = m.querySelector('button[id$="-cancel"]');
@@ -166,7 +166,7 @@ JS_BODY = r"""
       const ms = modals();
       if (!ms.length) { return; }
       const m = ms[ms.length - 1];
-      if (e.key === 'Escape') {                            // Esc = Huỷ
+      if (e.key === 'Escape') {                            // Esc = Cancel
         e.preventDefault(); e.stopPropagation();
         const c = m.querySelector('button[id$="-cancel"]');
         if (c) { c.click(); }
@@ -213,20 +213,20 @@ def push_panel(gr, demo, store, ctx):
     pending = ctx.push_pending
 
     panel = gr.HTML(elem_id="push-panel", apply_default_css=False)
-    b_push = gr.Button("Đẩy lên CVAT", elem_id="btn-push", interactive=False)
+    b_push = gr.Button("Push to CVAT", elem_id="btn-push", interactive=False)
     msg = gr.HTML(elem_id="push-msg", apply_default_css=False)
     prog = gr.HTML(elem_id="push-prog", apply_default_css=False)
     log_tb = gr.Textbox(label="Log đẩy lên CVAT (đã lọc token)", lines=6, max_lines=12, interactive=False, autoscroll=True,
                         elem_id="push-log", visible=False)
-    b_cancel = gr.Button("Huỷ", variant="stop", elem_id="push-cancel", visible=False)
+    b_cancel = gr.Button("Cancel", variant="stop", elem_id="push-cancel", visible=False)
     result = gr.HTML(elem_id="push-result", apply_default_css=False)
     token_tb = gr.Textbox(visible="hidden", elem_id="push-token")
     with gr.Column(visible=False, elem_id="push-confirm", elem_classes=["m28-modal"]) as modal:
         with gr.Column(elem_classes=["m28-modal-box"]):
             confirm_body = gr.HTML(elem_id="push-confirm-body", apply_default_css=False)
             with gr.Row(elem_classes=["m28-modal-btns"]):
-                b_ok = gr.Button("Đẩy lên CVAT", variant="primary", elem_id="push-confirm-ok")
-                b_no = gr.Button("Huỷ", elem_id="push-confirm-cancel")
+                b_ok = gr.Button("Push to CVAT", variant="primary", elem_id="push-confirm-ok")
+                b_no = gr.Button("Cancel", elem_id="push-confirm-cancel")
     timer = gr.Timer(1.0, active=False)
     outs = [panel, b_push, msg, prog, log_tb, b_cancel, result, timer]
     run = os.path.basename(os.path.normpath(store.run_dir))
@@ -278,7 +278,7 @@ def push_panel(gr, demo, store, ctx):
         if ctx.closing:
             return render(nap_anh.CLOSING_MSG) + close
         if it is None or it.get("run") != run:
-            return render("Yêu cầu xác nhận đã cũ hoặc không còn hiệu lực: bấm Đẩy lên CVAT lại.") + close
+            return render("Yêu cầu xác nhận đã cũ hoặc không còn hiệu lực: bấm Push to CVAT lại.") + close
         m = model()
         if not m["enabled"]:
             return render(m["reason"] or "Chưa đẩy được.") + close
@@ -324,7 +324,7 @@ def dot_tab(gr, demo, store, ctx, deps):
     with gr.Row():
         gr.HTML('<div class="nap-note">Mỗi <b>đợt</b> là một lượt nạp ảnh (tên do bạn đặt hoặc NAP_xxx). Xoá ở đây là <b>xoá mềm</b> '
                 '(thùng rác, khôi phục được); xoá ảnh/đợt cục bộ <b>không</b> xoá gì trên CVAT.</div>', elem_id="dot-intro", apply_default_css=False)
-        b_refresh = gr.Button("Làm mới", elem_id="dot-refresh", size="sm")
+        b_refresh = gr.Button("Refresh", elem_id="dot-refresh", size="sm")
     job_html = gr.HTML(elem_id="dot-job", apply_default_css=False)
     msg = gr.HTML(elem_id="dot-msg", apply_default_css=False)
     root = gr.HTML(elem_id="dot-root", apply_default_css=False)
@@ -340,8 +340,8 @@ def dot_tab(gr, demo, store, ctx, deps):
             typed = gr.Textbox(label="Gõ lại đúng tên để xác nhận", elem_id="dot-modal-typed", visible=False, max_lines=1)
             check = gr.Checkbox(label="Tôi hiểu nhãn đã sửa trong CVAT sẽ mất", elem_id="dot-modal-check", visible=False)
             with gr.Row(elem_classes=["m28-modal-btns"]):
-                b_ok = gr.Button("Xoá", variant="stop", elem_id="dot-modal-ok")
-                b_no = gr.Button("Huỷ", elem_id="dot-modal-cancel")
+                b_ok = gr.Button("Delete", variant="stop", elem_id="dot-modal-ok")
+                b_no = gr.Button("Cancel", elem_id="dot-modal-cancel")
 
     outs = [root, ses, msg, job_html, timer, modal, body, typed, check, b_ok, token_tb, target]
     opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1)
@@ -400,7 +400,7 @@ def dot_tab(gr, demo, store, ctx, deps):
         else:
             m = (gr.update(visible=True), modal["body"], gr.update(visible=modal.get("typed", False), value="", label=modal.get("typed_label", "")),
                  gr.update(visible=modal.get("check", False), value=False),
-                 gr.update(interactive=modal.get("ok_enabled", True), value=modal.get("ok_label", "Xoá")), modal["token"])
+                 gr.update(interactive=modal.get("ok_enabled", True), value=modal.get("ok_label", "Delete")), modal["token"])
         return (build_root(s), s, box(note, level), job_banner(), gr.Timer(active=any_running()), *m, switch)
 
     def modal_for(kind, **kw):
@@ -470,7 +470,7 @@ def dot_tab(gr, demo, store, ctx, deps):
             body = (f'<div class="modal-title modal-danger" id="dot-modal-title">Dọn thùng rác của đợt {_e(a["run"])}?</div>'
                     f'<div class="nap-box nap-err" role="alert"><b>Xoá vĩnh viễn {n} ảnh trong thùng rác, KHÔNG khôi phục được.</b></div>'
                     '<div class="nap-note">Tên các ảnh này vẫn bị loại khỏi đợt (nằm trong excluded.txt).</div>')
-            return render(s, modal=dict(body=body, token=it["token"], ok_label="Dọn vĩnh viễn"))
+            return render(s, modal=dict(body=body, token=it["token"], ok_label="Delete permanently"))
         if act == "delrun":
             return _ask_delrun(a, s)
         if act == "deltask":
@@ -510,13 +510,13 @@ def dot_tab(gr, demo, store, ctx, deps):
         if not m["enabled"]:
             raise RunError(m["reason"] or "Chưa đẩy được.")
         it = modal_for("push", run=a["run"])
-        return render(s, modal=dict(body=day_cvat.confirm_html(m), token=it["token"], ok_label="Đẩy lên CVAT", ok_enabled=True))
+        return render(s, modal=dict(body=day_cvat.confirm_html(m), token=it["token"], ok_label="Push to CVAT", ok_enabled=True))
 
     def _ask_delimg(a, s):
         run_dir = run_of(a)
         names = dot_anh.image_names(run_dir)
         if a["name"] not in names:
-            raise RunError(f"Ảnh {a['name']!r} không có trong đợt (có thể đã xoá): bấm Làm mới.")
+            raise RunError(f"Ảnh {a['name']!r} không có trong đợt (có thể đã xoá): bấm Refresh.")
         busy = dot_anh.run_busy(run_dir)
         if busy:
             raise RunError(f"Đợt {a['run']} đang có việc chạy ({busy[0]}): chờ xong rồi xoá.")
@@ -536,7 +536,7 @@ def dot_tab(gr, demo, store, ctx, deps):
                 f'<tr><th>Quyết định hiện tại</th><td>{_e(dot_anh.DECISION_VI.get(r["status"], r["status_text"]))}</td></tr></table>'
                 '<div class="nap-note"><b>Hậu quả:</b> ảnh rời khỏi hàng đợi rà và khỏi lần push sau; chuyển vào thùng rác của đợt, '
                 f'<b>khôi phục được</b>.</div>{warn}')
-        return render(s, modal=dict(body=body, token=it["token"], ok_label="Xoá ảnh"))
+        return render(s, modal=dict(body=body, token=it["token"], ok_label="Delete image"))
 
     def _restore(a, s):
         run_dir = run_of(a)
@@ -559,12 +559,12 @@ def dot_tab(gr, demo, store, ctx, deps):
         pushed = ps.get("trang_thai") in ("xong", "da_tao", "da_nhap")
         it = modal_for("delrun", run=a["run"])
         warn = (f'<div class="nap-box nap-err" role="alert"><b>Xoá đợt ở đây KHÔNG xoá task {_e(ps.get("task"))} trên CVAT.</b> '
-                'Muốn xoá task phải dùng nút Xoá task trên CVAT trước (hoặc xoá trong CVAT).</div>') if pushed else ""
+                'Muốn xoá task phải dùng nút Delete CVAT task trước (hoặc xoá trong CVAT).</div>') if pushed else ""
         body = (f'<div class="modal-title modal-danger" id="dot-modal-title">Xoá cả đợt {_e(a["run"])}?</div>'
                 '<div class="nap-note"><b>Hậu quả:</b> cả thư mục đợt (ảnh, nhãn nháp, kết quả rà) chuyển vào <code>runs\\_trash</code>, '
                 f'<b>khôi phục được</b> nếu tên {_e(a["run"])} chưa bị dùng lại. Không đụng gì trên CVAT.</div>{warn}')
         return render(s, modal=dict(body=body, token=it["token"], typed=True, typed_label=f"Gõ lại đúng tên đợt ({a['run']}), phân biệt hoa thường",
-                                    ok_label="Xoá cả đợt", ok_enabled=False))
+                                    ok_label="Delete batch", ok_enabled=False))
 
     def _ask_deltask(a, s):
         run_dir = run_of(a)
@@ -574,16 +574,16 @@ def dot_tab(gr, demo, store, ctx, deps):
         it = modal_for("deltask", run=a["run"], task=m["task"])
         return render(s, modal=dict(body=day_cvat.delete_confirm_html(m), token=it["token"], typed=True, check=True,
                                     typed_label=f"Gõ lại ĐÚNG tên task ({m['task']}), phân biệt hoa thường",
-                                    ok_label="Xoá task trên CVAT", ok_enabled=False))
+                                    ok_label="Delete CVAT task", ok_enabled=False))
 
     def _ask_purge(a, s):
         found = {d["entry"]: d for d in dot_anh.list_deleted_runs(ctx.runs_root)}
         if a["entry"] not in found:
-            raise RunError("Mục này không còn trong thùng rác đợt: bấm Làm mới.")
+            raise RunError("Mục này không còn trong thùng rác đợt: bấm Refresh.")
         it = modal_for("purge_run", entry=a["entry"])
         body = (f'<div class="modal-title modal-danger" id="dot-modal-title">Xoá vĩnh viễn đợt {_e(found[a["entry"]]["ten"])}?</div>'
                 '<div class="nap-box nap-err" role="alert"><b>Xoá hẳn khỏi ổ đĩa, KHÔNG khôi phục được</b> (ảnh, nhãn nháp, kết quả rà của đợt).</div>')
-        return render(s, modal=dict(body=body, token=it["token"], ok_label="Xoá vĩnh viễn"))
+        return render(s, modal=dict(body=body, token=it["token"], ok_label="Delete permanently"))
 
     def on_typed(typed_v, check_v, token):
         it = pending.item

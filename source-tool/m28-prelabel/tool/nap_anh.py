@@ -54,7 +54,7 @@ LOG_LINES = 500
 NOTE_MAX = 500                      # ghi chú của đợt (dot.json)
 
 
-CLOSING_MSG = "Trang đang đóng (đã bấm Đóng trang rà soát): không ghi thêm được."   # dùng chung review_app, dot_ui, ca_kho
+CLOSING_MSG = "Trang đang đóng (đã bấm Close page): không ghi thêm được."   # dùng chung review_app, dot_ui, ca_kho
 
 
 class RunError(Exception):
@@ -414,7 +414,7 @@ def count_files(path, exts=EXTS):
 def auto_open_action(run, snap):
     """Việc của nút Upload & Open ở mỗi nhịp đồng hồ: `run` = lượt đang chờ tự mở (None = không chờ), `snap` = job.snapshot().
     'none' không chờ gì; 'wait' lượt đó còn đang chuẩn bị; 'go' lượt đó chuẩn bị xong → chuyển trang sang lượt đó (một lần);
-    'drop' lượt đó lỗi, bị huỷ hoặc job đã sang lượt khác → bỏ yêu cầu (mở tay ở tab Các đợt → Rà đợt này khi cần)."""
+    'drop' lượt đó lỗi, bị huỷ hoặc job đã sang lượt khác → bỏ yêu cầu (mở tay ở tab Các đợt → Review batch khi cần)."""
     if not run:
         return "none"
     if snap.get("run") != run:
@@ -593,7 +593,7 @@ class PushJob(ChildJob):
     def start(self, run, runs_root, project_root, reviewer, task, tool_dir=None, python=None, images=None):
         with self._lock:
             if self.running:
-                raise RunError(f"Đang đẩy lượt {self.run} lên CVAT: chờ xong hoặc bấm Huỷ.")
+                raise RunError(f"Đang đẩy lượt {self.run} lên CVAT: chờ xong hoặc bấm Cancel.")
             run_dir = _check_cvat_start(self, run, runs_root, task)
             if not REVIEWER_RE.fullmatch(reviewer or ""):
                 raise RunError(f"Tên người rà {reviewer!r} không hợp lệ.")
@@ -678,7 +678,7 @@ class SmokeJob(ChildJob):
     def start(self, runs_root, project_root, giu_task=False, giu_project=False, tool_dir=None, python=None):
         with self._lock:
             if self.running:
-                raise RunError("Đang chạy kiểm tra nhanh CVAT: chờ xong hoặc bấm Huỷ.")
+                raise RunError("Đang chạy kiểm tra nhanh CVAT: chờ xong hoặc bấm Cancel check.")
             run_dir = os.path.join(runs_root, SMOKE_DIR)
             if not _inside(run_dir, runs_root):
                 raise RunError(f"{run_dir} nằm ngoài {runs_root}: từ chối.")

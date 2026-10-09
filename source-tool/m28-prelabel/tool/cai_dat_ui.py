@@ -1,4 +1,4 @@
-"""Tab "Cài đặt" của trang rà soát M28 (Gradio): CVAT (link, token, tổ chức, Nhớ trên máy này, Thử kết nối, Quên token), người rà, đường dẫn
+"""Tab "Cài đặt" của trang rà soát M28 (Gradio): CVAT (link, token, tổ chức, Nhớ trên máy này, nút Test CVAT connection và Forget token), người rà, đường dẫn
 (thư mục ảnh, file face_landmarker.task), cờ low_conf (t_flip) và pipeline (chỉ đọc).
 
 Không import gradio ở đầu module (gradio chỉ đến từ tham số `gr`, như dot_ui.py); phần dựng HTML thuần ở đầu file để test không cần trình duyệt.
@@ -6,11 +6,11 @@ Logic nằm ở cai_dat.py; tab này chỉ nối với Gradio. An toàn:
   * Token chỉ đi MỘT chiều vào server qua ô Token (type="password") của handler Gradio sẵn có (api_visibility="private", cổng 127.0.0.1);
     không bao giờ ở gr.State, value của Textbox, HTML, elem_classes, data-*, giá trị trả về của handler. Về trình duyệt chỉ có dạng che.
   * Mọi handler bọc try/except: lỗi lạ chỉ hiện thông báo đã lọc token, traceback (đã lọc) chỉ ra console.
-  * Handler GHI từ chối khi trang đang đóng (ctx.closing); Lưu / Quên token còn từ chối khi đang đẩy hay xoá task trên CVAT.
+  * Handler GHI từ chối khi trang đang đóng (ctx.closing); Save / Forget token còn từ chối khi đang đẩy hay xoá task trên CVAT.
   * Mỗi lần ghi tăng `rev`; tab trình duyệt giữ `rev` cũ bị từ chối nhẹ nhàng và tải lại (nhiều tab trình duyệt cùng mở).
-  * Thử kết nối chạy bằng tiến trình con (cai_dat.test_connection): trang vẫn không gọi mạng.
-  * "Chạy kiểm tra nhanh CVAT" chạy tool/cvat_smoke.py bằng tiến trình con (nap_anh.SmokeJob, token qua môi trường của nó): tạo task demo-smoke
-    giả, nhập nhãn, xuất lại, xoá. Có hộp xác nhận (Huỷ mặc định), khoá chéo với đẩy/xoá task, Lưu/Quên token từ chối khi đang chạy.
+  * Test CVAT connection chạy bằng tiến trình con (cai_dat.test_connection): trang vẫn không gọi mạng.
+  * "Run CVAT quick check" chạy tool/cvat_smoke.py bằng tiến trình con (nap_anh.SmokeJob, token qua môi trường của nó): tạo task demo-smoke
+    giả, nhập nhãn, xuất lại, xoá. Có hộp xác nhận (Cancel mặc định), khoá chéo với đẩy/xoá task, Save/Forget token từ chối khi đang chạy.
 """
 import functools
 import html
@@ -99,8 +99,8 @@ def check_html(res):
 
 
 def test_html(res, project, typed=False):
-    """Kết quả thử kết nối. `project` là tên project trong pipeline.json. typed=True: giá trị đang gõ, chưa Lưu."""
-    extra = ["Đây là giá trị đang gõ trong ô, chưa bấm Lưu."] if typed else []
+    """Kết quả thử kết nối. `project` là tên project trong pipeline.json. typed=True: giá trị đang gõ, chưa Save."""
+    extra = ["Đây là giá trị đang gõ trong ô, chưa bấm Save."] if typed else []
     if res["ok"]:
         pf = res.get("project_found")
         proj = (f"project {project}: đã có (id {res.get('project_id')})" if pf
@@ -139,11 +139,11 @@ def status_html(snap, pipe):
         out.append(box_html("err", "Không lưu được ra file", [snap["dir_error"]]))
     if snap["file_status"] in ("hong", "khong_doc"):
         out.append(box_html("warn", "File cvat.json " + ("hỏng" if snap["file_status"] == "hong" else "không đọc được"),
-                            [f"Đã bỏ qua file này (không hiện nội dung). Bấm Quên token để xoá, hoặc nhập lại rồi bấm Lưu để ghi lại: {snap['file_path']}"]))
+                            [f"Đã bỏ qua file này (không hiện nội dung). Bấm Forget token để xoá, hoặc nhập lại rồi bấm Save để ghi lại: {snap['file_path']}"]))
     if snap["env"] == "partial" and snap["source"] != "env":
         out.append(f'<div class="cd-note">Biến môi trường trong cmd chỉ có một trong CVAT_URL / CVAT_ACCESS_TOKEN nên không dùng.</div>')
     if snap["source"] == "env":
-        out.append('<div class="cd-note">Đang dùng biến môi trường của cmd. Nhập và Lưu ở đây thì chỉ trang này dùng giá trị mới '
+        out.append('<div class="cd-note">Đang dùng biến môi trường của cmd. Nhập và bấm Save ở đây thì chỉ trang này dùng giá trị mới '
                    "(biến trong cmd không đổi).</div>")
     return "".join(out)
 
@@ -153,7 +153,7 @@ def remember_note_html(snap):
     path = snap["file_path"] or os.path.join(d, cai_dat.FILE_CVAT)
     return (f'<div class="cd-note">Bật thì lưu link, token, tổ chức vào <code class="cd-path">{_e(path)}</code>: file nằm NGOÀI repo, trong hồ sơ của bạn '
             "(không bao giờ vào repo, runs\\, outputs\\). Linux/macOS: quyền chỉ chủ máy (0600). Windows: dựa vào quyền hồ sơ người dùng "
-            "(không có 0600 thật, không dùng keyring/DPAPI). Dùng máy chung thì để TẮT hoặc bấm Quên token khi xong.</div>")
+            "(không có 0600 thật, không dùng keyring/DPAPI). Dùng máy chung thì để TẮT hoặc bấm Forget token khi xong.</div>")
 
 
 def reviewer_info_html(snap, ctx_reviewer, run_name, next_name):
@@ -164,7 +164,7 @@ def reviewer_info_html(snap, ctx_reviewer, run_name, next_name):
     if next_name != ctx_reviewer:
         out.append(f"Lượt đang mở vẫn ghi vào <code>triage_{_e(ctx_reviewer)}.csv</code>; từ lượt sau dùng <b>{_e(next_name)}</b>.")
     out.append("Đổi tên KHÔNG áp dụng ngay cho lượt đang mở vì phần rà dở nằm ở file theo tên cũ. Tên mới có hiệu lực ở lượt kế tiếp "
-               "(Upload &amp; Open ở tab Nạp ảnh, hoặc Rà đợt này ở tab Các đợt). Mở lại trang bằng dòng lệnh thì tên là tên trong lệnh.")
+               "(Upload &amp; Open ở tab Nạp ảnh, hoặc Review batch ở tab Các đợt). Mở lại trang bằng dòng lệnh thì tên là tên trong lệnh.")
     return "".join(f'<div class="cd-note">{x}</div>' for x in out)
 
 
@@ -225,7 +225,7 @@ def smoke_confirm_html(url):
     lines = [f"Sẽ TẠO task demo-smoke (4 ảnh xám giả, không phải ảnh mặt) trong project m28 trên {url or '(chưa có link)'}, nhập nhãn nháp, "
              "xuất lại, rồi XOÁ task đó.",
              "Nếu chưa có project m28 thì tạo rồi xoá lại khi còn trống. Không đụng task khác.",
-             "Mất khoảng 1-2 phút. Bấm Huỷ giữa chừng có thể để lại task demo-smoke; lần chạy sau tự dọn nhờ runs\\_smoke\\dang_mo.json."]
+             "Mất khoảng 1-2 phút. Bấm Cancel check giữa chừng có thể để lại task demo-smoke; lần chạy sau tự dọn nhờ runs\\_smoke\\dang_mo.json."]
     return '<div class="modal-title" id="cd-smoke-title">Chạy kiểm tra nhanh CVAT?</div>' + box_html("warn", "Sẽ làm:", lines)
 
 
@@ -268,7 +268,7 @@ def smoke_result_html(rep, json_path=""):
 # ---------- tab ----------
 def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_model=None):
     """Dựng NỘI DUNG tab Cài đặt (gọi trong `with gr.Tab(...)`). after_cvat(ev): gắn thêm .then(...) làm mới khung Đẩy lên CVAT và tab Các đợt
-    sau Lưu/Quên token. after_model(ev): gắn thêm .then(...) kiểm lại model/cấu hình ở tab Nạp ảnh sau khi Lưu đường dẫn model. Trả (hàm làm mới,
+    sau Save/Forget token. after_model(ev): gắn thêm .then(...) kiểm lại model/cấu hình ở tab Nạp ảnh sau khi Save đường dẫn model. Trả (hàm làm mới,
     inputs, outputs, opts) để tab.select gọi."""
     S = cai_dat.get()
     pending = dot_anh.Pending()
@@ -284,43 +284,43 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
         url_tb = gr.Textbox(label="Link CVAT (CVAT_URL)", placeholder="http://localhost:8080", max_lines=1, elem_id="cd-url")
         with gr.Row(elem_id="cd-token-row"):
             token_tb = gr.Textbox(label="Token CVAT", type="password", max_lines=1, elem_id="cd-token", scale=5)
-            b_eye = gr.Button("Hiện / ẩn", elem_id="cd-eye", size="sm")
+            b_eye = gr.Button("Show / Hide", elem_id="cd-eye", size="sm")
         org_tb = gr.Textbox(label="Tổ chức (CVAT_ORG), để trống nếu không dùng", max_lines=1, elem_id="cd-org")
         remember = gr.Checkbox(label="Nhớ trên máy này", value=False, elem_id="cd-remember")
         rem_note = gr.HTML(elem_id="cd-remember-note", apply_default_css=False)
         with gr.Row(elem_id="cd-cvat-btns"):
-            b_save = gr.Button("Lưu", variant="primary", elem_id="cd-save")
-            b_test = gr.Button("Thử kết nối CVAT", elem_id="cd-test")
-            b_forget = gr.Button("Quên token", variant="stop", elem_id="cd-forget")
-            b_smoke = gr.Button("Chạy kiểm tra nhanh CVAT", elem_id="cd-smoke")
+            b_save = gr.Button("Save", variant="primary", elem_id="cd-save")
+            b_test = gr.Button("Test CVAT connection", elem_id="cd-test")
+            b_forget = gr.Button("Forget token", variant="stop", elem_id="cd-forget")
+            b_smoke = gr.Button("Run CVAT quick check", elem_id="cd-smoke")
         cvat_msg = gr.HTML(elem_id="cd-cvat-msg", apply_default_css=False)
         smoke_msg = gr.HTML(elem_id="cd-smoke-msg", apply_default_css=False)
         smoke_prog = gr.HTML(elem_id="cd-smoke-prog", apply_default_css=False)
         smoke_log = gr.Textbox(label="Log kiểm tra nhanh CVAT (đã lọc token)", lines=6, max_lines=12, interactive=False, autoscroll=True,
                                elem_id="cd-smoke-log", visible=False)
-        b_smoke_stop = gr.Button("Huỷ kiểm tra", variant="stop", elem_id="cd-smoke-stop", visible=False)
+        b_smoke_stop = gr.Button("Cancel check", variant="stop", elem_id="cd-smoke-stop", visible=False)
         smoke_result = gr.HTML(elem_id="cd-smoke-result", apply_default_css=False)
         smoke_timer = gr.Timer(1.0, active=False)
     with gr.Column(visible=False, elem_id="cd-forget-confirm", elem_classes=["m28-modal"]) as forget_modal:
         with gr.Column(elem_classes=["m28-modal-box"]):
             forget_body = gr.HTML(elem_id="cd-forget-body", apply_default_css=False)
             with gr.Row(elem_classes=["m28-modal-btns"]):
-                b_forget_ok = gr.Button("Quên token", variant="stop", elem_id="cd-forget-ok")
-                b_forget_no = gr.Button("Huỷ", elem_id="cd-forget-cancel")
+                b_forget_ok = gr.Button("Forget token", variant="stop", elem_id="cd-forget-ok")
+                b_forget_no = gr.Button("Cancel", elem_id="cd-forget-cancel")
     with gr.Column(visible=False, elem_id="cd-smoke-confirm", elem_classes=["m28-modal"]) as smoke_modal:
         with gr.Column(elem_classes=["m28-modal-box"]):
             smoke_body = gr.HTML(elem_id="cd-smoke-body", apply_default_css=False)
             smoke_keep = gr.Checkbox(label="Giữ task để xem bằng mắt (--giu-task)", value=False, elem_id="cd-smoke-keep")
             with gr.Row(elem_classes=["m28-modal-btns"]):
-                b_smoke_ok = gr.Button("Chạy kiểm tra", variant="primary", elem_id="cd-smoke-ok")
-                b_smoke_no = gr.Button("Huỷ", elem_id="cd-smoke-cancel")
+                b_smoke_ok = gr.Button("Run check", variant="primary", elem_id="cd-smoke-ok")
+                b_smoke_no = gr.Button("Cancel", elem_id="cd-smoke-cancel")
     # --- Người rà ---
     with gr.Column(elem_classes=["cd-sec"]):
         gr.HTML('<div class="cd-sec-title">Người rà</div>', apply_default_css=False)
         rev_info = gr.HTML(elem_id="cd-reviewer-info", apply_default_css=False)
         rev_tb = gr.Textbox(label="Tên người rà mặc định (dùng từ lượt sau)", max_lines=1, elem_id="cd-reviewer", placeholder="ví dụ P2")
         with gr.Row(elem_id="cd-reviewer-btns"):
-            b_rev = gr.Button("Lưu tên", elem_id="cd-reviewer-save")
+            b_rev = gr.Button("Save name", elem_id="cd-reviewer-save")
         rev_msg = gr.HTML(elem_id="cd-reviewer-msg", apply_default_css=False)
     # --- Đường dẫn ---
     with gr.Column(elem_classes=["cd-sec"]):
@@ -328,13 +328,13 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
         paths_info = gr.HTML(elem_id="cd-paths-info", apply_default_css=False)
         img_tb = gr.Textbox(label="Thư mục ảnh", max_lines=1, elem_id="cd-images", placeholder="D:\\m28\\data\\frames")
         with gr.Row(elem_id="cd-images-btns"):
-            b_img_check = gr.Button("Kiểm", elem_id="cd-images-check")
-            b_img_save = gr.Button("Lưu", elem_id="cd-images-save")
+            b_img_check = gr.Button("Check", elem_id="cd-images-check")
+            b_img_save = gr.Button("Save", elem_id="cd-images-save")
         img_msg = gr.HTML(elem_id="cd-images-msg", apply_default_css=False)
         mod_tb = gr.Textbox(label="File face_landmarker.task", max_lines=1, elem_id="cd-model", placeholder="D:\\m28\\face_landmarker.task")
         with gr.Row(elem_id="cd-model-btns"):
-            b_mod_check = gr.Button("Kiểm", elem_id="cd-model-check")
-            b_mod_save = gr.Button("Lưu", elem_id="cd-model-save")
+            b_mod_check = gr.Button("Check", elem_id="cd-model-check")
+            b_mod_save = gr.Button("Save", elem_id="cd-model-save")
         mod_msg = gr.HTML(elem_id="cd-model-msg", apply_default_css=False)
     # --- t_flip ---
     with gr.Column(elem_classes=["cd-sec"]):
@@ -343,16 +343,16 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
         tf_tb = gr.Textbox(label="t_flip mới (số trong (0; 1], dấu phẩy hay chấm đều được)", max_lines=1, elem_id="cd-tflip", placeholder="0,0672")
         tf_ack = gr.Checkbox(label="Tôi là P2/P1 và biết file cấu hình đã đóng băng", value=False, elem_id="cd-tflip-ack", visible=False)
         with gr.Row(elem_id="cd-tflip-btns"):
-            b_tf_set = gr.Button("Đặt t_flip", elem_id="cd-tflip-set")
-            b_tf_null = gr.Button("Để null", elem_id="cd-tflip-null")
+            b_tf_set = gr.Button("Set t_flip", elem_id="cd-tflip-set")
+            b_tf_null = gr.Button("Set null", elem_id="cd-tflip-null")
         tf_msg = gr.HTML(elem_id="cd-tflip-msg", apply_default_css=False)
         tf_token = gr.Textbox(visible="hidden", elem_id="cd-tflip-token")
     with gr.Column(visible=False, elem_id="cd-tflip-confirm", elem_classes=["m28-modal"]) as tf_modal:
         with gr.Column(elem_classes=["m28-modal-box"]):
             tf_body = gr.HTML(elem_id="cd-tflip-body", apply_default_css=False)
             with gr.Row(elem_classes=["m28-modal-btns"]):
-                b_tf_ok = gr.Button("Đổi t_flip", variant="primary", elem_id="cd-tflip-ok")
-                b_tf_no = gr.Button("Huỷ", elem_id="cd-tflip-cancel")
+                b_tf_ok = gr.Button("Change t_flip", variant="primary", elem_id="cd-tflip-ok")
+                b_tf_no = gr.Button("Cancel", elem_id="cd-tflip-cancel")
     # --- Pipeline ---
     with gr.Column(elem_classes=["cd-sec"]):
         gr.HTML('<div class="cd-sec-title">Pipeline (chỉ đọc)</div>', apply_default_css=False)
@@ -397,7 +397,7 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
                 if j.running:
                     return f"Đang {what} lượt {j.run} lên CVAT: chờ xong rồi mới đổi cài đặt CVAT (tiến trình con đang dùng token hiện tại)."
             if ctx.smoke_job.running:
-                return "Đang chạy kiểm tra nhanh CVAT: chờ xong hoặc bấm Huỷ kiểm tra rồi mới đổi cài đặt CVAT (tiến trình con đang dùng token hiện tại)."
+                return "Đang chạy kiểm tra nhanh CVAT: chờ xong hoặc bấm Cancel check rồi mới đổi cài đặt CVAT (tiến trình con đang dùng token hiện tại)."
         return ""
 
     def safe_with(where):
@@ -537,7 +537,7 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
             if not info["ok"]:
                 return ret(view(over=note(tf_msg, info["error"], "err")))
             if not is_null and not str(text or "").strip():
-                return ret(view(over=note(tf_msg, "Chưa nhập t_flip mới (hoặc bấm Để null).", "err")))
+                return ret(view(over=note(tf_msg, "Chưa nhập t_flip mới (hoặc bấm Set null).", "err")))
             try:
                 new = None if is_null else cai_dat.parse_t_flip(text)
             except ValueError as e:
@@ -560,7 +560,7 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
         if why:
             return ret(view(over={**note(tf_msg, why, "warn"), **hide}))
         if it is None:
-            return ret(view(over={**note(tf_msg, "Yêu cầu xác nhận đã cũ hoặc không còn hiệu lực: không ghi gì, bấm Đặt t_flip lại.", "warn"), **hide}))
+            return ret(view(over={**note(tf_msg, "Yêu cầu xác nhận đã cũ hoặc không còn hiệu lực: không ghi gì, bấm Set t_flip lại.", "warn"), **hide}))
         info = cai_dat.read_t_flip(config_path)
         if info["ok"] and info["frozen"] and not ack:
             return ret(view(over={**note(tf_msg, "Cấu hình đã đóng băng: tick ô xác nhận rồi bấm lại.", "warn"), **hide}))
@@ -595,7 +595,7 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
             return "Trang đang chuyển sang lượt khác: chờ rồi thử lại."
         for j, what in ((ctx.push_job, "đẩy lượt"), (ctx.del_job, "xoá task của lượt"), (sm_job, "chạy kiểm tra nhanh CVAT")):
             if j.running:
-                return f"Đang {what}" + ("" if j is sm_job else f" {j.run} (CVAT)") + ": chờ xong hoặc bấm Huỷ rồi mới chạy kiểm tra nhanh."
+                return f"Đang {what}" + ("" if j is sm_job else f" {j.run} (CVAT)") + ": chờ xong hoặc bấm Cancel rồi mới chạy kiểm tra nhanh."
         return ""
 
     def smoke_render(note="", level="warn", modal=None):
@@ -638,7 +638,7 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
             return smoke_render(why)
         eff = S.cvat_env()
         if not eff["url"] or not eff["token"]:
-            return smoke_render("Chưa có link và token CVAT: nhập và Lưu ở khung CVAT (hoặc đặt CVAT_URL, CVAT_ACCESS_TOKEN trong cmd) rồi chạy lại.")
+            return smoke_render("Chưa có link và token CVAT: nhập và bấm Save ở khung CVAT (hoặc đặt CVAT_URL, CVAT_ACCESS_TOKEN trong cmd) rồi chạy lại.")
         return smoke_render(modal=dict(modal=gr.update(visible=True), body=smoke_confirm_html(cvat_io.norm_url(eff["url"]))))
 
     @smoke_safe

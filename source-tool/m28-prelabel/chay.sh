@@ -70,7 +70,7 @@ hoi_nguoi() {
 mo_trang() {
   hoi_nguoi
   echo
-  echo 'Đang mở trang rà soát (chỉ máy này vào được, địa chỉ http://127.0.0.1:7860). Xong việc bấm "Đóng trang rà soát" trên trang.'
+  echo 'Đang mở trang rà soát (chỉ máy này vào được, địa chỉ http://127.0.0.1:7860). Xong việc bấm "Close page" trên trang.'
   python tool/review_app.py --nap "$NGUOI"
 }
 

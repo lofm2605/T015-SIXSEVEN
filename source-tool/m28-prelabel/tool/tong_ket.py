@@ -3,7 +3,7 @@
     python tool\\tong_ket.py --vao <thư mục chứa các gói ketqua_*.zip> --ra outputs\\tong_ket\\
     python tool\\tong_ket.py --vao goi_nhom --vao ketqua_P1_1410_NAP_001.zip --ra outputs\\tong_ket --nguong-sua 2
 
-Mỗi gói do đồng hồ ở đầu trang rà soát (nút "Lưu số đo" trong hộp Đóng trang) của một thành viên ghi ra (outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip, kèm bản .json). Công cụ kiểm sha256, số phiên bản
+Mỗi gói do đồng hồ ở đầu trang rà soát (nút "Save timing" trong hộp Đóng trang) của một thành viên ghi ra (outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip, kèm bản .json). Công cụ kiểm sha256, số phiên bản
 định dạng, cấu trúc và rò rỉ riêng tư (đường dẫn tuyệt đối, email, tên máy, token) của TỪNG gói, loại gói hỏng hoặc trùng (cùng mã phiên) với lý do rõ ràng, gộp các người, rồi tính:
   (1) NME của nháp so với nhãn gán tay của nhóm manual (cùng ảnh), (2) tỉ lệ điểm phải sửa (nhóm assisted), (3) giây/mặt và % nhanh hơn của assisted so với manual (KTC 90% bằng
 cluster bootstrap; mỗi nhóm < 2 người thì chỉ mô tả). Cùng code với tab Thống kê (thong_ke.py, m28core\\so_sanh.py).

@@ -1,5 +1,5 @@
 """Thử chip đồng hồ ở đầu trang (tool/dong_ho_ui.py) nối vào trang rà soát: dựng build_ui, gọi handler trực tiếp (không trình duyệt), đồng hồ giả. Không ảnh, không mạng.
-Không còn tab "Đồng hồ": chip tự chạy khi Nạp ảnh, MỘT nút Dừng/Tiếp tục; Lưu số đo / Bỏ phiên nằm trong hộp Đóng trang."""
+Không còn tab "Đồng hồ": chip tự chạy khi Nạp ảnh, MỘT nút Pause/Resume; Save timing / Discard session nằm trong hộp Đóng trang."""
 import csv
 import glob
 import json
@@ -79,7 +79,7 @@ def test_no_clock_tab_chip_is_on_every_page_and_ids_are_unique(app):
     dup = {i for i in elem if i and elem.count(i) > 1}
     assert not [i for i in dup if i.startswith('dh-')]
     buttons = [b for b in demo.blocks.values() if getattr(b, 'elem_id', None) == 'dh-mini-btn']
-    assert len(buttons) == 1 and buttons[0].value == 'Dừng' and buttons[0].interactive is False                      # MỘT nút, chưa có phiên thì chưa bấm được
+    assert len(buttons) == 1 and buttons[0].value == 'Pause' and buttons[0].interactive is False                      # MỘT nút, chưa có phiên thì chưa bấm được
     js = dong_ho_ui.JS_BODY
     assert '__m28Dh' in ra.PAGE_JS and 'performance.now()' in ra.PAGE_JS and 'Date.now' not in js and 'setInterval' in js
     assert 'fetch(' not in js and 'XMLHttpRequest' not in js and "'Đồng hồ'" not in js                              # không gọi server mỗi giây, không tìm tab Đồng hồ
@@ -141,7 +141,7 @@ def test_auto_start_keeps_an_existing_session_running_or_paused(app):
     assert 'giữ nguyên' in again and 'đang chạy' in again and ctx.dong_ho.xem('P5')['dot'] == 'NAP_001' and ctx.dong_ho.xem('P5')['giay_phien'] == 20
     ctx.dong_ho.tam_dung('P5', ctx.dong_ho.xem('P5')['rev'])
     paused = dong_ho_ui.auto_start(None, ctx, 'NAP_003', 9)
-    assert 'tạm dừng' in paused and 'Tiếp tục' in paused and ctx.dong_ho.xem('P5')['trang_thai'] == 'tam_dung'                  # không tự Tiếp tục
+    assert 'tạm dừng' in paused and 'Resume' in paused and ctx.dong_ho.xem('P5')['trang_thai'] == 'tam_dung'                  # không tự Resume
 
 
 def test_auto_start_with_a_reviewer_that_is_not_p1_to_p5_says_why_and_does_not_run(app):
@@ -162,7 +162,7 @@ def test_auto_start_does_nothing_while_closing(app):
     assert dong_ho_ui.auto_start(None, ctx, 'NAP_001', 5) is None and not ctx.dong_ho.xem('P5')['co_phien']
 
 
-# ---------- chip và nút Dừng/Tiếp tục ----------
+# ---------- chip và nút Pause/Resume ----------
 def test_chip_idle_then_running_then_pause_resume_with_one_button(app):
     root, ctx, g = app
     demo, dh, _cb = small(ctx)
@@ -173,17 +173,17 @@ def test_chip_idle_then_running_then_pause_resume_with_one_button(app):
     run = call(demo, 'refresh')
     assert 'dh-mini-time' in run['dh-mini-wrap'] and 'data-chay="1"' in run['dh-mini-wrap'] and '▶ Đang chạy' in run['dh-mini-wrap'] and 's-chay' in run['dh-mini-wrap']
     assert 'P5' in run['dh-mini-wrap'] and 'NAP_001' in run['dh-mini-wrap']
-    assert run['dh-mini-btn']['interactive'] is True and run['dh-mini-btn']['value'] == 'Dừng'
+    assert run['dh-mini-btn']['interactive'] is True and run['dh-mini-btn']['value'] == 'Pause'
     g.tick(75)
     t = call(demo, 'on_tick')
     assert '01:15' in t['dh-mini-wrap'] and 'data-giay="75.000"' in t['dh-mini-wrap']
-    p = call(demo, 'on_btn', t['state'])                                            # bấm nút khi đang chạy: Dừng
+    p = call(demo, 'on_btn', t['state'])                                            # bấm nút khi đang chạy: Pause
     assert '⏸ Tạm dừng' in p['dh-mini-wrap'] and 'data-chay="0"' in p['dh-mini-wrap'] and 's-tam_dung' in p['dh-mini-wrap']
-    assert p['dh-mini-btn']['value'] == 'Tiếp tục' and p['dh-mini-btn']['interactive'] is True
+    assert p['dh-mini-btn']['value'] == 'Resume' and p['dh-mini-btn']['interactive'] is True
     g.tick(600)                                                                     # tạm dừng thì không cộng giờ
     assert '01:15' in call(demo, 'on_tick')['dh-mini-wrap']
-    r = call(demo, 'on_btn', p['state'])                                            # bấm lại: Tiếp tục
-    assert 'data-chay="1"' in r['dh-mini-wrap'] and r['dh-mini-btn']['value'] == 'Dừng' and ctx.dong_ho.xem('P5')['trang_thai'] == 'chay'
+    r = call(demo, 'on_btn', p['state'])                                            # bấm lại: Resume
+    assert 'data-chay="1"' in r['dh-mini-wrap'] and r['dh-mini-btn']['value'] == 'Pause' and ctx.dong_ho.xem('P5')['trang_thai'] == 'chay'
 
 
 def test_button_with_a_stale_rev_is_refused_and_the_chip_reloads(app):
@@ -194,7 +194,7 @@ def test_button_with_a_stale_rev_is_refused_and_the_chip_reloads(app):
     ctx.dong_ho.tam_dung('P5', cu)                                                  # tab khác vừa dừng
     g.tick(5)
     out = call(demo, 'on_btn', cu)                                                  # tab này còn rev cũ: bị từ chối, không đè
-    assert ctx.dong_ho.xem('P5')['trang_thai'] == 'tam_dung' and out['dh-mini-btn']['value'] == 'Tiếp tục' and out['state'] == ctx.dong_ho.xem('P5')['rev']
+    assert ctx.dong_ho.xem('P5')['trang_thai'] == 'tam_dung' and out['dh-mini-btn']['value'] == 'Resume' and out['state'] == ctx.dong_ho.xem('P5')['rev']
 
 
 def test_button_without_a_session_or_while_closing_does_nothing(app):
@@ -225,7 +225,7 @@ def test_mini_html_has_no_secrets_or_absolute_paths(app):
     assert 'bị hỏng' in dong_ho_ui.mini_html(dict(co_phien=False, hong=True))
 
 
-# ---------- hộp Đóng trang: Lưu số đo / Bỏ phiên ----------
+# ---------- hộp Đóng trang: Save timing / Discard session ----------
 def test_close_dialog_buttons_show_only_with_a_session(app):
     root, ctx, g = app
     demo, dh, cb = small(ctx)
@@ -260,7 +260,7 @@ def test_save_too_short_session_explains_and_keeps_the_session(app):
     g.tick(1)
     call(demo, 'on_luu')
     out = call(demo, 'on_luu')
-    assert 'Phiên rỗng' in out['close-body'] and 'Bỏ phiên đồng hồ' in out['close-body'] and 'Hủy phiên' not in out['close-body'] and ctx.dong_ho.xem('P5')['co_phien'] and not os.path.exists(os.path.join(root, 'outputs', 'timing', 'timing_P5.csv'))
+    assert 'Phiên rỗng' in out['close-body'] and 'Discard session' in out['close-body'] and 'Hủy phiên' not in out['close-body'] and ctx.dong_ho.xem('P5')['co_phien'] and not os.path.exists(os.path.join(root, 'outputs', 'timing', 'timing_P5.csv'))
 
 
 def test_save_with_nothing_to_save_says_so(app):
@@ -297,10 +297,10 @@ def test_close_note_names_the_person_the_state_and_the_save_button(app):
     start_session(ctx)
     g.tick(30)
     n1 = dong_ho_ui.close_note(ctx)
-    assert 'P5' in n1 and 'tự tạm dừng' in n1 and 'Lưu số đo' in n1 and '00:30' in n1
+    assert 'P5' in n1 and 'tự tạm dừng' in n1 and 'Save timing' in n1 and '00:30' in n1
     ctx.dong_ho.tam_dung('P5', ctx.dong_ho.xem('P5')['rev'])
     n2 = dong_ho_ui.close_note(ctx)
-    assert 'đang tạm dừng' in n2 and 'tự tạm dừng' not in n2 and 'Lưu số đo' in n2
+    assert 'đang tạm dừng' in n2 and 'tự tạm dừng' not in n2 and 'Save timing' in n2
 
 
 # ---------- đóng trang ----------
@@ -317,7 +317,7 @@ def test_close_confirm_pauses_running_clocks_and_says_so_first(app, capsys):
     on_confirm.fn()
     assert ctx.closing and ctx.dong_ho.xem('P5')['trang_thai'] == 'tam_dung' and 'tat_trang' in ctx.dong_ho.xem('P5')['ma_canh_bao']
     out = capsys.readouterr().out
-    assert 'Đồng hồ của P5 đã tạm dừng lúc 18:30:30' in out and 'bấm Tiếp tục' in out
+    assert 'Đồng hồ của P5 đã tạm dừng lúc 18:30:30' in out and 'bấm Resume' in out
     with pytest.raises(dong_ho.DongHoLoi, match='đang đóng'):
         ctx.dong_ho.tiep_tuc('P5')
 
@@ -349,4 +349,4 @@ def test_save_with_a_collected_label_file_goes_through_in_one_click(app):
 def test_messages_for_the_old_buttons_are_reworded_for_the_dialog():
     t = dong_ho_ui.vi_hop('Còn cảnh báo chưa xử lý (a). Chọn Sửa thời gian / Giữ nguyên, hoặc bấm Xong (lưu) thêm một lần nữa để lưu kèm cảnh báo. Bấm Hủy phiên nếu không cần.')
     assert 'Sửa thời gian' not in t and 'Xong (lưu)' not in t and 'Hủy phiên' not in t
-    assert 'Bấm Lưu số đo thêm một lần nữa để lưu kèm cảnh báo.' in t and 'Bấm Bỏ phiên đồng hồ nếu không cần.' in t
+    assert 'Bấm Save timing thêm một lần nữa để lưu kèm cảnh báo.' in t and 'Bấm Discard session nếu không cần.' in t

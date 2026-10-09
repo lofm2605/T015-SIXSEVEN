@@ -99,9 +99,9 @@ Khác với Windows:
 **Quy trình một buổi (mỗi người):**
 1. Đầu buổi **khôi phục task của hôm nay** (file sao lưu P4 phát) rồi mở trang: `./chay.sh` mục 1 (hoặc `python tool/review_app.py --nap P5`).
 2. **Nạp ảnh** ở tab Nạp ảnh (**Upload & Continue** hoặc **Upload & Open**): đồng hồ ⏱ ở đầu trang **tự chạy** cho người rà của trang (phải là P1–P5; đặt ở tab Cài đặt). Nhóm lấy từ file nhóm, người chưa có trong file thì mặc định `assisted` và dòng bấm giờ ghi cờ `chua_co_nhom`. Đã có phiên thì giữ nguyên, không đè.
-3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm nút **Dừng** cạnh đồng hồ, quay lại bấm **Tiếp tục** (cùng một nút, đổi chữ). Không còn tab Đồng hồ.
-4. Xong việc: `python tool/m28.py collect --task demo-<đợt> --reviewer P<số của bạn>` **trước**, rồi bấm **Đóng trang rà soát** → **Lưu số đo**. Trang ghi `outputs/timing/timing_P<số>.csv` và gói **`outputs/ket_qua/ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Chưa thấy nhãn đã xuất trong `raw/` thì trang nhắc chạy `collect` trước; bấm Lưu số đo thêm lần nữa mới lưu gói chỉ có thời gian. Sau khi lưu, bấm **Huỷ** để ở lại trang hoặc **Đóng trang rà soát** để tắt.
-5. Quên bấm, nghỉ lâu, qua nửa đêm, tắt trang đột ngột: phiên vẫn lưu được, kèm cờ `canh_bao` trong dòng bấm giờ để thống kê đánh dấu (không còn nút Sửa thời gian trên giao diện); khi có cảnh báo chưa xử lý, Lưu số đo hỏi bằng cách bấm thêm một lần. Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, bấm **Tiếp tục**. Muốn bỏ phiên (không lưu gì): hộp Đóng trang → **Bỏ phiên đồng hồ**, bấm hai lần.
+3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm nút **Pause** cạnh đồng hồ, quay lại bấm **Resume** (cùng một nút, đổi chữ). Không còn tab Đồng hồ.
+4. Xong việc: `python tool/m28.py collect --task demo-<đợt> --reviewer P<số của bạn>` **trước**, rồi bấm **Close page** → **Save timing**. Trang ghi `outputs/timing/timing_P<số>.csv` và gói **`outputs/ket_qua/ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Chưa thấy nhãn đã xuất trong `raw/` thì trang nhắc chạy `collect` trước; bấm Save timing thêm lần nữa mới lưu gói chỉ có thời gian. Sau khi lưu, bấm **Cancel** để ở lại trang hoặc **Close page** để tắt.
+5. Quên bấm, nghỉ lâu, qua nửa đêm, tắt trang đột ngột: phiên vẫn lưu được, kèm cờ `canh_bao` trong dòng bấm giờ để thống kê đánh dấu (không còn nút Sửa thời gian trên giao diện); khi có cảnh báo chưa xử lý, Save timing hỏi bằng cách bấm thêm một lần. Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, bấm **Resume**. Muốn bỏ phiên (không lưu gì): hộp Đóng trang → **Discard session**, bấm hai lần.
 
 **Nhóm trưởng tổng kết** (chỉ cần các gói zip, không cần ảnh hay CVAT):
 ```bash
@@ -130,8 +130,8 @@ Cài CVAT cùng bản 2.77.0 (mục 0), rồi:
 python -m pip install cvat-sdk==2.77.0
 python tool/make_label.py
 ```
-- **Từ trang rà soát:** tab **Cài đặt** → dán `http://localhost:8080` và token → **Lưu** → **Thử kết nối CVAT**. Bật **Nhớ trên máy này** thì token lưu ở `~/.config/m28/cvat.json`
-  (hoặc `$XDG_CONFIG_HOME/m28/`), ngoài repo, quyền `0600` (chỉ chủ máy đọc được; tool tự đặt). Ngày 24/10 bấm **Quên token** và thu hồi token trong CVAT.
+- **Từ trang rà soát:** tab **Cài đặt** → dán `http://localhost:8080` và token → **Save** → **Test CVAT connection**. Bật **Nhớ trên máy này** thì token lưu ở `~/.config/m28/cvat.json`
+  (hoặc `$XDG_CONFIG_HOME/m28/`), ngoài repo, quyền `0600` (chỉ chủ máy đọc được; tool tự đặt). Ngày 24/10 bấm **Forget token** và thu hồi token trong CVAT.
 - **Lệnh trong terminal** (`m28.py push/collect`) **không đọc `cvat.json`**: đặt biến môi trường trong chính terminal đó:
 ```bash
 export CVAT_URL=http://localhost:8080

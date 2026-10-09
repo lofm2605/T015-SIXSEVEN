@@ -223,7 +223,7 @@ def test_grid_uses_data_uri_and_never_original_path(world):
     h = dot_anh.grid_html(info, dot_anh.image_rows(rd, 'P2'), 0, [])
     assert h.count('src="data:image/jpeg;base64,') == 6 + 0 or 'data:image' in h
     assert 'inbox' not in h and rd not in h and 'file=' not in h and '/gradio_api' not in h
-    assert 'aria-label="Xoá ảnh a1"' in h and 'class="dot-trash"' in h and 'data-act="delimg"' in h
+    assert 'aria-label="Delete image a1"' in h and 'class="dot-trash"' in h and 'data-act="delimg"' in h
 
 
 def test_thumb_cache_and_placeholder(world, tmp_path):
@@ -597,7 +597,7 @@ def test_push_button_locked_with_reasons(world):
     assert not m['enabled'] and m['reason'] == 'Thiếu CVAT_URL và CVAT_ACCESS_TOKEN.' and m['env_help']
     h = day_cvat.panel_html(m)
     assert 'set CVAT_URL=http://localhost:8080' in h and 'set CVAT_ACCESS_TOKEN=' in h and 'cùng cửa sổ cmd' in h
-    assert 'tab <b>Cài đặt</b>' in h and 'bấm <b>Lưu</b>' in h and 'type="password"' not in h      # ô nhập token chỉ ở tab Cài đặt, không ở khung Đẩy
+    assert 'tab <b>Cài đặt</b>' in h and 'bấm <b>Save</b>' in h and 'type="password"' not in h      # ô nhập token chỉ ở tab Cài đặt, không ở khung Đẩy
     m = model(rd, env={'CVAT_URL': 'localhost:8080', 'CVAT_ACCESS_TOKEN': TOKEN})
     assert not m['enabled'] and 'http://' in m['reason'] and TOKEN not in day_cvat.panel_html(m)
     m = model(rd, env={'CVAT_URL': 'http://localhost:8080'})
@@ -618,7 +618,7 @@ def test_push_button_locked_when_files_missing_or_partial_push(world):
     m = model(rd)
     assert not m['enabled'] and m['partial'] and 'dở' in m['reason'] or 'dừng' in m['reason']
     h = day_cvat.panel_html(m)
-    assert '--resume' in h and 'Xoá task trên CVAT' in h and 'lỗi giả' in h
+    assert '--resume' in h and 'Delete CVAT task' in h and 'lỗi giả' in h
 
 
 def test_push_done_card_has_link_and_counts(world):

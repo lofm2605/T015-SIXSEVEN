@@ -48,7 +48,7 @@ exit /b 0
 :mo_trang
 call :hoi_nguoi
 echo.
-echo Dang mo trang ra soat (chi may nay vao duoc, dia chi http://127.0.0.1:7860). Xong viec bam "Dong trang ra soat" tren trang.
+echo Dang mo trang ra soat (chi may nay vao duoc, dia chi http://127.0.0.1:7860). Xong viec bam "Close page" tren trang.
 python tool\review_app.py --nap %NGUOI%
 goto :menu
 

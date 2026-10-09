@@ -13,12 +13,12 @@ thật. CVAT GIẢ: PYTHONPATH=tests/fake_cvat, M28_FAKE_CVAT_STATE=<file>; KHÔ
 kết quả chỉ chứng minh logic trang và tiến trình con, không chứng minh server CVAT thật.
 
 Các pha (mỗi pha một lần khởi động trang, cổng 7891-7899, M28_NO_BROWSER=1, mọi tiến trình dọn ở finally):
-  A  chưa có token: nút Đẩy khoá -> tab Cài đặt: link sai bị từ chối, hiện/ẩn token, Lưu (không Nhớ), ô token rỗng, nguồn "nhập trong phiên này", không có
-     cvat.json -> Thử kết nối (2.77.0, username, project) -> nút Đẩy mở khoá không cần mở lại cmd -> đẩy lên CVAT giả (tiến trình con nhận token qua
-     môi trường) -> đường dẫn (Kiểm, Lưu), người rà (lưu, áp dụng từ lượt sau) -> t_flip (hộp xác nhận, Huỷ, Esc, xác nhận, Để null) -> bố cục 1400/420 px
+  A  chưa có token: nút Đẩy khoá -> tab Cài đặt: link sai bị từ chối, Show / Hide token, Save (không Nhớ), ô token rỗng, nguồn "nhập trong phiên này", không có
+     cvat.json -> Test CVAT connection (2.77.0, username, project) -> nút Đẩy mở khoá không cần mở lại cmd -> đẩy lên CVAT giả (tiến trình con nhận token qua
+     môi trường) -> đường dẫn (Check, Save), người rà (Save name, áp dụng từ lượt sau) -> t_flip (hộp xác nhận, Cancel, Esc, xác nhận, Set null) -> bố cục 1400/420 px
   B  Nhớ trên máy này: cvat.json 0600 -> khởi động lại: nguồn "đã lưu trên máy", nút Đẩy mở khoá ngay
-  C  khởi động với biến môi trường + file đã lưu: nguồn "từ biến môi trường"; Quên token (Esc, rồi xác nhận): file mất, token biến môi trường còn
-  D  không còn gì: nút Đẩy khoá; Lưu -> mở; Quên -> khoá lại
+  C  khởi động với biến môi trường + file đã lưu: nguồn "từ biến môi trường"; Forget token (Esc, rồi xác nhận): file mất, token biến môi trường còn
+  D  không còn gì: nút Đẩy khoá; Save -> mở; Forget token -> khoá lại
   E  sai token (auth_fail) và khác phiên bản (2.70.0): thông báo đúng nguyên nhân
   F  phím tắt n/g/b/z/k trong các ô của tab Cài đặt không ghi gì vào triage (đối chứng: ở tab Rà soát phím n vẫn ghi)
   G  --images: lượt nạp ảnh thật, ảnh gốc bị chuyển đi -> nút Đẩy khoá -> cài thư mục ảnh -> mở khoá -> đẩy (task dùng ảnh ở thư mục đã cài)
@@ -225,7 +225,7 @@ def phase_a(pw, E, port):
         check(pg.locator('#cd-token input[type=password]').count() == 1, 'ô token duy nhất, type=password, nằm ở tab Cài đặt')
         st = txt(pg, '#cd-cvat-status')
         check('○ Chưa có link/token' in st, f'trạng thái ban đầu: {st[:60]!r}')
-        check(not os.path.exists(E.cfg), 'chưa Lưu: chưa có thư mục cài đặt nào')
+        check(not os.path.exists(E.cfg), 'chưa Save: chưa có thư mục cài đặt nào')
         for bad, want in (('localhost:8080', 'phải bắt đầu bằng http'), ('file:///etc/passwd', 'Chỉ nhận link http'), ('http://u:p@localhost:8080', 'tên đăng nhập')):
             fill(pg, 'cd-url', bad)
             fill(pg, 'cd-token', TOKEN)
@@ -242,7 +242,7 @@ def phase_a(pw, E, port):
         pg.click('#cd-forget-ok')
         wait_in(pg, '#cd-cvat-msg', 'Đã quên')
         check('KHÔNG mã hoá' not in txt(pg, '#cd-cvat-msg'), 'link http ra ngoài mạng nội bộ: có cảnh báo, rồi Quên để làm lại từ đầu')
-        # 3. nhập hợp lệ, hiện/ẩn, Lưu (Nhớ TẮT)
+        # 3. nhập hợp lệ, Show / Hide, Save (Nhớ TẮT)
         fill(pg, 'cd-url', URL + '/')
         fill(pg, 'cd-token', TOKEN)
         check(pg.get_attribute('#cd-token input', 'type') == 'password', 'ô token ban đầu ở chế độ ẩn')
@@ -256,7 +256,7 @@ def phase_a(pw, E, port):
         wait_in(pg, '#cd-cvat-msg', 'Đã lưu cho phiên này')
         pg.wait_for_function("() => document.querySelector('#cd-token input')?.value === ''", timeout=10000)
         ph = pg.get_attribute('#cd-token input', 'placeholder')
-        check(token_box_ok(pg) and '••••3456' in ph and TOKEN not in ph, f'sau Lưu: ô token rỗng, type=password, placeholder che: {ph!r}')
+        check(token_box_ok(pg) and '••••3456' in ph and TOKEN not in ph, f'sau Save: ô token rỗng, type=password, placeholder che: {ph!r}')
         st = txt(pg, '#cd-cvat-status')
         check('••••3456' in st and 'nhập trong phiên này' in st and '○ Chưa thử' in st and TOKEN not in st, f'trạng thái: {st!r}')
         check(pg.input_value('#cd-url input') == URL, 'ô link chuẩn hoá (bỏ / cuối)')
@@ -266,12 +266,12 @@ def phase_a(pw, E, port):
         pg.click('#cd-test')
         wait_in(pg, '#cd-cvat-msg', 'Kết nối được', 60000)
         mt = txt(pg, '#cd-cvat-msg')
-        check('2.77.0' in mt and 'm28-fake-user' in mt and 'project m28: chưa có' in mt, f'Thử kết nối: phiên bản, tài khoản, project: {mt[:200]!r}')
+        check('2.77.0' in mt and 'm28-fake-user' in mt and 'project m28: chưa có' in mt, f'Test CVAT connection: phiên bản, tài khoản, project: {mt[:200]!r}')
         pg.wait_for_function("(document.querySelector('#cd-cvat-status')?.innerText || '').includes('● Đã kết nối')", timeout=10000)
         check('thử lúc' in txt(pg, '#cd-cvat-status'), 'chip "● Đã kết nối" kèm giờ thử')
         calls = [c['m'] for c in dp.fake_state(E.state)['calls']]
         check('users.retrieve_current_user' in calls and 'projects.list' in calls and not any(m in calls for m in ('projects.create', 'tasks.create_from_data')),
-              'Thử kết nối chỉ ĐỌC trên CVAT giả (không tạo gì)')
+              'Test CVAT connection chỉ ĐỌC trên CVAT giả (không tạo gì)')
         mk = [c for c in dp.fake_state(E.state)['calls'] if c['m'] == 'make_client']
         check(mk and all(c['kwargs'].get('access_token') == '<redacted>' for c in mk), 'make_client: token được ghi là <redacted> (token đến SDK qua môi trường tiến trình con)')
         app.html()
@@ -279,7 +279,7 @@ def phase_a(pw, E, port):
         # 5. quay lại Rà soát: nút Đẩy mở khoá
         to_review(pg)
         wait_push(pg, True)
-        check('Sẵn sàng đẩy' in txt(pg, '#push-panel') and 'Thiếu CVAT' not in txt(pg, '#push-panel'), 'đã Lưu: nút Đẩy mở khoá, không mở lại cmd')
+        check('Sẵn sàng đẩy' in txt(pg, '#push-panel') and 'Thiếu CVAT' not in txt(pg, '#push-panel'), 'đã Save: nút Đẩy mở khoá, không mở lại cmd')
         check(file_text(triage) == triage0, 'chưa ghi gì vào triage_E2E.csv')
         # 6. đẩy lên CVAT giả: tiến trình con nhận token qua môi trường
         pg.click('#btn-push')
@@ -300,8 +300,8 @@ def phase_a(pw, E, port):
         pg.click('#cd-images-check')
         wait_in(pg, '#cd-images-msg', 'Thấy', 30000)
         mt = txt(pg, '#cd-images-msg')
-        check('Ổn' in mt and 'ảnh' in mt and 'thư mục con' in mt and 'Ví dụ:' in mt, f'Kiểm thư mục ảnh (có ngoặc kép và khoảng trắng): {mt[:140]!r}')
-        check(not os.path.exists(os.path.join(E.cfg, 'cai_dat.json')), 'chỉ Kiểm: chưa lưu gì')
+        check('Ổn' in mt and 'ảnh' in mt and 'thư mục con' in mt and 'Ví dụ:' in mt, f'Check thư mục ảnh (có ngoặc kép và khoảng trắng): {mt[:140]!r}')
+        check(not os.path.exists(os.path.join(E.cfg, 'cai_dat.json')), 'chỉ Check: chưa lưu gì')
         fill(pg, 'cd-images', 'Z:\\khong\\co\\frames')
         pg.click('#cd-images-check')
         wait_in(pg, '#cd-images-msg', 'Không thấy')
@@ -315,7 +315,7 @@ def phase_a(pw, E, port):
         pg.click('#cd-model-check')
         wait_in(pg, '#cd-model-msg', 'MB', 30000)
         mt = txt(pg, '#cd-model-msg')
-        check('Ổn' in mt and '3,' in mt, f'Kiểm model: {mt[:120]!r}')
+        check('Ổn' in mt and '3,' in mt, f'Check model: {mt[:120]!r}')
         pg.click('#cd-model-save')
         wait_in(pg, '#cd-model-msg', 'Đã lưu đường dẫn model')
         prefs = json.load(open(os.path.join(E.cfg, 'cai_dat.json'), encoding='utf-8'))
@@ -344,7 +344,7 @@ def phase_a(pw, E, port):
         modal_open(pg, '#cd-tflip-confirm')
         mt = txt(pg, '#cd-tflip-confirm')
         check('đóng băng 12/10' in mt and '--force flags autoqc overlays' in mt and '0,0672' in mt, f'hộp xác nhận t_flip: {mt[:160]!r}')
-        check(pg.evaluate('document.activeElement && document.activeElement.id') == 'cd-tflip-cancel', 'nút Huỷ là mặc định (có focus)')
+        check(pg.evaluate('document.activeElement && document.activeElement.id') == 'cd-tflip-cancel', 'nút Cancel là mặc định (có focus)')
         snap(pg, E, 'caidat_tflip_modal.png')
         pg.keyboard.press('Escape')
         pg.wait_for_function("() => !document.querySelector('#cd-tflip-confirm')", timeout=15000)
@@ -353,7 +353,7 @@ def phase_a(pw, E, port):
         modal_open(pg, '#cd-tflip-confirm')
         pg.click('#cd-tflip-cancel')
         pg.wait_for_function("() => !document.querySelector('#cd-tflip-confirm')", timeout=15000)
-        check(open(cfgp, 'rb').read() == E.config_bytes, 'Huỷ: config không đổi')
+        check(open(cfgp, 'rb').read() == E.config_bytes, 'Cancel: config không đổi')
         pg.click('#cd-tflip-set')
         modal_open(pg, '#cd-tflip-confirm')
         pg.click('#cd-tflip-ok')
@@ -369,7 +369,7 @@ def phase_a(pw, E, port):
         modal_open(pg, '#cd-tflip-confirm')
         pg.click('#cd-tflip-ok')
         pg.wait_for_function("() => (document.querySelector('#cd-tflip-info')?.innerText || '').includes('chưa đặt')", timeout=15000)
-        check(open(cfgp, 'rb').read() == E.config_bytes, 'Để null: config về đúng từng byte ban đầu')
+        check(open(cfgp, 'rb').read() == E.config_bytes, 'Set null: config về đúng từng byte ban đầu')
         # 10. bố cục
         app.html()
         check(overflow(pg) <= 0, f'1440 px: không cuộn ngang ({overflow(pg)})')
@@ -436,7 +436,7 @@ def phase_b(pw, E, port):
 
 # ---------------------------------------------------------------- pha C
 def phase_c(pw, E, port):
-    log('\n== PHA C: biến môi trường thắng file; Quên token ==')
+    log('\n== PHA C: biến môi trường thắng file; Forget token ==')
     pth = os.path.join(E.cfg, 'cvat.json')
     check(os.path.isfile(pth), 'còn cvat.json từ pha B')
     app = launch(pw, E, 'CD2', port, 'c', cvat=dict(CVAT_URL=URL, CVAT_ACCESS_TOKEN=TOKEN_ENV))
@@ -447,7 +447,7 @@ def phase_c(pw, E, port):
         check('từ biến môi trường' in st and '••••7777' in st and 'đã lưu trên máy' not in st and TOKEN_ENV not in st, f'nguồn: từ biến môi trường (thắng file): {st[:140]!r}')
         pg.click('#cd-forget')
         modal_open(pg, '#cd-forget-confirm')
-        check(pg.evaluate('document.activeElement && document.activeElement.id') == 'cd-forget-cancel', 'hộp Quên token: nút Huỷ có focus')
+        check(pg.evaluate('document.activeElement && document.activeElement.id') == 'cd-forget-cancel', 'hộp Forget token: nút Cancel có focus')
         mt = txt(pg, '#cd-forget-confirm')
         check('biến môi trường' in mt and 'KHÔNG xoá được' in mt, f'hộp nói rõ token trong cmd không xoá được: {mt[:160]!r}')
         snap(pg, E, 'caidat_forget_modal.png')
@@ -472,7 +472,7 @@ def phase_c(pw, E, port):
 
 # ---------------------------------------------------------------- pha D
 def phase_d(pw, E, port):
-    log('\n== PHA D: không còn gì -> Lưu -> Quên ==')
+    log('\n== PHA D: không còn gì -> Save -> Forget ==')
     check(not os.path.exists(os.path.join(E.cfg, 'cvat.json')), 'không còn cvat.json')
     app = launch(pw, E, 'CD2', port, 'd')
     pg = app.pg
@@ -494,7 +494,7 @@ def phase_d(pw, E, port):
         check('○ Chưa có link/token' in txt(pg, '#cd-cvat-status') and token_box_ok(pg), 'Quên: về "Chưa có link/token"')
         to_review(pg)
         wait_in(pg, '#push-panel', 'Thiếu CVAT_URL và CVAT_ACCESS_TOKEN')
-        check(pg.locator('#btn-push').is_disabled(), 'Quên token: nút Đẩy khoá lại, có lý do')
+        check(pg.locator('#btn-push').is_disabled(), 'Forget token: nút Đẩy khoá lại, có lý do')
         # tab thứ hai của trình duyệt giữ rev cũ: bị từ chối nhẹ nhàng
         to_settings(pg)
         fill(pg, 'cd-url', URL)
@@ -511,7 +511,7 @@ def phase_d(pw, E, port):
         wait_in(pg2, '#cd-cvat-msg', 'Đã lưu cho phiên này')
         pg.click('#cd-save')                                   # tab 1 còn rev cũ
         wait_in(pg, '#cd-cvat-msg', 'tab khác')
-        check(token_box_ok(pg) and pg.input_value('#cd-url input') == URL, 'tab cũ: Lưu bị từ chối ("vừa đổi ở tab khác"), ô nhập tải lại từ server, ô token rỗng')
+        check(token_box_ok(pg) and pg.input_value('#cd-url input') == URL, 'tab cũ: Save bị từ chối ("vừa đổi ở tab khác"), ô nhập tải lại từ server, ô token rỗng')
         pg2.close()
         check('••••3456' in txt(pg, '#cd-cvat-status'), 'tab cũ đã tải lại: thấy giá trị do tab kia lưu')
         app.html()
@@ -533,7 +533,7 @@ def phase_e(pw, E, port):
             pg.click('#cd-test')
             wait_in(pg, '#cd-cvat-msg', want, 60000)
             mt = txt(pg, '#cd-cvat-msg')
-            check(kind in mt and 'chưa bấm Lưu' in mt and TOKEN not in mt, f'{control}: {mt[:200]!r}')
+            check(kind in mt and 'chưa bấm Save' in mt and TOKEN not in mt, f'{control}: {mt[:200]!r}')
             if label == 'e2':
                 check('2.70.0' in mt and 'cvat-sdk' in mt, 'khác phiên bản: nêu phiên bản server và cách sửa')
             fill(pg, 'cd-url', URL)

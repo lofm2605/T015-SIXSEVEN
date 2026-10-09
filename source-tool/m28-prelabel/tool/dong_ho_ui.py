@@ -1,8 +1,8 @@
 """Đồng hồ bấm giờ gán nhãn ở ĐẦU trang rà soát (logic ở dong_ho.py; không import gradio ở đầu module). Không còn tab riêng.
 
-Một chip thấy ở mọi tab: ⏱ mm:ss · trạng thái · người · đợt, kèm MỘT nút Dừng/Tiếp tục. Đồng hồ tự chạy khi bấm Nạp ảnh (auto_start): người là người rà của trang (P1–P5),
+Một chip thấy ở mọi tab: ⏱ mm:ss · trạng thái · người · đợt, kèm MỘT nút Pause/Resume. Đồng hồ tự chạy khi bấm Nạp ảnh (auto_start): người là người rà của trang (P1–P5),
 nhóm lấy từ config/nhom_thi_nghiem.json, không có thì assisted. mm:ss chạy mượt bằng JS ở trình duyệt (không gọi server mỗi giây); nguồn sự thật là đồng hồ phía server,
-`gr.Timer(15)` chỉ đồng bộ lại. Lưu số đo (timing_<Pk>.csv và gói kết quả) hoặc bỏ phiên nằm trong hộp "Đóng trang rà soát?" khi đang có phiên.
+`gr.Timer(15)` chỉ đồng bộ lại. Save timing (timing_<Pk>.csv và gói kết quả) hoặc Discard session nằm trong hộp "Đóng trang rà soát?" khi đang có phiên.
 Không ảnh mặt, không mạng, không token, không phát file nào (không thêm allowed_paths).
 """
 import html
@@ -24,8 +24,8 @@ from m28core import nhom as nhom_mod  # noqa: E402
 TRANG_THAI_VI = {"chay": "▶ Đang chạy", "tam_dung": "⏸ Tạm dừng", "du_mat": "■ Đủ mặt, chờ lưu", "chua": "• Chưa có phiên"}
 DIEU_KIEN_MAC_DINH = "assisted"
 OPTS = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="dongho")
-NUT_DUNG, NUT_TIEP = "Dừng", "Tiếp tục"
-NUT_BO, NUT_BO_LAN_2 = "Bỏ phiên đồng hồ (không lưu)", "Bấm lần nữa để bỏ phiên (không lưu)"
+NUT_DUNG, NUT_TIEP = "Pause", "Resume"
+NUT_BO, NUT_BO_LAN_2 = "Discard session (not saved)", "Click again to discard (not saved)"
 
 CSS = """
 /* ---------- chip đồng hồ ở đầu trang (màu lấy từ biến theme) ---------- */
@@ -104,8 +104,8 @@ def summary_html(r, nguoi):
 
 def vi_hop(text):
     """Thông báo của dong_ho.py viết cho các nút cũ của tab; ở hộp Đóng trang nút tên khác: đổi chữ cho khớp."""
-    text = text.replace("Chọn Sửa thời gian / Giữ nguyên, hoặc bấm Xong (lưu) thêm một lần nữa để lưu kèm cảnh báo.", "Bấm Lưu số đo thêm một lần nữa để lưu kèm cảnh báo.")
-    return text.replace("Hủy phiên", "Bỏ phiên đồng hồ").replace("Xong (lưu)", "Lưu số đo")
+    text = text.replace("Chọn Sửa thời gian / Giữ nguyên, hoặc bấm Xong (lưu) thêm một lần nữa để lưu kèm cảnh báo.", "Bấm Save timing thêm một lần nữa để lưu kèm cảnh báo.")
+    return text.replace("dùng Xong hoặc", "dùng Save timing hoặc").replace("Hủy phiên", "Discard session").replace("Xong (lưu)", "Save timing")
 
 
 def box_html(text, level="warn"):
@@ -152,7 +152,7 @@ def tu_tam_dung(ctx):
     except Exception:
         return []
     for nguoi, gio in got:
-        print(f"Đồng hồ của {nguoi} đã tạm dừng lúc {gio}: mở lại trang rà soát để bấm Tiếp tục (hoặc lưu số đo ở hộp Đóng trang).", flush=True)
+        print(f"Đồng hồ của {nguoi} đã tạm dừng lúc {gio}: mở lại trang rà soát để bấm Resume (hoặc Save timing ở hộp Đóng trang).", flush=True)
     return got
 
 
@@ -166,7 +166,7 @@ def close_note(ctx):
         return ""
     dang = "đang chạy: đóng trang sẽ <b>tự tạm dừng</b> đồng hồ" if v["trang_thai"] == "chay" else "đang tạm dừng"
     return (f'<div class="nap-box nap-warn" role="alert">Đồng hồ của <b>{e(p)}</b> {dang} ({fmt_giay(v["giay_phien"])}, đợt {e(v.get("dot") or v.get("task") or "")}). '
-            "Làm xong thì bấm <b>Lưu số đo</b> để ghi dòng bấm giờ và gói kết quả cho nhóm trưởng; chưa xong thì cứ đóng, mở lại trang bấm Tiếp tục.</div>")
+            "Làm xong thì bấm <b>Save timing</b> để ghi dòng bấm giờ và gói kết quả cho nhóm trưởng; chưa xong thì cứ đóng, mở lại trang bấm Resume.</div>")
 
 
 def so_mat_cua_luot(run_dir):
@@ -181,7 +181,7 @@ def so_mat_cua_luot(run_dir):
 
 def auto_start(gr, ctx, run, n_mat=None):
     """Gọi từ tab Nạp ảnh ngay khi bấm Nạp: đồng hồ bắt đầu cho người rà của trang. Nhóm lấy từ config/nhom_thi_nghiem.json, không có thì assisted.
-    Đã có phiên thì giữ nguyên (báo, không đè, không tự Tiếp tục). Trả thông báo (cũng hiện ở góc trang nếu có gr) hoặc None khi đang đóng trang."""
+    Đã có phiên thì giữ nguyên (báo, không đè, không tự Resume). Trả thông báo (cũng hiện ở góc trang nếu có gr) hoặc None khi đang đóng trang."""
     if ctx.closing:
         return None
 
@@ -195,7 +195,7 @@ def auto_start(gr, ctx, run, n_mat=None):
         if nguoi is None:
             return noi("Chưa chạy đồng hồ: tên người rà phải là P1 đến P5 (đặt ở tab Cài đặt).", warn=True)
         if v.get("co_phien"):
-            tt = "đang chạy" if v["trang_thai"] == "chay" else "đang tạm dừng (bấm Tiếp tục ở đầu trang)"
+            tt = "đang chạy" if v["trang_thai"] == "chay" else "đang tạm dừng (bấm Resume ở đầu trang)"
             return noi(f"Đồng hồ của {nguoi} {tt}, giữ nguyên phiên đợt {v.get('dot') or v.get('task') or ''}.")
         cond = nhom_mod.nhom_cua(nhom_mod.doc(ctx.project_root), nguoi) or DIEU_KIEN_MAC_DINH
         d.bat_dau(nguoi, cond, dot=run, bo_anh=run, n_mat=n_mat or dong_ho.N_MAT_MAC_DINH, rev=0)
@@ -207,7 +207,7 @@ def auto_start(gr, ctx, run, n_mat=None):
 
 # ---------- chip ----------
 def chip(gr, demo, ctx):
-    """Dựng chip + nút Dừng/Tiếp tục (đặt ngay dưới thanh Đóng trang). Trả SimpleNamespace(refresh, outs, opts) để các nơi khác (Nạp ảnh, hộp Đóng trang) làm mới chip bằng .then."""
+    """Dựng chip + nút Pause/Resume (đặt ngay dưới thanh Close page). Trả SimpleNamespace(refresh, outs, opts) để các nơi khác (Nạp ảnh, hộp Đóng trang) làm mới chip bằng .then."""
     d = get_dh(ctx)
     with gr.Row(elem_id="dh-bar"):
         mini = gr.HTML(mini_html(dict(co_phien=False)), elem_id="dh-mini-wrap", apply_default_css=False)
@@ -262,11 +262,11 @@ def chip(gr, demo, ctx):
     return types.SimpleNamespace(refresh=refresh, outs=outs, opts=OPTS, btn=btn, mini=mini)
 
 
-# ---------- hộp "Đóng trang rà soát?": Lưu số đo / Bỏ phiên ----------
+# ---------- hộp "Đóng trang rà soát?": Save timing / Discard session ----------
 def close_buttons(gr, ctx, body, body_fn):
     """Hai nút trong hộp Đóng trang (gọi BÊN TRONG hàng nút của hộp). body: gr.HTML của hộp; body_fn(extra_html) dựng lại nội dung hộp kèm đoạn thêm.
     Trả SimpleNamespace(show, show_outs, events): show() chạy sau khi hộp mở (chỉ hiện hai nút khi đang có phiên); events: sự kiện của hai nút để nối .then làm mới chip."""
-    b_luu = gr.Button("Lưu số đo", variant="primary", elem_id="dh-luu-btn", visible=False)
+    b_luu = gr.Button("Save timing", variant="primary", elem_id="dh-luu-btn", visible=False)
     b_bo = gr.Button(NUT_BO, variant="stop", elem_id="dh-bo-btn", visible=False)
     ma_st = gr.State("")
     show_outs = [b_luu, b_bo, ma_st]
@@ -285,7 +285,7 @@ def close_buttons(gr, ctx, body, body_fn):
         if not d.ung_vien_nhan(p) and getattr(ctx, "dh_luu_cho", None) != (v["phien"], v["rev"]):       # chưa có nhãn xuất: nhắc collect trước, bấm thêm lần nữa thì lưu chỉ thời gian
             ctx.dh_luu_cho = (v["phien"], v["rev"])
             return (body_fn(box_html("Chưa thấy file nhãn đã xuất của bạn trong raw/ (<task>_" + p + "_<DDMM>.xml), nên gói kết quả sẽ chỉ có thời gian. Chạy "
-                                     "python tool/m28.py collect --reviewer " + p + " trước, rồi bấm Lưu số đo; hoặc bấm Lưu số đo thêm lần nữa để lưu chỉ thời gian.")),
+                                     "python tool/m28.py collect --reviewer " + p + " trước, rồi bấm Save timing; hoặc bấm Save timing thêm lần nữa để lưu chỉ thời gian.")),
                     gr.update(), gr.update(), "")
         try:
             r = d.xong_luu(p, v["rev"], True, None, "auto", None)

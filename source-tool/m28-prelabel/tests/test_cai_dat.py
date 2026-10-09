@@ -323,7 +323,7 @@ def test_corrupt_cvat_file_does_not_break_and_is_not_echoed(tmp_path, content):
     s = settings_in(tmp_path)
     assert s.file_status == 'hong' and s.effective()['source'] is None
     html = cai_dat_ui.status_html(s.snapshot(), PIPE)
-    assert 'hỏng' in html and 'Quên token' in html
+    assert 'hỏng' in html and 'Forget token' in html
     for frag in (b'phai json', b'chuoi', b'bad', b'12345678', b'etc/passwd'):
         if frag in content and len(frag) > 3:
             assert frag.decode('latin-1') not in html
@@ -1053,7 +1053,7 @@ def test_status_and_test_html_never_show_token(S):
     S.forget_cvat()
     assert '○ Chưa có link/token' in cai_dat_ui.status_html(S.snapshot(), pi)
     t = cai_dat_ui.test_html(ok, 'm28', typed=True)
-    assert 'Kết nối được' in t and 'chưa bấm Lưu' in t and 'project m28: đã có (id 3)' in t
+    assert 'Kết nối được' in t and 'chưa bấm Save' in t and 'project m28: đã có (id 3)' in t
     t = cai_dat_ui.test_html(dict(ok, project_found=False, project_id=None), 'm28')
     assert 'chưa có (tool tạo khi đẩy lần đầu)' in t
     t = cai_dat_ui.test_html(dict(ok=False, error_kind='redirect', message='<script>x</script>'), 'm28')
@@ -1202,7 +1202,7 @@ def test_gradio_handlers_save_test_forget_without_leaking_token(world, monkeypat
     # token sai ở bước thử (auth_fail): thông báo đúng nguyên nhân
     monkeypatch.setenv('M28_FAKE_CVAT_CONTROL', json.dumps(dict(auth_fail=True)))
     m = call(test, URL, TOKEN, '', None)
-    assert 'từ chối token' in m['cd-cvat-msg'] and 'sai token' in m['cd-cvat-msg'] and 'chưa bấm Lưu' in m['cd-cvat-msg']
+    assert 'từ chối token' in m['cd-cvat-msg'] and 'sai token' in m['cd-cvat-msg'] and 'chưa bấm Save' in m['cd-cvat-msg']
     monkeypatch.setenv('M28_FAKE_CVAT_CONTROL', json.dumps(dict(version='2.70.0')))
     m = call(test, URL, TOKEN, '', None)
     assert 'khác phiên bản' in m['cd-cvat-msg'] and '2.70.0' in m['cd-cvat-msg']

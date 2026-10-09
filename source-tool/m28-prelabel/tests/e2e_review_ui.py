@@ -10,15 +10,15 @@ các lượt này chứa ảnh in-cabin nên chỉ để ngoài git. Ví dụ (L
 
 Sáu pha (A-F):
   A  chạy app thẳng trên bản chép F5UI: phím tắt, hoàn tác, đóng giữa chừng (kill) rồi mở lại, màn hẹp 800 px, nút Xong chỉ ghi done.txt
-     (dải xanh, KHÔNG tắt: tiến trình còn chạy sau 3 giây, tab Các đợt mở được) rồi nút "Đóng trang rà soát" (hộp xác nhận, Huỷ, xác nhận)
+     (dải xanh, KHÔNG tắt: tiến trình còn chạy sau 3 giây, tab Các đợt mở được) rồi nút "Close page" (hộp xác nhận, Cancel, xác nhận)
      tắt tiến trình mã 0 với lớp phủ "Đã đóng", không có request ra ngoài 127.0.0.1, server chỉ bind 127.0.0.1 (proxy chết).
   B  qua m28 thật: `m28.py review --force review` (Xong, đợi, Đóng) rồi `push --dry-run`, XML/manual_list/rejected khớp CSV.
   C  độ mượt trên ALL616 (616 mặt): mở trang, một quyết định, đổi trang; xoá triage_E2E.csv sau khi đo.
   D  (thêm) lỗi ghi CSV (giả lập Excel khoá file bằng cách đặt một thư mục vào chỗ file): báo "Không ghi được", giữ nguyên mặt, sửa xong bấm lại thì ghi được.
   E  sửa theo đợt kiểm 6/10: đổi bộ lọc, lưới rỗng, dải xanh sau Xong (không lớp phủ), phím tắt/tab cũ không ghi sau Xong, gõ chữ ở tab khác
-     được, hộp Đóng (cảnh báo khi chưa Xong, Huỷ, Esc, focus mặc định ở Huỷ), Host lạ bị chặn, cổng bận, tab thứ hai sau Xong, bấm lặp.
+     được, hộp Đóng (cảnh báo khi chưa Xong, Cancel, Esc, focus mặc định ở Cancel), Host lạ bị chặn, cổng bận, tab thứ hai sau Xong, bấm lặp.
   F  tab "Nạp ảnh": kéo thả (set_input_files) ảnh in-cabin thật + ảnh xấu vào trang đang rà dở F5UP, tạo lượt NAP_001, prepare thật (MediaPipe),
-     tóm tắt, màn hẹp 420 px, "Rà đợt này" ở tab Các đợt (trang tự tải lại cùng cổng, lượt F5UP không bị đụng), Cancel rồi Retry (NAP_002), thiếu model
+     tóm tắt, màn hẹp 420 px, "Review batch" ở tab Các đợt (trang tự tải lại cùng cổng, lượt F5UP không bị đụng), Cancel rồi Retry (NAP_002), thiếu model
      (khung đỏ, khoá nút), nút Đóng bị từ chối khi prepare đang chạy, và chế độ `review_app.py --nap` từ trang trống (Đóng ở chế độ này). Cần thêm --imgs (mặc định <work>/data/frames).
 Mọi tiến trình đã mở được dọn ở `finally`. Cổng 7871–7879, M28_NO_BROWSER=1.
 """
@@ -55,12 +55,12 @@ def check(cond, msg):
     log('  ok  ', msg)
 
 
-DONE_BAR = ("Đã ghi xong. Bạn có thể Đẩy lên CVAT, xem Các đợt, xuất Ca khó. "
-            "Xong việc bấm 'Đóng trang rà soát' để quay lại cmd.")
+DONE_BAR = ("Đã ghi xong. Bạn có thể Push to CVAT, xem Các đợt, xuất Ca khó. "
+            "Xong việc bấm 'Close page' để quay lại cmd.")
 
 
 def open_close_box(pg):
-    """Bấm 'Đóng trang rà soát' ở thanh đầu trang; trả chữ trong hộp xác nhận."""
+    """Bấm 'Close page' ở thanh đầu trang; trả chữ trong hộp xác nhận."""
     pg.click('#btn-dong')
     pg.wait_for_selector('#close-confirm', state='visible', timeout=10000)
     pg.wait_for_timeout(400)
@@ -327,8 +327,8 @@ def phase_a(pw, W, shots, ports):
         check(pg.locator('#progress .m28-done-bar').get_attribute('role') == 'status', 'dải xanh có role=status')
         check(pg.locator('.m28-done, .m28-closed, .m28-modal').count() == 0 and big_fixed(pg) == 0, 'sau Xong không có lớp phủ/hộp nào chặn màn hình')
         check(pg.locator('#btn-nhan').is_disabled() and pg.locator('#btn-xong').is_disabled() and pg.locator('#btn-undo').is_disabled(),
-              'sau Xong: Nhận/Hoàn tác/Xong bị khoá')
-        check(pg.locator('#btn-dong').is_visible(), 'nút Đóng trang rà soát thấy được sau Xong')
+              'sau Xong: Nhận/Undo/Xong bị khoá')
+        check(pg.locator('#btn-dong').is_visible(), 'nút Close page thấy được sau Xong')
         pg.screenshot(path=os.path.join(shots, '03b_sau_xong_dai_xanh.png'))
         n_csv = len(read_csv_rows(csv_path))
         for k in ('n', 'g', 'b', 'z', 'k', '3', 'ArrowLeft'):
@@ -345,12 +345,12 @@ def phase_a(pw, W, shots, ports):
         pg.wait_for_selector('#info .face-name')
         box = open_close_box(pg)
         check('Lệnh m28 trong cmd sẽ đi tiếp' in box and 'chưa bấm Xong' not in box, f'hộp Đóng sau Xong: {box!r}')
-        check(pg.evaluate('document.activeElement && document.activeElement.id') == 'close-confirm-cancel', 'hộp Đóng: nút Huỷ có focus mặc định')
+        check(pg.evaluate('document.activeElement && document.activeElement.id') == 'close-confirm-cancel', 'hộp Đóng: nút Cancel có focus mặc định')
         pg.screenshot(path=os.path.join(shots, '03c_hop_dong.png'))
         pg.click('#close-confirm-cancel')
         pg.wait_for_selector('#close-confirm', state='hidden', timeout=10000)
         pg.wait_for_timeout(1500)
-        check(p.poll() is None and pg.locator('.m28-closed').count() == 0, 'Huỷ ở hộp Đóng: trang và tiến trình còn nguyên')
+        check(p.poll() is None and pg.locator('.m28-closed').count() == 0, 'Cancel ở hộp Đóng: trang và tiến trình còn nguyên')
         open_close_box(pg)
         confirm_close(pg)
         code = p.wait(timeout=15)
@@ -606,7 +606,7 @@ def phase_e(pw, W, shots, port):
         box = open_close_box(pg)                        # chưa bấm Xong, còn mặt chưa rà: cảnh báo
         check('chưa bấm Xong, lượt này sẽ còn mặt chưa rà' in box and '4 mặt' in box and 'dừng ở bước review' in box, f'hộp Đóng chưa Xong, còn mặt: {box!r}')
         pg.screenshot(path=os.path.join(shots, 'after_02b_dong_chua_xong.png'))
-        pg.keyboard.press('Escape')                     # Esc = Huỷ
+        pg.keyboard.press('Escape')                     # Esc = Cancel
         pg.wait_for_selector('#close-confirm', state='hidden', timeout=10000)
         check(p.poll() is None, 'Esc ở hộp Đóng: không đóng')
         check('TRƯỚC' in pg.inner_text('#reason'), 'nhãn lý do ghi rõ chọn TRƯỚC')
@@ -641,7 +641,7 @@ def phase_e(pw, W, shots, port):
         pg.set_viewport_size({'width': 1440, 'height': 900})
         pg.wait_for_timeout(400)
         box = open_close_box(pg)                        # chưa bấm Xong nhưng đã rà hết
-        check('chưa bấm Xong: m28 sẽ coi như chưa rà xong; bấm Huỷ rồi bấm Xong trước nếu muốn đi tiếp' in box, f'hộp Đóng chưa Xong, rà hết: {box!r}')
+        check('chưa bấm Xong: m28 sẽ coi như chưa rà xong; bấm Cancel rồi bấm Xong trước nếu muốn đi tiếp' in box, f'hộp Đóng chưa Xong, rà hết: {box!r}')
         pg.click('#close-confirm-cancel')
         pg.wait_for_selector('#close-confirm', state='hidden', timeout=10000)
         # Xong: dải xanh (không lớp phủ), tab cũ không ghi được, trang vẫn dùng được
@@ -757,7 +757,7 @@ def _goto_tab(pg):
 
 
 def _open_run(pg, run):
-    """Mở một đợt bằng nút "Rà đợt này" ở tab Các đợt (tab Nạp ảnh không còn nút Rà lượt này)."""
+    """Mở một đợt bằng nút "Review batch" ở tab Các đợt (tab Nạp ảnh không còn nút Rà lượt này)."""
     pg.get_by_role('tab', name='Các đợt').click()
     sel = f'#dot-root [data-act="ra"][data-run="{run}"]'
     pg.wait_for_selector(sel + ':not([disabled])', timeout=30000)
@@ -861,7 +861,7 @@ def phase_f(pw, W, shots, ports, imgs_dir):
         pg.screenshot(path=os.path.join(shots, 'upload_04_hep.png'), full_page=True)
         pg.set_viewport_size({'width': 1440, 'height': 900})
         pg.wait_for_timeout(400)
-        # 5. chuyển sang NAP_001 (tab Các đợt → Rà đợt này)
+        # 5. chuyển sang NAP_001 (tab Các đợt → Review batch)
         _open_run(pg, 'NAP_001')
         pg.wait_for_function("document.title === 'Rà soát M28 · NAP_001'", timeout=60000)
         pg.wait_for_selector('#info .face-name', timeout=60000)
@@ -899,7 +899,7 @@ def phase_f(pw, W, shots, ports, imgs_dir):
         pg.click('#nap-cancel')
         pg.wait_for_function("(document.querySelector('#nap-summary')?.innerText || '').includes('Đã huỷ')", timeout=30000)
         n2 = os.path.join(runs, 'NAP_002')
-        check(os.path.isdir(os.path.join(n2, 'inbox')) and os.path.getsize(os.path.join(n2, 'nap_log.txt')) > 0, 'NAP_002: sau Huỷ còn inbox và log')
+        check(os.path.isdir(os.path.join(n2, 'inbox')) and os.path.getsize(os.path.join(n2, 'nap_log.txt')) > 0, 'NAP_002: sau Cancel còn inbox và log')
         check(pg.locator('#nap-retry').is_enabled() and pg.locator('#nap-cancel').is_disabled(),
               'sau Cancel: Retry bật, Cancel khoá')
         pg.click('#nap-retry')

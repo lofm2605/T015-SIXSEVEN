@@ -155,7 +155,7 @@ def _table(head, rows):
 
 
 def kq_html(kq):
-    """Bảng số lượng của một lần lọc (dùng cho Xem trước và sau khi tạo): vào, thác nước, từng tiêu chí, còn lại theo phần/nguồn/lượt, cảnh báo. KHÔNG hiện ảnh mặt."""
+    """Bảng số lượng của một lần lọc (dùng cho Preview và sau khi tạo): vào, thác nước, từng tiêu chí, còn lại theo phần/nguồn/lượt, cảnh báo. KHÔNG hiện ảnh mặt."""
     out = ['<div class="tk-root">',
            f'<div class="tk-tiles"><div class="tk-tile"><div class="tk-tv">{kq.tong}</div><div class="tk-tl">mặt vào ((lượt, mặt))</div><div class="tk-tn">{kq.bang.mat_duy_nhat()} mặt duy nhất</div></div>'
            f'<div class="tk-tile"><div class="tk-tv">{len(kq.giu)}</div><div class="tk-tl">mặt còn lại</div></div>'
@@ -190,7 +190,7 @@ def cfg_files(project_root):
 def resolve_cfg(project_root, value):
     """Đường dẫn file cấu hình từ giá trị trong danh sách (phải là phần tử của cfg_files do server tính); sai thì RunError."""
     if value not in [v for _l, v in cfg_files(project_root)]:
-        raise nap_anh.RunError("File cấu hình không có trong danh sách: bấm Làm mới.")
+        raise nap_anh.RunError("File cấu hình không có trong danh sách: bấm Refresh.")
     p = os.path.join(project_root, *value.split("/"))
     if not nap_anh._inside(p, project_root):
         raise nap_anh.RunError("File cấu hình nằm ngoài thư mục dự án: từ chối.")
@@ -272,21 +272,21 @@ def loc_tab(gr, demo, store, ctx):
     gr.Markdown("**Cấu hình lọc (JSON)** — nạp/lưu chỉ trong thư mục `outputs\\`")
     with gr.Row(elem_id="loc-rows"):
         d_cfg = gr.Dropdown(choices=cfg_files(ctx.project_root), value=None, label="Nạp cấu hình", elem_id="loc-cfg")
-        b_load = gr.Button("Nạp", elem_id="loc-load-cfg")
+        b_load = gr.Button("Load", elem_id="loc-load-cfg")
         t_cfgname = gr.Textbox(value="", label="Lưu thành (outputs\\<tên>.json)", placeholder="loc_cua_toi", elem_id="loc-cfgname")
-        b_save = gr.Button("Lưu cấu hình", elem_id="loc-save-cfg")
+        b_save = gr.Button("Save config", elem_id="loc-save-cfg")
     with gr.Row(elem_id="loc-rows"):
         t_ten = gr.Textbox(value="bo_loc", label="Tên bộ dữ liệu (chữ không dấu, số, _ -; tối đa 40)", elem_id="loc-ten")
     comps["ten"] = t_ten
     with gr.Row(elem_id="loc-btns"):
-        b_prev = gr.Button("Xem trước số lượng", variant="primary", elem_id="loc-preview")
-        b_make = gr.Button("Tạo bộ dữ liệu", variant="stop", elem_id="loc-create")
+        b_prev = gr.Button("Preview", variant="primary", elem_id="loc-preview")
+        b_make = gr.Button("Create dataset", variant="stop", elem_id="loc-create")
     with gr.Row(visible=False, elem_id="loc-confirm") as confirm_row:
-        b_ow = gr.Button("Bộ này đã có: ghi đè", elem_id="loc-overwrite-ok")
-        b_ow_no = gr.Button("Huỷ", elem_id="loc-overwrite-cancel")
+        b_ow = gr.Button("Overwrite", elem_id="loc-overwrite-ok")
+        b_ow_no = gr.Button("Cancel", elem_id="loc-overwrite-cancel")
     msg = gr.HTML(elem_id="loc-msg", apply_default_css=False)
     result = gr.HTML(elem_id="loc-result", apply_default_css=False)
-    download = gr.DownloadButton("Tải file .zip", visible=False, elem_id="loc-download")
+    download = gr.DownloadButton("Download .zip", visible=False, elem_id="loc-download")
     order = [k for k in KEYS if k in comps]
     inputs = [comps[k] for k in order]
     refresh_outs = [d_luot, d_nhap, d_nguoi, d_cfg, msg]
@@ -307,9 +307,9 @@ def loc_tab(gr, demo, store, ctx):
         runs = dot_anh.list_runs(ctx.runs_root)
         for l in v.get("luot") or []:
             if l not in runs:
-                raise nap_anh.RunError(f"Lượt {l!r} không có trong danh sách lượt: bấm Làm mới.")
+                raise nap_anh.RunError(f"Lượt {l!r} không có trong danh sách lượt: bấm Refresh.")
         if v.get("luot_nhap") and v["luot_nhap"] not in runs:
-            raise nap_anh.RunError(f"Lượt chứa nháp {v['luot_nhap']!r} không có trong danh sách lượt: bấm Làm mới.")
+            raise nap_anh.RunError(f"Lượt chứa nháp {v['luot_nhap']!r} không có trong danh sách lượt: bấm Refresh.")
 
     def lam_loc(v):
         check_values(v)
@@ -324,7 +324,7 @@ def loc_tab(gr, demo, store, ctx):
         except ERR as ex:
             gr.Warning(str(ex), title="Chưa xem trước được")
             return msg_html(str(ex), "warn"), "", gr.update(visible=False), gr.update(visible=False)
-        return msg_html("Xem trước = chạy thử (--dry-run): chưa ghi file nào.", "info"), kq_html(kq), gr.update(visible=False), gr.update(visible=False)
+        return msg_html("Preview = chạy thử (--dry-run): chưa ghi file nào.", "info"), kq_html(kq), gr.update(visible=False), gr.update(visible=False)
 
     def tao(a, ghi_de):
         if ctx.closing:
@@ -335,7 +335,7 @@ def loc_tab(gr, demo, store, ctx):
                 cfg, kq = lam_loc(v)
                 dest = ld.duong_goi(ctx.project_root, cfg["ten"])
                 if os.path.exists(dest) and not ghi_de:
-                    return (msg_html(f"Bộ {cfg['ten']!r} đã có. Bấm \"Bộ này đã có: ghi đè\" để thay, hoặc đổi tên bộ.", "warn"), kq_html(kq), gr.update(visible=False),
+                    return (msg_html(f"Bộ {cfg['ten']!r} đã có. Bấm Overwrite để thay, hoặc đổi tên bộ.", "warn"), kq_html(kq), gr.update(visible=False),
                             gr.update(visible=True))
                 info = ld.ghi_bo(kq, cfg["ten"], ghi_de=ghi_de)
             except ERR as ex:
@@ -378,7 +378,7 @@ def loc_tab(gr, demo, store, ctx):
             return (msg_html(str(ex), "warn"),) + (gr.update(),) * len(order)
         v = from_cfg(cfg)
         shown = lambda k: ("" if v[k] is None else str(v[k])) if k in NUM_KEYS else v[k]                       # noqa: E731
-        return (msg_html(f"Đã nạp {sel.replace('/', chr(92))}. Bấm Xem trước số lượng để kiểm.", "ok"),) + tuple(gr.update(value=shown(k)) for k in order)
+        return (msg_html(f"Đã nạp {sel.replace('/', chr(92))}. Bấm Preview để kiểm.", "ok"),) + tuple(gr.update(value=shown(k)) for k in order)
 
     b_prev.click(on_preview, inputs, [msg, result, download, confirm_row], **opts)
     b_make.click(on_make, inputs, [msg, result, download, confirm_row], **dict(opts, concurrency_id="locdl_ghi"))

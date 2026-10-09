@@ -697,7 +697,7 @@ class Settings:
         token rỗng = giữ token đang dùng (chỉ khi nó không đến từ biến môi trường nếu remember). Trả dict(ok, level, msg, stale, warning)."""
         with self._lock:
             if self._stale(rev):
-                return dict(ok=False, level="warn", stale=True, msg="Cài đặt vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm Lưu.")
+                return dict(ok=False, level="warn", stale=True, msg="Cài đặt vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm Save.")
             u = check_url(url)
             if not u["ok"]:
                 return dict(ok=False, level="err", stale=False, msg=u["error"])
@@ -759,7 +759,7 @@ class Settings:
         """Quên token: xoá cvat.json (kể cả file hỏng) và giá trị đã nhập trong phiên. Biến môi trường của cmd thì không xoá được."""
         with self._lock:
             if self._stale(rev):
-                return dict(ok=False, level="warn", stale=True, msg="Cài đặt vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm Quên token.")
+                return dict(ok=False, level="warn", stale=True, msg="Cài đặt vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm Forget token.")
             level, notes = "ok", []
             if self.path_cvat():
                 okd, err = self._remove_file(self.path_cvat())
@@ -806,7 +806,7 @@ class Settings:
     def set_reviewer(self, name, rev=None):
         with self._lock:
             if self._stale(rev):
-                return dict(ok=False, level="warn", stale=True, msg="Cài đặt vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm Lưu tên.")
+                return dict(ok=False, level="warn", stale=True, msg="Cài đặt vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm Save name.")
             try:
                 n = check_reviewer(name)
             except RunError as e:
@@ -821,7 +821,7 @@ class Settings:
         """kind 'images_dir' | 'model_path'. Rỗng = xoá. Phải qua kiểm (không 'err') mới lưu."""
         with self._lock:
             if self._stale(rev):
-                return dict(ok=False, level="warn", stale=True, check=None, msg="Cài đặt vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm Lưu.")
+                return dict(ok=False, level="warn", stale=True, check=None, msg="Cài đặt vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm Save.")
             if kind not in ("images_dir", "model_path"):
                 raise ValueError(kind)
             try:

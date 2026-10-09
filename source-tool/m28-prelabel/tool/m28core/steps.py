@@ -527,7 +527,7 @@ def review(args, out):
         subprocess.call([sys.executable, app, rd, args.reviewer])
     except KeyboardInterrupt:                                    # Ctrl+C: trang con tự thoát sạch, không mất dòng CSV nào
         if os.path.exists(os.path.join(out, "done.txt")):        # đã bấm Xong rồi mới Ctrl+C: m28.py bỏ qua bước có done.txt khi chạy lại
-            print("Đã bấm Xong nhưng m28 dừng vì Ctrl+C (trang chưa được đóng bằng nút 'Đóng trang rà soát'): "
+            print("Đã bấm Xong nhưng m28 dừng vì Ctrl+C (trang chưa được đóng bằng nút 'Close page'): "
                   "gõ lại đúng lệnh (không thêm --force review) để đi tiếp, bước review đã có done.txt nên được bỏ qua.")
         else:
             print("Đã đóng trang rà soát chưa bấm Xong: gõ lại đúng lệnh để làm tiếp.")

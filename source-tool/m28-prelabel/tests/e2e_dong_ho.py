@@ -9,11 +9,11 @@ Cần một thư mục chạy GIẢ (--work, ngoài repo, KHÔNG phải thư m�
 
 Không còn tab Đồng hồ. Đồng hồ tự chạy khi bấm Nạp ảnh (cần model MediaPipe, không có trong kịch bản này) nên kịch bản bắt đầu phiên bằng dong_ho.DongHo ở thư mục giả TRƯỚC khi mở trang.
 Kịch bản (app thật `review_app.py --nap P5`, cổng 7861, proxy chết để chứng minh không cần mạng):
-  1  chip ở đầu trang: mm:ss tăng sau 3 giây mà KHÔNG có request nào mỗi giây (đếm request); nút Dừng: số đứng yên 2 giây; nút Tiếp tục: chạy lại (một nút duy nhất #dh-mini-btn)
+  1  chip ở đầu trang: mm:ss tăng sau 3 giây mà KHÔNG có request nào mỗi giây (đếm request); nút Pause: số đứng yên 2 giây; nút Resume: chạy lại (một nút duy nhất #dh-mini-btn)
   2  tải lại trang: phiên còn, đồng hồ vẫn chạy; không có tab "Đồng hồ"
-  3  mở tab thứ hai bấm Dừng; tab đầu (rev cũ) bấm nút bị từ chối, phiên vẫn tạm dừng
-  4  hộp Đóng trang: có nút Lưu số đo và Bỏ phiên đồng hồ; Bỏ phiên bấm hai lần: không có dòng CSV, có dòng huy_P5.csv
-  5  phiên mới: Lưu số đo (lần một nhắc collect, lần hai lưu): timing_P5.csv đúng 12 cột facetimer + cột thêm, có gói zip trong outputs/ket_qua
+  3  mở tab thứ hai bấm Pause; tab đầu (rev cũ) bấm nút bị từ chối, phiên vẫn tạm dừng
+  4  hộp Đóng trang: có nút Save timing và Discard session; Discard session bấm hai lần: không có dòng CSV, có dòng huy_P5.csv
+  5  phiên mới: Save timing (lần một nhắc collect, lần hai lưu): timing_P5.csv đúng 12 cột facetimer + cột thêm, có gói zip trong outputs/ket_qua
   6  tab Thống kê với gói giả của 4 người (outputs/goi_nhom): có ba mục, KTC, không số nào khi thiếu dữ liệu
   7  không request nào ra ngoài 127.0.0.1; `lsof` thấy cổng chỉ bind 127.0.0.1
   8  ảnh chụp dongho_*.png, thongke_*.png vào --shots (desktop 1440x900 và hẹp 420 px)
@@ -95,13 +95,13 @@ def main():
             t1, n1 = secs(mini(pg)), len(REQ)
             check(t1 - t0 >= 2, f'mm:ss đã tăng sau 3 giây ({t0} -> {t1})')
             check(n1 - n0 <= 1, f'không có request mỗi giây (chỉ {n1 - n0} request trong 3 giây)')
-            check(pg.locator('#dh-mini-btn').inner_text().strip() == 'Dừng', 'một nút, đang chạy thì chữ Dừng')
+            check(pg.locator('#dh-mini-btn').inner_text().strip() == 'Pause', 'một nút, đang chạy thì chữ Pause')
             pg.locator('#dh-mini-btn').click()
             pg.wait_for_selector('#dh-mini-time[data-chay="0"]')
             a1 = secs(mini(pg))
             pg.wait_for_timeout(2200)
             check(secs(mini(pg)) == a1, 'dừng 2 giây: số đứng yên')
-            check(pg.locator('#dh-mini-btn').inner_text().strip() == 'Tiếp tục', 'đang dừng thì chữ Tiếp tục')
+            check(pg.locator('#dh-mini-btn').inner_text().strip() == 'Resume', 'đang dừng thì chữ Resume')
             pg.locator('#dh-mini-btn').click()
             pg.wait_for_selector('#dh-mini-time[data-chay="1"]')
             pg.screenshot(path=os.path.join(shots, 'dongho_chay_1440.png'))
@@ -124,14 +124,14 @@ def main():
             pg.reload()
             pg.locator('#btn-dong').click()
             pg.wait_for_selector('#dh-luu-btn', state='visible')
-            check(pg.locator('#dh-bo-btn').is_visible(), 'hộp Đóng trang có nút Lưu số đo và Bỏ phiên đồng hồ')
+            check(pg.locator('#dh-bo-btn').is_visible(), 'hộp Đóng trang có nút Save timing và Discard session')
             pg.locator('#dh-bo-btn').click()
             pg.wait_for_timeout(800)
-            check(os.path.exists(os.path.join(W, 'outputs', 'timing', 'dang_chay_P5.json')), 'bấm Bỏ phiên lần một: chưa bỏ')
+            check(os.path.exists(os.path.join(W, 'outputs', 'timing', 'dang_chay_P5.json')), 'bấm Discard session lần một: chưa bỏ')
             pg.locator('#dh-bo-btn').click()
             pg.wait_for_timeout(900)
             check(not os.path.exists(os.path.join(W, 'outputs', 'timing', 'timing_P5.csv')) and os.path.exists(os.path.join(W, 'outputs', 'timing', 'huy_P5.csv')),
-                  'Bỏ phiên: không có dòng CSV, có dòng nhật ký huy_P5.csv')
+                  'Discard session: không có dòng CSV, có dòng nhật ký huy_P5.csv')
             pg.locator('#close-confirm-cancel').click()
             # 5
             DongHo(W).bat_dau('P5', 'assisted', dot='NAP_001', bo_anh='NAP_001', n_mat=4)
@@ -142,7 +142,7 @@ def main():
             pg.wait_for_selector('#dh-luu-btn', state='visible')
             pg.locator('#dh-luu-btn').click()                        # chưa có nhãn xuất trong raw/: lần một nhắc collect
             pg.wait_for_timeout(900)
-            check('collect' in pg.locator('#close-body').inner_text(), 'Lưu số đo lần một nhắc chạy collect trước')
+            check('collect' in pg.locator('#close-body').inner_text(), 'Save timing lần một nhắc chạy collect trước')
             pg.locator('#dh-luu-btn').click()
             pg.wait_for_timeout(1500)
             rows = list(csv.DictReader(open(os.path.join(W, 'outputs', 'timing', 'timing_P5.csv'), encoding='utf-8')))
@@ -153,7 +153,7 @@ def main():
             pg.locator('#close-confirm-cancel').click()
             # 6
             open_tab(pg, 'Thống kê')
-            pg.get_by_role('button', name='Làm mới').first.click()
+            pg.get_by_role('button', name='Refresh').first.click()
             pg.wait_for_timeout(2500)
             txt = pg.locator('#tk-view').inner_text()
             check('1. NME của nháp' in txt and '2. Tỉ lệ điểm phải sửa' in txt and '3. So sánh thời gian' in txt and 'KTC 90%' in txt, 'tab Thống kê có ba mục và KTC')
@@ -166,7 +166,7 @@ def main():
             check(nar.evaluate('document.documentElement.scrollWidth') <= 421, '420 px không tràn ngang (chip đồng hồ)')
             nar.screenshot(path=os.path.join(shots, 'dongho_420.png'), full_page=True)
             open_tab(nar, 'Thống kê')
-            nar.get_by_role('button', name='Làm mới').first.click()
+            nar.get_by_role('button', name='Refresh').first.click()
             nar.wait_for_timeout(2500)
             check(nar.evaluate('document.documentElement.scrollWidth') <= 421, '420 px không tràn ngang (Thống kê)')
             nar.screenshot(path=os.path.join(shots, 'thongke_420.png'), full_page=True)

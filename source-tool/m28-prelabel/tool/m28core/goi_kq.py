@@ -1,4 +1,4 @@
-"""Gói kết quả của MỘT phiên bấm giờ (đồng hồ ở đầu trang rà soát, nút "Lưu số đo" trong hộp Đóng trang) để gửi nhóm trưởng tổng kết (QĐ-006).
+"""Gói kết quả của MỘT phiên bấm giờ (đồng hồ ở đầu trang rà soát, nút "Save timing" trong hộp Đóng trang) để gửi nhóm trưởng tổng kết (QĐ-006).
 
 Ghi `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (+ bản `.json` đọc được) NGOÀI git (outputs/ bị .gitignore chặn). Nội dung:
   người, nhóm (manual/assisted), đợt và bộ ảnh, số mặt, giây phiên (không tính lúc tạm dừng), số lần tạm dừng, giờ bắt đầu/kết thúc, giây từng mặt nếu có bấm

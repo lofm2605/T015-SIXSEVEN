@@ -1,4 +1,4 @@
-"""Kiểm thử đầu-cuối tab "Các đợt", xoá mềm, nút "Đẩy lên CVAT" và "Xoá task trên CVAT" bằng Chromium thật (Playwright) + CVAT GIẢ. TUỲ CHỌN.
+"""Kiểm thử đầu-cuối tab "Các đợt", xoá mềm, nút "Push to CVAT" và "Delete CVAT task" bằng Chromium thật (Playwright) + CVAT GIẢ. TUỲ CHỌN.
 
 Cần playwright và Chromium (KHÔNG chạy `playwright install`), MediaPipe thật, ảnh in-cabin thật, pytest không gom file này (tên không khớp test_*.py).
 Thư mục chạy (--work) có config/ (m28_config.json, map_mp50.json, face50_label.json, pipeline.json), face_landmarker.task và r_list.csv. Ví dụ:
@@ -10,9 +10,9 @@ CVAT GIẢ: trang và tiến trình con chạy với PYTHONPATH=tests/fake_cvat 
 CVAT_URL=http://localhost:8080, CVAT_ACCESS_TOKEN = chuỗi giả dễ nhận. KHÔNG có CVAT thật: kết quả chỉ chứng minh logic trang và tiến trình,
 không chứng minh server CVAT thật nhận định dạng nhãn/XML.
 
-Kịch bản (một mạch): nạp 3 đợt Khoi, Nam, Cuong (prepare thật) -> thẻ đợt -> xoá mềm/khôi phục ảnh của Nam (Huỷ, Esc, Xoá, Khôi phục)
--> rà đợt Khoi (có Gán tay và Bỏ) -> nút Đẩy lên CVAT (khoá khi còn mặt chưa rà; hộp xác nhận; Huỷ/Esc; đẩy; thẻ kết quả; không đẩy lần hai)
--> thẻ Khoi ghi Đã đẩy CVAT, cảnh báo CVAT khi xoá ảnh -> xoá TASK trên CVAT (hộp xác nhận gõ lại tên + tick, Huỷ/Esc không xoá, xoá thật
+Kịch bản (một mạch): nạp 3 đợt Khoi, Nam, Cuong (prepare thật) -> thẻ đợt -> xoá mềm/khôi phục ảnh của Nam (Cancel, Esc, Delete, Restore)
+-> rà đợt Khoi (có Gán tay và Bỏ) -> nút Push to CVAT (khoá khi còn mặt chưa rà; hộp xác nhận; Cancel/Esc; đẩy; thẻ kết quả; không đẩy lần hai)
+-> thẻ Khoi ghi Đã đẩy CVAT, cảnh báo CVAT khi xoá ảnh -> xoá TASK trên CVAT (hộp xác nhận gõ lại tên + tick, Cancel/Esc không xoá, xoá thật
 đúng một lần, đợt đẩy lại được) -> xoá cả đợt Cuong, khôi phục -> trang không có biến CVAT -> phím tắt không chạy ở tab Các đợt, bí mật không lộ.
 Cổng 7881-7889, M28_NO_BROWSER=1 (CVAT_URL / CVAT_ACCESS_TOKEN lấy từ biến môi trường như trước; tab Cài đặt chỉ được kiểm là có đúng một ô password), mọi tiến trình được dọn ở finally. Ảnh chụp: <shots>/push_*.png (có mặt người thật: để ngoài git).
 """
@@ -199,7 +199,7 @@ def run(pw, W, imgs_dir, shots, port):
             check(f'{len(files)} ảnh' in txt and 'người nạp E2E' in txt, f'thẻ {name} ghi {len(files)} ảnh và người nạp: {txt[:80]!r}')
         kt = card(pg, 'Khoi').inner_text()
         check('Ảnh buổi sáng <b>camera 1</b>' in kt and card(pg, 'Khoi').locator('.dot-note b').count() == 0, 'ghi chú hiện đúng chữ, HTML bị escape')
-        check('Chưa rà' in kt and 'Rà đợt này' in kt, f'Khoi chưa rà: {kt!r}')
+        check('Chưa rà' in kt and 'Review batch' in kt, f'Khoi chưa rà: {kt!r}')
         check(overflow(pg) <= 0, f'1440 px: không cuộn ngang ({overflow(pg)})')
         shot('push_dots_desktop.png')
         pg.set_viewport_size({'width': 420, 'height': 900})
@@ -223,19 +223,19 @@ def run(pw, W, imgs_dir, shots, port):
         pg.wait_for_timeout(400)
         op2 = pg.evaluate("el => getComputedStyle(el).opacity", t0.locator('.dot-trash').element_handle())
         check(float(op) < 0.5 and float(op2) > 0.9, f'nút thùng rác chỉ hiện khi rê chuột (opacity {op} -> {op2})')
-        check(t0.locator('.dot-trash').get_attribute('aria-label') == f'Xoá ảnh {name0}', 'nút thùng rác có aria-label')
+        check(t0.locator('.dot-trash').get_attribute('aria-label') == f'Delete image {name0}', 'nút thùng rác có aria-label')
         shot('push_trash_hover.png')
-        # Huỷ
+        # Cancel
         t0.locator('.dot-trash').click()
         modal_open(pg, '#dot-modal')
         check(pg.get_attribute('#dot-modal', 'role') == 'dialog' and pg.get_attribute('#dot-modal', 'aria-modal') == 'true', 'modal role=dialog aria-modal=true')
-        check(focus_id(pg) == 'dot-modal-cancel', f'nút Huỷ có focus khi hộp mở (focus: {focus_id(pg)!r})')
+        check(focus_id(pg) == 'dot-modal-cancel', f'nút Cancel có focus khi hộp mở (focus: {focus_id(pg)!r})')
         mt = pg.inner_text('#dot-modal')
         check(name0 in mt and 'Tên gốc' in mt and 'Nam' in mt and 'Quyết định hiện tại' in mt and 'khôi phục được' in mt, f'modal nêu ảnh, đợt, quyết định, hậu quả: {mt[:120]!r}')
         shot('push_delete_modal.png')
         pg.click('#dot-modal-cancel')
         modal_gone(pg, '#dot-modal')
-        check(thumbs(pg) == n0 and inbox_file(nam, name0) is not None and not os.path.exists(os.path.join(nam, 'excluded.txt')), 'Huỷ: ảnh còn nguyên')
+        check(thumbs(pg) == n0 and inbox_file(nam, name0) is not None and not os.path.exists(os.path.join(nam, 'excluded.txt')), 'Cancel: ảnh còn nguyên')
         # Esc
         t0.hover()
         t0.locator('.dot-trash').click()
@@ -243,13 +243,13 @@ def run(pw, W, imgs_dir, shots, port):
         pg.keyboard.press('Escape')
         modal_gone(pg, '#dot-modal')
         check(thumbs(pg) == n0 and not os.path.exists(os.path.join(nam, 'excluded.txt')), 'Esc: ảnh còn nguyên, chưa có excluded.txt')
-        # Enter khi focus ở Huỷ không xoá
+        # Enter khi focus ở Cancel không xoá
         t0.hover()
         t0.locator('.dot-trash').click()
         modal_open(pg, '#dot-modal')
         pg.keyboard.press('Enter')
         modal_gone(pg, '#dot-modal')
-        check(thumbs(pg) == n0 and not os.path.exists(os.path.join(nam, 'excluded.txt')), 'Enter khi focus ở Huỷ: không xoá')
+        check(thumbs(pg) == n0 and not os.path.exists(os.path.join(nam, 'excluded.txt')), 'Enter khi focus ở Cancel: không xoá')
         before = {f: base._sha(os.path.join(nam, *f.split('/'))) for f in (os.path.relpath(inbox_file(nam, name0), nam).replace(os.sep, '/'),
                                                                           'crop/images/%s.png' % name0, 'overlays/%s.png' % name0)
                   if os.path.exists(os.path.join(nam, *f.split('/')))}
@@ -272,9 +272,9 @@ def run(pw, W, imgs_dir, shots, port):
         open_grid(pg, 'Nam')
         pg.click('button[data-act=restore]')
         pg.wait_for_function("n => document.querySelectorAll('.dot-thumb').length === n", arg=n0, timeout=15000)
-        check(name0 not in excluded_names(nam), 'Khôi phục: tên gỡ khỏi excluded.txt')
+        check(name0 not in excluded_names(nam), 'Restore: tên gỡ khỏi excluded.txt')
         after = {f: base._sha(os.path.join(nam, *f.split('/'))) for f in before}
-        check(after == before, 'Khôi phục: file trở lại đúng chỗ, đúng nội dung (sha256 khớp)')
+        check(after == before, 'Restore: file trở lại đúng chỗ, đúng nội dung (sha256 khớp)')
         check(not os.listdir(os.path.join(nam, '_trash')), 'thùng rác của Nam trống sau khi khôi phục')
         # dọn thùng rác qua modal
         t0.hover()
@@ -315,7 +315,7 @@ def run(pw, W, imgs_dir, shots, port):
         pg.wait_for_selector('#btn-push', timeout=30000)
         n_faces = ui.progress()[1]
         check(n_faces == 4, f'Khoi có {n_faces} mặt trong hàng đợi')
-        check(pg.locator('#btn-push').is_disabled(), 'còn mặt chưa rà: nút Đẩy lên CVAT khoá')
+        check(pg.locator('#btn-push').is_disabled(), 'còn mặt chưa rà: nút Push to CVAT khoá')
         pg.wait_for_function("(document.querySelector('#push-panel')?.innerText || '').includes('chưa rà')", timeout=15000)
         check(f'Còn {n_faces} mặt chưa rà' in pg.inner_text('#push-panel'), f'lý do khoá: {pg.inner_text("#push-panel")!r}')
         draft_keys = iter(['g', 'b', 'n', 'n'])                  # mặt có nháp: Gán tay (có nháp), Bỏ, Nhận; mặt không có nháp: Gán tay (ảnh trống)
@@ -340,11 +340,11 @@ def run(pw, W, imgs_dir, shots, port):
         n_nhan, n_tay, n_bo = decs.count('nhan'), decs.count('gan_tay'), decs.count('bo')
         check(shot_nd and n_tay == 2 and n_nhan == 1 and n_bo == 1, f'Khoi: 1 Nhận, 2 Gán tay (1 có nháp, 1 ảnh trống), 1 Bỏ: {decs}')
         shot('gantay_guide.png')
-        # bấm Xong TRƯỚC khi đẩy: trang tải lại một lần, vẫn còn server, Đẩy lên CVAT và tab Các đợt dùng được sau Xong
+        # bấm Xong TRƯỚC khi đẩy: trang tải lại một lần, vẫn còn server, Push to CVAT và tab Các đợt dùng được sau Xong
         base.click_xong(ui)
         check(os.path.exists(os.path.join(runs, 'Khoi', 'review', 'done.txt')), 'Khoi: bấm Xong ghi review/done.txt')
         pg.wait_for_function("() => { const b = document.querySelector('#btn-push'); return !!b && !b.disabled; }", timeout=20000)
-        check(pg.locator('#btn-push').is_enabled(), 'sau Xong: nút Đẩy lên CVAT vẫn bật')
+        check(pg.locator('#btn-push').is_enabled(), 'sau Xong: nút Push to CVAT vẫn bật')
         pg.get_by_role('tab', name='Các đợt').click()
         pg.wait_for_selector('#dot-root .dot-card', timeout=15000)
         check(card(pg, 'Khoi').count() == 1 and pg.locator('#progress .m28-done-bar').is_visible(), 'sau Xong: tab Các đợt mở được, dải xanh còn ở đầu trang')
@@ -356,7 +356,7 @@ def run(pw, W, imgs_dir, shots, port):
         pg.click('#btn-push')
         modal_open(pg, '#push-confirm')
         check(pg.get_attribute('#push-confirm', 'role') == 'dialog' and pg.get_attribute('#push-confirm', 'aria-modal') == 'true', 'hộp xác nhận role=dialog')
-        check(focus_id(pg) == 'push-confirm-cancel', f'nút Huỷ là mặc định có focus ({focus_id(pg)!r})')
+        check(focus_id(pg) == 'push-confirm-cancel', f'nút Cancel là mặc định có focus ({focus_id(pg)!r})')
         ct = pg.inner_text('#push-confirm')
         for want in ('demo-Khoi', URL, 'Không đụng task m28-', 'MỚI'):
             check(want in ct, f'hộp xác nhận có {want!r}')
@@ -381,7 +381,7 @@ def run(pw, W, imgs_dir, shots, port):
         modal_open(pg, '#push-confirm')
         pg.click('#push-confirm-cancel')
         modal_gone(pg, '#push-confirm')
-        check(not fake_state(state)['tasks'], 'Huỷ: chưa đẩy gì')
+        check(not fake_state(state)['tasks'], 'Cancel: chưa đẩy gì')
         pg.click('#btn-push')
         modal_open(pg, '#push-confirm')
         pg.click('#push-confirm-ok')
@@ -441,9 +441,9 @@ def run(pw, W, imgs_dir, shots, port):
         kt = card(pg, 'Khoi').inner_text()
         check('Đã đẩy CVAT: demo-Khoi' in kt and 'đang mở' in kt, f'thẻ Khoi: {kt[:120]!r}')
         check(card(pg, 'Khoi').locator('button[data-act=push]').count() == 0, 'đợt đã đẩy: không còn nút Đẩy trên thẻ')
-        check(card(pg, 'Khoi').locator('button[data-act=ra]').is_disabled(), 'đợt đang mở: nút Rà đợt này khoá')
+        check(card(pg, 'Khoi').locator('button[data-act=ra]').is_disabled(), 'đợt đang mở: nút Review batch khoá')
         open_grid(pg, 'Khoi')
-        check('Đã đẩy lên CVAT' in pg.inner_text('.dot-cvat') and 'Xoá task trên CVAT' in pg.inner_text('.dot-cvat'), 'khu CVAT của đợt có link và nút Xoá task')
+        check('Đã đẩy lên CVAT' in pg.inner_text('.dot-cvat') and 'Delete CVAT task' in pg.inner_text('.dot-cvat'), 'khu CVAT của đợt có link và nút Delete CVAT task')
         check(pg.locator('button[data-act=delrun]').is_disabled(), 'đợt đang rà: không xoá cả đợt')
         t0 = pg.locator('.dot-thumb').first
         keep_name = t0.locator('img').get_attribute('alt')
@@ -477,7 +477,7 @@ def run(pw, W, imgs_dir, shots, port):
         mt = pg.inner_text('#dot-modal')
         for want in ('KHÔNG HOÀN TÁC', 'nhãn đã sửa', 'collect', 'demo-Khoi', f'id {task_id}'):
             check(want in mt, f'modal xoá task có {want!r}')
-        check(focus_id(pg) == 'dot-modal-cancel', 'nút Huỷ là mặc định có focus')
+        check(focus_id(pg) == 'dot-modal-cancel', 'nút Cancel là mặc định có focus')
         check(pg.locator('#dot-modal-ok').is_disabled(), 'chưa gõ tên, chưa tick: nút xoá khoá')
         pg.fill('#dot-modal-typed textarea, #dot-modal-typed input', 'demo-khoi')
         pg.wait_for_timeout(400)
@@ -498,7 +498,7 @@ def run(pw, W, imgs_dir, shots, port):
         modal_open(pg, '#dot-modal')
         pg.click('#dot-modal-cancel')
         modal_gone(pg, '#dot-modal')
-        check(n_calls(state, 'Task.remove') == 0, 'Huỷ: chưa gọi xoá')
+        check(n_calls(state, 'Task.remove') == 0, 'Cancel: chưa gọi xoá')
         pg.click('button[data-act=deltask]')
         modal_open(pg, '#dot-modal')
         pg.fill('#dot-modal-typed textarea, #dot-modal-typed input', 'demo-Khoi')
@@ -529,7 +529,7 @@ def run(pw, W, imgs_dir, shots, port):
         check('task trên CVAT đã xoá, đẩy lại được' in card(pg, 'Khoi').inner_text(), 'thẻ Khoi ghi task đã xoá, đẩy lại được')
         pg.get_by_role('tab', name='Rà soát').click()
         pg.wait_for_function("() => { const b = document.querySelector('#btn-push'); return !!b && !b.disabled; }", timeout=30000)
-        check(pg.locator('#btn-push').is_visible(), 'sau khi xoá task: nút Đẩy lên CVAT lại bật')
+        check(pg.locator('#btn-push').is_visible(), 'sau khi xoá task: nút Push to CVAT lại bật')
         # đẩy lại một lần để chứng minh đợt đẩy lại được
         pg.click('#btn-push')
         modal_open(pg, '#push-confirm')

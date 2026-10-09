@@ -92,10 +92,10 @@ Nếu `runs\F5` còn từ lần chạy trước 7/10/2026 (50 điểm cũ, tên 
 ```bat
 python tool\m28.py review --run F5 --reviewer P1 --force review
 ```
-Trình duyệt tự mở http://127.0.0.1:7860 (chỉ máy bạn truy cập được). Chọn lý do **trước**, rồi bấm **Nhận (N) / Gán tay (G) / Bỏ ảnh (B)**; Hoàn tác (Z), ← → để chuyển mặt.
+Trình duyệt tự mở http://127.0.0.1:7860 (chỉ máy bạn truy cập được). Chọn lý do **trước**, rồi bấm **Nhận (N) / Gán tay (G) / Bỏ ảnh (B)**; Undo (Z), ← → (Prev / Next) để chuyển mặt.
 **Gán tay** đưa mặt lên CVAT ở job riêng **kèm nháp, mọi điểm đánh dấu low_conf**: kiểm kỹ từng điểm, giữ điểm đúng, sửa điểm sai (mặt không có nháp thì lên **ảnh trống**). Phân vân Nhận/Gán tay thì chọn Nhận.
 **"Gán tay" trên trang rà soát khác điều kiện "gán tay" của thí nghiệm.** Nút Gán tay chỉ ảnh hưởng task `demo-…` do `m28.py push` tạo: mặt lên job riêng kèm nháp, mọi điểm low_conf. Thí nghiệm bấm giờ 14–15/10 dùng task `m28-manual` (không nháp) và `m28-assisted` khôi phục từ `backups\`, không đi qua nút này nên không đổi. Không dùng số đo trên task `demo-…` làm mốc "gán tay" của thí nghiệm.
-Rà hết thì bấm **Xong** (trang tải lại, hiện dải xanh; sau đó vẫn Đẩy lên CVAT, xem Các đợt, xuất Ca khó được), xong việc bấm **Đóng trang rà soát** ở đầu trang rồi xác nhận để lệnh trong cmd đi tiếp. Kết quả nằm ở `runs\F5\review\triage_P1.csv`. Chỉ mở **một tab**. Không chia sẻ cổng này cho ai.
+Rà hết thì bấm **Xong** (trang tải lại, hiện dải xanh; sau đó vẫn Push to CVAT, xem Các đợt, xuất Ca khó được), xong việc bấm **Close page** ở đầu trang rồi xác nhận để lệnh trong cmd đi tiếp. Kết quả nằm ở `runs\F5\review\triage_P1.csv`. Chỉ mở **một tab**. Không chia sẻ cổng này cho ai.
 Không có Gradio hoặc trang lỗi: dùng `--review excel` (mở `runs\F5\autoqc\autoqc.csv` bằng Excel, điền cột `decision` = nhan / gan_tay / bo, lưu CSV UTF-8 thành `runs\F5\review\triage_P1.csv`).
 
 ### Có ảnh mới, chưa có lượt nào: kéo thả ảnh (tab Nạp ảnh)
@@ -104,20 +104,20 @@ Cần `face_landmarker.task` (mục 3, cùng thư mục chạy lệnh) và `conf
 python tool\review_app.py --nap P1
 ```
 Trình duyệt mở http://127.0.0.1:7860. Ở tab **Nạp ảnh**: kéo thả ảnh .jpg/.jpeg/.png (tối đa 25 MB mỗi ảnh, 200 ảnh mỗi lần) vào ô lớn, kiểm danh sách ảnh bị loại,
-bấm **Upload & Open** (chờ thanh tiến độ xong, trang tự chuyển sang rà) hoặc **Upload & Continue** (ở lại tab này; mở đợt đó sau ở tab **Các đợt** → **Rà đợt này**). Có nút Cancel, Retry, không gõ lệnh nào.
+bấm **Upload & Open** (chờ thanh tiến độ xong, trang tự chuyển sang rà) hoặc **Upload & Continue** (ở lại tab này; mở đợt đó sau ở tab **Các đợt** → **Review batch**). Có nút Cancel, Retry, không gõ lệnh nào.
 Ảnh nằm ở `runs\NAP_001\inbox` (tên đã làm sạch; tên gốc ở `runs\NAP_001\nap_ten_goc.csv`, log ở `runs\NAP_001\nap_log.txt`). Đang rà dở lượt khác thì vẫn nạp được:
 lượt cũ không bị đụng, mở lại bằng lệnh cmd in ra (ví dụ `python tool\review_app.py runs\F5 P1`). Ảnh mặt người thật chỉ xử lý trên máy bạn, không đưa vào chat AI.
 
 ### Ca khó: đánh dấu, xuất gói, họp team
-**Thành viên:** khi rà gặp mặt khó (đổi chỗ điểm, lật, dồn cục, ca chưa có quy tắc, pain point công cụ) bấm **K** (hoặc nút **Ca khó**), chọn loại, ghi chú, **Lưu**; không ảnh hưởng Nhận/Gán tay/Bỏ.
-Cuối ngày mở tab **Ca khó**, kiểm lại, bấm **Xuất gói họp**; file nằm ở `outputs\ca_kho\ca_kho_P1_1610.zip` (cũng tải về được từ trang). Gửi file này cho người tổ chức qua Drive riêng tư của đội
+**Thành viên:** khi rà gặp mặt khó (đổi chỗ điểm, lật, dồn cục, ca chưa có quy tắc, pain point công cụ) bấm **K** (hoặc nút **Ca khó**), chọn loại, ghi chú, **Save**; không ảnh hưởng Nhận/Gán tay/Bỏ.
+Cuối ngày mở tab **Ca khó**, kiểm lại, bấm **Export meeting pack**; file nằm ở `outputs\ca_kho\ca_kho_P1_1610.zip` (cũng tải về được từ trang). Gửi file này cho người tổ chức qua Drive riêng tư của đội
 hoặc gửi trực tiếp. Không đăng công khai, không đưa vào chat AI, không commit. Lượt không rõ nguồn (có thể là ảnh khách hàng) mặc định không kèm ảnh: đừng bật ô kèm ảnh nếu chưa chắc.
 
 **Người tổ chức (P5):**
 ```bat
 python tool\review_app.py --nap P5
 ```
-Mở tab **Họp team** (không cần lượt), bấm **Tạo phiên mới hôm nay**, kéo thả các gói zip, bấm **Nhập các gói**, họp (bấm thẻ để xem, **Trình chiếu** để chiếu), rồi **Xuất biên bản**.
+Mở tab **Họp team** (không cần lượt), bấm **New session today**, kéo thả các gói zip, bấm **Import packs**, họp (bấm thẻ để xem, **Present** để chiếu), rồi **Export minutes**.
 Biên bản ở `outputs\ca_kho\hop_1610\bien_ban_1610.md`: **tự** chép các khối vào `problem-backlog.md` và `so-quyet-dinh.md` rồi commit hai file đó (trang không ghi vào hai file này).
 Sau họp xoá các gói zip đã nhận nếu không cần nữa.
 
@@ -127,9 +127,9 @@ Sau họp xoá các gói zip đã nhận nếu không cần nữa.
 **Quy trình một buổi (mỗi người):**
 1. Đầu buổi **khôi phục task của hôm nay** (file sao lưu P4 phát) rồi mở trang: `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`).
 2. **Nạp ảnh** ở tab Nạp ảnh (**Upload & Continue** hoặc **Upload & Open**): đồng hồ ⏱ ở đầu trang **tự chạy** cho người rà của trang (phải là P1–P5; đặt ở tab Cài đặt). Nhóm lấy từ file nhóm, người chưa có trong file thì mặc định `assisted` và dòng bấm giờ ghi cờ `chua_co_nhom`. Đã có phiên thì giữ nguyên, không đè.
-3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm nút **Dừng** cạnh đồng hồ, quay lại bấm **Tiếp tục** (cùng một nút, đổi chữ). Không còn tab Đồng hồ.
-4. Xong việc: `python tool\m28.py collect --task demo-<đợt> --reviewer P<số của bạn>` **trước**, rồi bấm **Đóng trang rà soát** → **Lưu số đo**. Trang ghi `outputs\timing\timing_P<số>.csv` và gói **`outputs\ket_qua\ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Chưa thấy nhãn đã xuất trong `raw\` thì trang nhắc chạy `collect` trước; bấm Lưu số đo thêm lần nữa mới lưu gói chỉ có thời gian. Sau khi lưu, bấm **Huỷ** để ở lại trang hoặc **Đóng trang rà soát** để tắt.
-5. Quên bấm, nghỉ lâu, qua nửa đêm, tắt trang đột ngột: phiên vẫn lưu được, kèm cờ `canh_bao` trong dòng bấm giờ để thống kê đánh dấu (không còn nút Sửa thời gian trên giao diện); khi có cảnh báo chưa xử lý, Lưu số đo hỏi bằng cách bấm thêm một lần. Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, bấm **Tiếp tục**. Muốn bỏ phiên (không lưu gì): hộp Đóng trang → **Bỏ phiên đồng hồ**, bấm hai lần.
+3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm nút **Pause** cạnh đồng hồ, quay lại bấm **Resume** (cùng một nút, đổi chữ). Không còn tab Đồng hồ.
+4. Xong việc: `python tool\m28.py collect --task demo-<đợt> --reviewer P<số của bạn>` **trước**, rồi bấm **Close page** → **Save timing**. Trang ghi `outputs\timing\timing_P<số>.csv` và gói **`outputs\ket_qua\ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Chưa thấy nhãn đã xuất trong `raw\` thì trang nhắc chạy `collect` trước; bấm Save timing thêm lần nữa mới lưu gói chỉ có thời gian. Sau khi lưu, bấm **Cancel** để ở lại trang hoặc **Close page** để tắt.
+5. Quên bấm, nghỉ lâu, qua nửa đêm, tắt trang đột ngột: phiên vẫn lưu được, kèm cờ `canh_bao` trong dòng bấm giờ để thống kê đánh dấu (không còn nút Sửa thời gian trên giao diện); khi có cảnh báo chưa xử lý, Save timing hỏi bằng cách bấm thêm một lần. Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, bấm **Resume**. Muốn bỏ phiên (không lưu gì): hộp Đóng trang → **Discard session**, bấm hai lần.
 
 **Nhóm trưởng tổng kết** (chỉ cần các gói zip, không cần ảnh hay CVAT):
 ```bat
@@ -142,7 +142,7 @@ Công cụ kiểm từng gói (loại gói hỏng hoặc trùng và nói lý do)
 ### Thống kê và lọc dữ liệu train
 Hai việc này **chỉ đọc** `runs\`, `raw\`, `final\`, `data\` và chỉ ghi dưới `outputs\`. Cần nhãn sửa tay trong `raw\` (P4 `collect`) và, cho mục thời gian, các gói kết quả hoặc `timing_P*.csv` do tab Đồng hồ ghi (xem mục "Bấm giờ và thống kê" ở trên).
 
-**Xem số liệu (tab Thống kê):** `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`), chọn tab **Thống kê** (chỉ còn ba chỉ số); bấm **Làm mới**; **Xuất CSV + HTML** ghi `outputs\thong_ke\<ngày-giờ>\`. Ttest ẩn mặc định (tập đo một lần). Nhãn trong `raw\` của task thí nghiệm chỉ có nháp khi chọn ô **Lượt chứa nháp** (task `demo-…` có `push.json` thì tự tìm lượt).
+**Xem số liệu (tab Thống kê):** `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`), chọn tab **Thống kê** (chỉ còn ba chỉ số); bấm **Refresh**; **Export CSV + HTML** ghi `outputs\thong_ke\<ngày-giờ>\`. Ttest ẩn mặc định (tập đo một lần). Nhãn trong `raw\` của task thí nghiệm chỉ có nháp khi chọn ô **Lượt chứa nháp** (task `demo-…` có `push.json` thì tự tìm lượt).
 ```bat
 python tool\thong_ke.py --luot-nhap <lượt chứa nháp> [--nguong-sua 2] [--goi <thư mục gói>] [--timing .]
 ```
@@ -168,8 +168,8 @@ python -m pip install cvat-sdk==2.77.0
 python tool\make_label.py
 ```
 **Project CVAT dựng bằng label cũ không dùng được** (label `face50` kiểu một skeleton: bản 50 điểm `pNN_vùng_bên` trước QĐ-003, hoặc bản đầu của DMS trước QĐ-004): `push` dừng và báo "label face50 CŨ", chưa tạo task nào. P4 dựng lại project (xoá project `m28` cũ rỗng trong CVAT rồi `push` tạo lại, hoặc project mới tên khác, đặt trong `config\pipeline.json`) bằng `config\face50_label.json` mới (bảy label skeleton, mỗi nhóm một: `longmaytrai`, `longmayphai`, `songmui`, `mattrai`, `matphai`, `moingoai`, `moitrong`; tổng 50 sublabel tên mới, 47 cạnh, màu theo nhóm). Khi gán tay trong CVAT, mỗi mặt vẽ bảy skeleton (mỗi nhóm một) thay vì một.
-**Cách chính (từ trang rà soát):** mở trang → tab **Cài đặt** → dán link `http://localhost:8080` và token CVAT vào ô → **Lưu** → **Thử kết nối CVAT** (phải thấy "Kết nối được", bản 2.77.0, tên tài khoản).
-Mặc định token chỉ nằm trong bộ nhớ của trang này. Bật **Nhớ trên máy này** thì token lưu ở `%APPDATA%\m28\cvat.json` (ngoài repo; Windows không có quyền 0600 thật, file dựa vào quyền hồ sơ của bạn). Ngày 24/10 bấm **Quên token** và thu hồi token trong CVAT.
+**Cách chính (từ trang rà soát):** mở trang → tab **Cài đặt** → dán link `http://localhost:8080` và token CVAT vào ô → **Save** → **Test CVAT connection** (phải thấy "Kết nối được", bản 2.77.0, tên tài khoản).
+Mặc định token chỉ nằm trong bộ nhớ của trang này. Bật **Nhớ trên máy này** thì token lưu ở `%APPDATA%\m28\cvat.json` (ngoài repo; Windows không có quyền 0600 thật, file dựa vào quyền hồ sơ của bạn). Ngày 24/10 bấm **Forget token** và thu hồi token trong CVAT.
 Không dán token vào chat hay file trong repo.
 
 **Phương án thay thế (bắt buộc cho `m28.py push/collect` chạy ở cmd; lệnh cmd KHÔNG đọc `cvat.json`):** đặt token trong biến môi trường, **trong cùng cửa sổ cmd sẽ chạy lệnh hoặc mở trang**; `set` chỉ có tác dụng trong cửa sổ đó;
@@ -180,7 +180,7 @@ set CVAT_ACCESS_TOKEN=<dán token của bạn>
 python tool\m28.py push --run F5 --reviewer P2 --task demo-F5
 python tool\m28.py collect --task demo-F5 --reviewer P2
 ```
-- **Từ trang rà soát:** mở trang (`python tool\review_app.py runs\F5 P2`), nhập link/token ở tab Cài đặt (hoặc mở từ cửa sổ cmd đã `set`). Rà hết mặt thì nút **Đẩy lên CVAT** (dưới nút Xong) bật; bấm → hộp xác nhận (nút Huỷ là mặc định, Esc = Huỷ) → Đẩy.
+- **Từ trang rà soát:** mở trang (`python tool\review_app.py runs\F5 P2`), nhập link/token ở tab Cài đặt (hoặc mở từ cửa sổ cmd đã `set`). Rà hết mặt thì nút **Push to CVAT** (dưới nút Xong) bật; bấm → hộp xác nhận (nút Cancel là mặc định, Esc = Cancel) → Push to CVAT.
   Thiếu link/token (tab Cài đặt hoặc biến môi trường) thì nút khoá và trang nhắc mở tab Cài đặt (hoặc lệnh `set`). Ô nhập token chỉ nằm ở tab Cài đặt.
 - **Lần push dở** (mất mạng, nhập nhãn lỗi): `python tool\m28.py push --run F5 --resume` làm nốt trên đúng task đã tạo, hoặc `python tool\m28.py push --run F5 --cleanup --confirm-name demo-F5` để xoá task dở rồi đẩy lại.
   Sau khi `push` xong, gõ lại `push`/`all` ở cmd chỉ in "bỏ qua push" (đã ghi `runs\F5\push\done.txt`).
@@ -191,15 +191,15 @@ python tool\m28.py collect --task demo-F5 --reviewer P2
 - **Tab Các đợt**: xem các lượt đã nạp (thẻ: ngày, ghi chú, số ảnh, Nhận/Gán tay/Bỏ/Chưa rà, trạng thái), xem lưới ảnh, xoá ảnh (rê chuột lên ảnh, bấm thùng rác), khôi phục, xoá cả đợt.
 - **CẢNH BÁO khi xoá:**
   - Xoá ảnh hoặc đợt ở trang là **xoá mềm, chỉ trên máy bạn** (thùng rác `runs\<lượt>\_trash`, `runs\_trash`; khôi phục được). Nó **không xoá gì trên CVAT**: ảnh đã đẩy vẫn nằm trong task `demo-…`.
-  - **Dọn thùng rác** và **Xoá vĩnh viễn** là xoá thật, không khôi phục được.
-  - **Xoá task trên CVAT** (nút ở khu CVAT của đợt đã đẩy) **không hoàn tác được và mất cả nhãn đã sửa trong CVAT**: chạy `collect` trước. Hộp xác nhận bắt gõ lại đúng tên task và tick ô "Tôi hiểu…". Chỉ xoá được task do chính tool tạo (`demo-…` ghi trong `push.json`); không bao giờ task `m28-`.
+  - **Empty trash** và **Delete permanently** là xoá thật, không khôi phục được.
+  - **Delete CVAT task** (nút ở khu CVAT của đợt đã đẩy) **không hoàn tác được và mất cả nhãn đã sửa trong CVAT**: chạy `collect` trước. Hộp xác nhận bắt gõ lại đúng tên task và tick ô "Tôi hiểu…". Chỉ xoá được task do chính tool tạo (`demo-…` ghi trong `push.json`); không bao giờ task `m28-`.
 Chỉ tạo task bắt đầu bằng `demo-`; không bao giờ chạy trên task `m28-`.
 
 ### Kiểm tra nhanh trước lần push đầu tiên
 Làm một lần trên máy có CVAT, trước khi đẩy ảnh thật (mất khoảng 1-2 phút):
 1. Bật CVAT (Ubuntu WSL: `docker compose up -d`, chờ 1-2 phút).
-2. Đưa token cho tool: **Lưu** token ở tab Cài đặt và bật **Nhớ trên máy này** (để lệnh cmd cũng thấy), hoặc `set CVAT_URL=http://localhost:8080` và `set CVAT_ACCESS_TOKEN=<token>` trong cùng cửa sổ cmd. Không dán token vào chat hay file.
-3. Chạy `python tool\cvat_smoke.py` (hoặc menu `chay.bat` mục "Kiem tra nhanh CVAT", hoặc nút **Chạy kiểm tra nhanh CVAT** ở tab Cài đặt). Tool tạo task `demo-smoke` từ 4 ảnh xám giả (không phải ảnh mặt), nhập nhãn nháp, xuất lại, kiểm, rồi **xoá task đó** (và project m28 nếu chính nó vừa tạo). Không đụng task nào khác. `--dry-run` chỉ kiểm cục bộ, không cần CVAT.
+2. Đưa token cho tool: **Save** token ở tab Cài đặt và bật **Nhớ trên máy này** (để lệnh cmd cũng thấy), hoặc `set CVAT_URL=http://localhost:8080` và `set CVAT_ACCESS_TOKEN=<token>` trong cùng cửa sổ cmd. Không dán token vào chat hay file.
+3. Chạy `python tool\cvat_smoke.py` (hoặc menu `chay.bat` mục "Kiem tra nhanh CVAT", hoặc nút **Run CVAT quick check** ở tab Cài đặt). Tool tạo task `demo-smoke` từ 4 ảnh xám giả (không phải ảnh mặt), nhập nhãn nháp, xuất lại, kiểm, rồi **xoá task đó** (và project m28 nếu chính nó vừa tạo). Không đụng task nào khác. `--dry-run` chỉ kiểm cục bộ, không cần CVAT.
 4. Đọc bảng cuối: `ĐẠT` là ổn; `HỎNG` kèm nguyên nhân tiếng Việt ở cột Ghi chú; `BỎ QUA` là bước không chạy vì bước trước hỏng hoặc vì bạn chọn cờ. Dòng cuối là `Tất cả ĐẠT` hoặc `Có N bước HỎNG`.
 5. Muốn nhìn tận mắt: `python tool\cvat_smoke.py --giu-task`, mở link task in ra trong CVAT, kiểm 50 điểm, các cạnh và ô `low_conf`; lần chạy sau tự xoá task đó.
 6. Có `HỎNG`: gửi P4 file `runs\_smoke\bao_cao_<giờ>.txt` (không gửi token, không gửi ảnh). Đừng tự xoá `runs\_smoke\dang_mo.json` trừ khi đã xoá task `demo-smoke` tay trong CVAT.

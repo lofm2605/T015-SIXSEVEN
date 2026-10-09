@@ -2,7 +2,7 @@
 
 Quy ước (giống nap_anh.py):
   * Chỉ thư viện chuẩn. Không import gradio, numpy, steps, torch, cvat_sdk. TRANG KHÔNG GỌI MẠNG: chỉ tiến trình con
-    (`m28.py push ...`, xem nap_anh.PushJob/DeleteTaskJob) gọi CVAT. Link/token/tổ chức lấy từ cai_dat.py (một nguồn: giá trị vừa Lưu ở
+    (`m28.py push ...`, xem nap_anh.PushJob/DeleteTaskJob) gọi CVAT. Link/token/tổ chức lấy từ cai_dat.py (một nguồn: giá trị vừa Save ở
     tab Cài đặt > biến môi trường CVAT_URL + CVAT_ACCESS_TOKEN > file đã lưu; đọc lại mỗi lần vẽ). Khung "Đẩy lên CVAT" không có ô nhập
     token (ô nhập chỉ nằm ở tab Cài đặt); token KHÔNG bao giờ hiện lên trang, không đi qua đối số dòng lệnh.
   * Số Nhận / Gán tay / Bỏ trong hộp xác nhận tính bằng ĐÚNG hàm m28core.phan_loai.classify mà steps.push dùng.
@@ -23,7 +23,7 @@ from m28core import cvat_io, loai_tru, phan_loai  # noqa: E402
 PHASES = ["kiểm tra", "kết nối", "project", "tải ảnh", "nhập nhãn", "xuất kiểm"]
 PHASE_RE = re.compile(r"^\[(\d)/6\]")
 STATE_VI = {"dang_chay": "Đang chạy", "xong": "Xong", "loi": "Lỗi", "da_huy": "Đã huỷ", "chua": ""}
-ENV_HELP = ("Mở tab <b>Cài đặt</b>, nhập link <code>http://localhost:8080</code> và token CVAT của bạn, bấm <b>Lưu</b> (không cần đóng trang). "
+ENV_HELP = ("Mở tab <b>Cài đặt</b>, nhập link <code>http://localhost:8080</code> và token CVAT của bạn, bấm <b>Save</b> (không cần đóng trang). "
             "Cách khác: đóng trang (Ctrl+C), trong <b>cùng cửa sổ cmd</b> gõ <code>set CVAT_URL=http://localhost:8080</code> và "
             "<code>set CVAT_ACCESS_TOKEN=&lt;token của bạn&gt;</code> rồi mở lại trang. Không dán token vào chat hay file.")
 
@@ -34,7 +34,7 @@ def _e(x):
 
 # ---------- môi trường ----------
 def env_state(environ=None):
-    """dict(ok, url, org, source, reason|None). environ=None: lấy từ cài đặt của trang (cai_dat: vừa Lưu > biến môi trường > file), đọc lại
+    """dict(ok, url, org, source, reason|None). environ=None: lấy từ cài đặt của trang (cai_dat: vừa Save > biến môi trường > file), đọc lại
     mỗi lần gọi; truyền environ (test) thì chỉ đọc đúng dict đó. reason KHÔNG chứa giá trị token."""
     env = cai_dat.cvat_env(environ)
     source = "env" if environ is not None else cai_dat.get().effective()["source"]
@@ -186,7 +186,7 @@ def panel_html(m):
         run, ps = m["run"], m["push"] or {}
         out.append('<div class="nap-note">Xem lại bằng một trong hai lệnh (cmd): '
                    f'<code>python tool\\m28.py push --run {_e(run)} --resume</code> làm nốt trên đúng task đã tạo, hoặc xoá task dở rồi đẩy lại bằng nút '
-                   '<b>Xoá task trên CVAT</b> ở tab Các đợt.</div>')
+                   '<b>Delete CVAT task</b> ở tab Các đợt.</div>')
         if ps.get("loi"):
             out.append(f'<div class="m28-warn">{_e(ps["loi"])}</div>')
     if m["enabled"]:
@@ -295,13 +295,13 @@ def next_step(ps, run):
     st = (ps or {}).get("trang_thai")
     tname = (ps or {}).get("task", f"demo-{run}")
     if st is None or st == "task_deleted":
-        return "Chưa tạo task nào trên CVAT: sửa nguyên nhân rồi bấm Đẩy lên CVAT lại."
+        return "Chưa tạo task nào trên CVAT: sửa nguyên nhân rồi bấm Push to CVAT lại."
     if st == "dang_tao":
         return (f"Dừng lúc đang tạo task, chưa có id: chạy python tool\\m28.py push --run {run} --cleanup để xem task cùng tên trên CVAT "
                 "(tool không tự xoá) rồi tự xoá trong giao diện CVAT nếu thừa.")
     if st in ("da_tao", "da_nhap"):
         return (f"Task {tname} (id {ps.get('task_id')}) đã tạo trên CVAT, chưa xong: chạy python tool\\m28.py push --run {run} --resume "
-                f"để làm nốt, hoặc xoá task dở bằng nút Xoá task trên CVAT (tab Các đợt) / python tool\\m28.py push --run {run} --cleanup --confirm-name {tname}.")
+                f"để làm nốt, hoặc xoá task dở bằng nút Delete CVAT task (tab Các đợt) / python tool\\m28.py push --run {run} --cleanup --confirm-name {tname}.")
     return ""
 
 

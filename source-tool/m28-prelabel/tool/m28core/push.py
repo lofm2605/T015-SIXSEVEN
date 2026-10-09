@@ -370,7 +370,7 @@ def _resolve_tay_nhap(mode, st, tay_nhap_xml):
     if not isinstance(da_ghi, list) or set(da_ghi) != set(tay_nhap_xml):
         raise SystemExit(f"--resume: nhóm Gán tay có nháp trong push.json ({len(da_ghi) if isinstance(da_ghi, list) else '?'} mặt) khác XML nhãn nháp "
                          f"hiện tại ({len(tay_nhap_xml)} mặt): kết quả rà soát đã đổi sau lần đẩy trước. Chưa nhập gì. Xoá task dở bằng "
-                         "--cleanup (hoặc nút Xoá task trên CVAT ở tab Các đợt) rồi đẩy lại.")
+                         "--cleanup (hoặc nút Delete CVAT task ở tab Các đợt) rồi đẩy lại.")
     return list(da_ghi), False
 
 

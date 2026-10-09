@@ -161,7 +161,7 @@ def step2(pw, W, shots):
         page.keyboard.press('k')
         page.wait_for_selector('#ck-panel', state='visible')
         check(page.locator('#ck-loai input:checked').get_attribute('value') == 'SWAP' and page.locator('#ck-note textarea').input_value() == 'nkg đổi chỗ mắt'
-              and page.locator('#ck-unmark').is_visible(), 'K lần nữa: điền sẵn giá trị cũ, có nút Bỏ đánh dấu')
+              and page.locator('#ck-unmark').is_visible(), 'K lần nữa: điền sẵn giá trị cũ, có nút Unmark')
         page.locator('#ck-note textarea').fill('đổi chỗ mắt (đã sửa)')
         page.click('#ck-save')
         page.wait_for_selector('#ck-panel', state='hidden')
@@ -173,7 +173,7 @@ def step2(pw, W, shots):
         second = ui.cur()
         page.keyboard.press('k')
         page.wait_for_selector('#ck-panel', state='visible')
-        check(page.locator('#ck-loai input:checked').count() == 0 and not page.locator('#ck-unmark').is_visible(), 'mặt chưa đánh dấu: panel trống, không có Bỏ đánh dấu')
+        check(page.locator('#ck-loai input:checked').count() == 0 and not page.locator('#ck-unmark').is_visible(), 'mặt chưa đánh dấu: panel trống, không có Unmark')
         page.click('#ck-save')
         page.wait_for_function("document.querySelector('#ck-msg').innerText.includes('Chọn loại')", timeout=10000)
         check(page.locator('#ck-panel').first.is_visible() and len(read_marks(marks)) == 1, 'thiếu loại: cảnh báo, panel còn mở, chưa ghi')
@@ -182,7 +182,7 @@ def step2(pw, W, shots):
         page.keyboard.type('mattrai_1')
         page.locator('#ck-diem ul[role="listbox"] li').first.click()
         page.locator('#ck-note textarea').fill('Chưa có quy tắc cho kính')
-        # ảnh đổi giữa chừng: bấm mặt khác trong lưới -> panel tự đóng, Lưu không ghi sang mặt khác
+        # ảnh đổi giữa chừng: bấm mặt khác trong lưới -> panel tự đóng, Save không ghi sang mặt khác
         page.click('#ck-save')
         page.wait_for_selector('#ck-panel', state='hidden')
         rows = read_marks(marks)
@@ -210,15 +210,15 @@ def step2(pw, W, shots):
               f'ca 3 (CONG_CU) trên mặt đã Nhận: quyet_dinh_ra={rows[2]["quyet_dinh_ra"]}')
         check(sha(tri) == h0 and ui.progress() == prog0, 'sau 3 ca khó: triage_P1.csv không đổi (cùng hash), tiến độ rà vẫn như cũ')
         check(not os.path.exists(os.path.join(run, 'review', 'done.txt')), 'chưa có done.txt')
-        # Bỏ đánh dấu hai bước
+        # Unmark hai bước
         page.keyboard.press('k')
         page.wait_for_selector('#ck-panel', state='visible')
         page.click('#ck-unmark')
         page.wait_for_function("document.querySelector('#ck-unmark').innerText.includes('Bấm lần nữa')", timeout=10000)
-        check(len(read_marks(marks)) == 3, 'Bỏ đánh dấu: bấm lần đầu chỉ xin xác nhận, chưa xoá')
+        check(len(read_marks(marks)) == 3, 'Unmark: bấm lần đầu chỉ xin xác nhận, chưa xoá')
         page.click('#ck-cancel')
         page.wait_for_selector('#ck-panel', state='hidden')
-        check(len(read_marks(marks)) == 3, 'Huỷ: không bỏ đánh dấu')
+        check(len(read_marks(marks)) == 3, 'Cancel: không bỏ đánh dấu')
         # K ở tab khác không mở panel
         page.get_by_role('tab', name='Ca khó', exact=True).click()
         page.wait_for_timeout(500)
@@ -290,14 +290,14 @@ def step3(pw, pg, W, shots):
     page.wait_for_selector('#ck-edit', state='visible')
     page.click('#ck-m-del')
     page.wait_for_selector('#ck-m-del-ok', state='visible')
-    check(page.locator('#ck-m-del-no').is_visible() and not page.locator('#ck-m-del').is_visible(), 'Xoá: hiện Xác nhận xoá và Không')
+    check(page.locator('#ck-m-del-no').is_visible() and not page.locator('#ck-m-del').is_visible(), 'Delete: hiện Confirm delete và Cancel')
     page.click('#ck-m-del-no')
     page.wait_for_selector('#ck-m-del-ok', state='hidden')
     check(os.path.exists(os.path.join(W, 'runs', 'CKN', 'ca_kho.csv')) and len(read_marks(os.path.join(W, 'runs', 'CKN', 'ca_kho.csv'))) == 1, 'Không: ca còn nguyên')
     page.click('#ck-m-del')
     page.click('#ck-m-del-ok')
     page.wait_for_function("document.querySelectorAll('#ck-list .ck-mcard').length === 3", timeout=10000)
-    check(len(read_marks(os.path.join(W, 'runs', 'CKN', 'ca_kho.csv'))) == 0, 'Xác nhận xoá: ca CKN bị xoá (còn 3 ca)')
+    check(len(read_marks(os.path.join(W, 'runs', 'CKN', 'ca_kho.csv'))) == 0, 'Confirm delete: ca CKN bị xoá (còn 3 ca)')
     page.wait_for_timeout(500)
     check('CKN' not in page.inner_text('#ck-ngoai'), 'hết ca CKN thì hộp đỏ biến mất')
     # khôi phục một ca CKN để kiểm lượt không rõ nguồn không kèm ảnh
@@ -482,7 +482,7 @@ def step5(pw, W, shots, repo_hash):
         page.click('#hop-save')
         page.wait_for_function("document.querySelector('#hop-form-msg').innerText.includes('Đã lưu')", timeout=10000)
         k1 = card.get_attribute('data-key')
-        # ca khác: Đã chốt có quyết định + người phụ trách, Lưu & sang ca sau
+        # ca khác: Đã chốt có quyết định + người phụ trách, Save & next
         k2 = page.locator('#hop-grid .ck-card').nth(1).get_attribute('data-key')
         page.locator(f'#hop-grid .ck-card[data-key="{k2}"]').click()
         page.wait_for_function(f"document.querySelector('#hop-grid .ck-card.sel').dataset.key === {json.dumps(k2)}", timeout=10000)
@@ -495,7 +495,7 @@ def step5(pw, W, shots, repo_hash):
         page.wait_for_function("document.querySelector('#hop-form-msg').innerText.includes('Đã lưu')", timeout=10000)
         page.wait_for_timeout(600)
         cur_after = page.locator('#hop-grid .ck-card.sel').first.get_attribute('data-key')
-        check(cur_after != k2, f'Lưu & sang ca sau: chuyển sang ca khác ({cur_after})')
+        check(cur_after != k2, f'Save & next: chuyển sang ca khác ({cur_after})')
         hop = json.load(open(os.path.join(outd, sess_name, 'hop.json'), encoding='utf-8'))
         c1, c2 = hop['ca'][k1], hop['ca'][k2]
         check(c1['trang_thai'] == 'dang_ban' and c2['trang_thai'] == 'da_chot' and c2['phu_trach'] == 'P4' and c2['quyet_dinh'].startswith('Kính râm')
@@ -598,7 +598,7 @@ def step_review_pages(pw, W, shots):
         check(pg.no_hscroll(420), 'panel ở 420 px: không cuộn ngang')
         pg.shot(shots, 'cakho_02_panel_hep', True)
         box = page.locator('#ck-save').bounding_box()
-        check(box and box['width'] > 40, 'nút Lưu bấm được ở 420 px')
+        check(box and box['width'] > 40, 'nút Save bấm được ở 420 px')
     finally:
         pg.close()
         stop(p)
