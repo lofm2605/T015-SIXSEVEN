@@ -126,10 +126,10 @@ Sau họp xoá các gói zip đã nhận nếu không cần nữa.
 
 **Quy trình một buổi (mỗi người):**
 1. Đầu buổi **khôi phục task của hôm nay** (file sao lưu P4 phát) rồi mở trang: `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`).
-2. Tab **Đồng hồ**: chọn người P1–P5 (và nhóm, nếu chưa có trong file nhóm), gõ tên **đợt** (ví dụ `NAP_001`), bấm **Bắt đầu**. Hoặc nạp ảnh ở tab Nạp ảnh rồi bấm gợi ý **Bắt đầu đồng hồ cho đợt này** (hoặc bật ô tự bắt đầu khi nạp).
-3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm **Tạm dừng**, quay lại bấm **Tiếp tục**. Muốn đo từng mặt thì bấm **Xong mặt này → mặt tiếp** sau mỗi mặt (tuỳ chọn); bấm nhầm thì **Hoàn tác mặt vừa xong**.
-4. Xong việc: `python tool\m28.py collect --task demo-<đợt> --reviewer P<số của bạn>`, rồi bấm **Xong (lưu & xuất)**. Trang ghi `outputs\timing\timing_P<số>.csv` và gói **`outputs\ket_qua\ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Bấm Xong trước khi collect thì gói chỉ có thời gian: sau khi collect dùng **Xuất lại gói**.
-5. Quên bấm, nghỉ lâu, qua nửa đêm: trang hiện cảnh báo vàng; chọn **Sửa thời gian** (nhập thời gian thật), **Giữ nguyên** hoặc **Hủy phiên…** (gõ `HUY`; không ghi dòng nào). Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, tab Đồng hồ, bấm Tiếp tục hoặc Xong.
+2. **Nạp ảnh** ở tab Nạp ảnh (**Nạp & Tiếp tục** hoặc **Nạp & Mở**): đồng hồ ⏱ ở đầu trang **tự chạy** cho người rà của trang (phải là P1–P5; đặt ở tab Cài đặt). Nhóm lấy từ file nhóm, người chưa có trong file thì mặc định `assisted` và dòng bấm giờ ghi cờ `chua_co_nhom`. Đã có phiên thì giữ nguyên, không đè.
+3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm nút **Dừng** cạnh đồng hồ, quay lại bấm **Tiếp tục** (cùng một nút, đổi chữ). Không còn tab Đồng hồ.
+4. Xong việc: `python tool\m28.py collect --task demo-<đợt> --reviewer P<số của bạn>` **trước**, rồi bấm **Đóng trang rà soát** → **Lưu số đo**. Trang ghi `outputs\timing\timing_P<số>.csv` và gói **`outputs\ket_qua\ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Chưa thấy nhãn đã xuất trong `raw\` thì trang nhắc chạy `collect` trước; bấm Lưu số đo thêm lần nữa mới lưu gói chỉ có thời gian. Sau khi lưu, bấm **Huỷ** để ở lại trang hoặc **Đóng trang rà soát** để tắt.
+5. Quên bấm, nghỉ lâu, qua nửa đêm, tắt trang đột ngột: phiên vẫn lưu được, kèm cờ `canh_bao` trong dòng bấm giờ để thống kê đánh dấu (không còn nút Sửa thời gian trên giao diện); khi có cảnh báo chưa xử lý, Lưu số đo hỏi bằng cách bấm thêm một lần. Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, bấm **Tiếp tục**. Muốn bỏ phiên (không lưu gì): hộp Đóng trang → **Bỏ phiên đồng hồ**, bấm hai lần.
 
 **Nhóm trưởng tổng kết** (chỉ cần các gói zip, không cần ảnh hay CVAT):
 ```bat
@@ -146,7 +146,7 @@ Hai việc này **chỉ đọc** `runs\`, `raw\`, `final\`, `data\` và chỉ gh
 ```bat
 python tool\thong_ke.py --luot-nhap <lượt chứa nháp> [--nguong-sua 2] [--goi <thư mục gói>] [--timing .]
 ```
-Chỗ đặt `timing_P*.csv`: `outputs\timing\` (tab Đồng hồ ghi ở đây), thư mục `source-tool\m28-prelabel\`, `outputs\`, `raw\`, `final\`; file `timing_*.csv` đã bị `.gitignore` chặn. File facetimer 12 cột (`date, person, condition, task, job, block, seq, face_id, seconds, warmup, interrupted, note`) vẫn đọc được; thiếu cột thì bỏ file đó và báo rõ tên cột.
+Chỗ đặt `timing_P*.csv`: `outputs\timing\` (đồng hồ ở đầu trang ghi ở đây), thư mục `source-tool\m28-prelabel\`, `outputs\`, `raw\`, `final\`; file `timing_*.csv` đã bị `.gitignore` chặn. File facetimer 12 cột (`date, person, condition, task, job, block, seq, face_id, seconds, warmup, interrupted, note`) vẫn đọc được; thiếu cột thì bỏ file đó và báo rõ tên cột.
 
 **Lọc dữ liệu train (tab Lọc dữ liệu hoặc lệnh):** bắt đầu bằng xem trước, không ghi gì:
 ```bat

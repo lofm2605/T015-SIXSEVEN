@@ -11,7 +11,7 @@ Hai nhóm: manual (gán tay hoàn toàn) và assisted (dùng tool, sửa nháp);
   (2) Tỉ lệ điểm phải sửa (chỉ nhóm assisted, ngưỡng mặc định 2% IOD; điểm xoá/ẩn tính là đã sửa).
   (3) Thời gian: giây/mặt mỗi nhóm (trung vị, trung bình nhân), % nhanh hơn của assisted so với manual (mục tiêu >= 20%), KTC 90% bằng cluster bootstrap (bốc người rồi bốc mặt,
       seed 28, 2.000 lần); mỗi nhóm < 2 người thì chỉ có kết quả mô tả.
-Nguồn: gói kết quả (outputs\\ket_qua, outputs\\goi_nhom, --goi) + file nhãn raw\\ + dòng bấm giờ timing_P*.csv (bản của tab Đồng hồ hay facetimer). Phần tính ở m28core\\so_sanh.py,
+Nguồn: gói kết quả (outputs\\ket_qua, outputs\\goi_nhom, --goi) + file nhãn raw\\ + dòng bấm giờ timing_P*.csv (bản của đồng hồ ở đầu trang hay facetimer). Phần tính ở m28core\\so_sanh.py,
 dùng chung với tool\\tong_ket.py (nhóm trưởng chỉ cần gói của các thành viên). Quy tắc: ô số kèm n; n < 5 ghi "n quá nhỏ"; chưa có dữ liệu thì khung trống nói rõ cần file nào, ai làm ra,
 không bao giờ hiện 0 hay số mẫu; Ttest ẩn mặc định; mặt xoá mềm không vào số đo; HTML xuất không ảnh mặt, không mã tài xế, không đường dẫn tuyệt đối.
 """
@@ -88,7 +88,7 @@ def doc_nguon_goi(project_root, goi, names, mac_dinh=True):
 
 def doc_timing(project_root, timing, phien_goi):
     """(rows, files, loi, trung): dòng bấm giờ từ timing_P*.csv. Dòng cùng mã phiên với một gói thì bỏ (gói thắng). Thiếu cột: bỏ file đó, báo tên cột, file khác vẫn đọc.
-    Trùng khoá (người, task, khối, seq): giữ dòng của tab Đồng hồ (outputs\\timing) rồi dòng đọc trước; liệt kê, không lặng lẽ."""
+    Trùng khoá (người, task, khối, seq): giữ dòng của đồng hồ ở đầu trang (outputs\\timing) rồi dòng đọc trước; liệt kê, không lặng lẽ."""
     paths = toc_do.tim_file(project_root, timing)
     paths.sort(key=lambda p: (0 if os.path.realpath(os.path.dirname(p)) == os.path.realpath(os.path.join(project_root, TIMING_UU_TIEN)) else 1, os.path.basename(p), p))
     rows, files, loi, trung, seen = [], [], [], [], {}
@@ -233,7 +233,7 @@ def mat_tu_goi(nd):
 def _thong_bao_trong_nme(co_manual, co_nhap_assisted, co_assisted):
     if not co_manual:
         return _trong("Chưa có nhãn gán tay của nhóm manual: đây là ĐÁP ÁN để đo nháp (cả hai nhóm làm cùng bộ ảnh).",
-                      "gói kết quả của người nhóm manual (outputs\\ket_qua\\ketqua_<Pk>_*.zip) hoặc raw\\<task>_<Pk>_<DDMM>.xml; điền config\\nhom_thi_nghiem.json", "người nhóm manual (bấm Xong ở tab Đồng hồ rồi gửi gói cho nhóm trưởng)")
+                      "gói kết quả của người nhóm manual (outputs\\ket_qua\\ketqua_<Pk>_*.zip) hoặc raw\\<task>_<Pk>_<DDMM>.xml; điền config\\nhom_thi_nghiem.json", "người nhóm manual (bấm Lưu số đo ở hộp Đóng trang rồi gửi gói cho nhóm trưởng)")
     if not co_assisted:
         return _trong("Chưa có nháp của nhóm assisted để đo.", "gói kết quả của người nhóm assisted (có nháp và nhãn cuối)", "người nhóm assisted")
     if not co_nhap_assisted:
@@ -338,7 +338,7 @@ def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False,
     cap = [dict(nguoi=m["nguoi"], anh=m["anh"], nhap=m["nhap"], nhan=m["nhan"]) for m in assisted if m["nhap"]]
     if not cap:
         st["sua"] = dict(trong=_trong("Chưa có mặt nào của nhóm assisted có CẢ nháp đã nhập và nhãn cuối.",
-                                      "gói kết quả nhóm assisted có nháp (Xong ở tab Đồng hồ sau khi collect), hoặc raw\\<task>_<Pk>_<DDMM>.xml của task demo-… cùng lượt trong runs\\", "người nhóm assisted"))
+                                      "gói kết quả nhóm assisted có nháp (Lưu số đo ở hộp Đóng trang, sau khi collect), hoặc raw\\<task>_<Pk>_<DDMM>.xml của task demo-… cùng lượt trong runs\\", "người nhóm assisted"))
     else:
         st["sua"] = dict(trong=None, **so_sanh.ti_le_sua(cap, cfg, nguong))
         st["meta"]["canh_bao"] += kiem_hop_ly_nhap(cap, cfg, nguong)
@@ -363,7 +363,7 @@ def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False,
     st["thoi_gian"] = so_sanh.thoi_gian(t)
     if not t:
         st["thoi_gian"]["trong"] = _trong("Chưa có dòng bấm giờ nào dùng được (đã bỏ khởi động, giây trống/≤ 0" + (f", dòng ngoài bộ ảnh {bo_cfg}" if chi_bo_anh and bo_cfg else "") + ").",
-                                          "gói kết quả (tab Đồng hồ: Xong lưu & xuất) hoặc outputs\\timing\\timing_<Pk>.csv", "mọi thành viên (đo bằng tab Đồng hồ)")
+                                          "gói kết quả (hộp Đóng trang: Lưu số đo) hoặc outputs\\timing\\timing_<Pk>.csv", "mọi thành viên (đo bằng đồng hồ ở đầu trang)")
     else:
         st["thoi_gian"]["trong"] = None
     st["thoi_gian"]["n_dong_goi"] = sum(1 for r in t if r.get("nguon") == "goi")

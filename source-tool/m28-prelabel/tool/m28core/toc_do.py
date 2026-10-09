@@ -95,7 +95,7 @@ def doc_file(path, ten=None):
         rows.append(dict(date=r["date"], person=r["person"], condition=r["condition"].lower(), task=r["task"], job=r["job"], block=r["block"],
                          seq=None if seq is None else int(seq), face_id=r["face_id"], seconds=_f(r["seconds"]),
                          warmup=int(_f(r["warmup"]) or 0), interrupted=int(_f(r["interrupted"]) or 0), note=r["note"], file=ten,
-                         # cột thêm của tab Đồng hồ (QĐ-006); file facetimer 12 cột thì để mặc định
+                         # cột thêm của đồng hồ ở đầu trang (QĐ-006); file facetimer 12 cột thì để mặc định
                          phien=r.get("phien", ""), dot=r.get("dot", ""), bo_anh=r.get("bo_anh", ""), sua_tay=int(_f(r.get("sua_tay", "")) or 0),
                          canh_bao=r.get("canh_bao", ""), uoc_luong=int(_f(r.get("uoc_luong_chia_deu", "")) or 0)))
     return rows

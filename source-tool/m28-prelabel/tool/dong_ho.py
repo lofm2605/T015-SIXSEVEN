@@ -1,6 +1,6 @@
 """Đồng hồ bấm giờ gán nhãn M28 (logic thuần, chỉ thư viện chuẩn; giao diện ở dong_ho_ui.py). Thay facetimer dòng lệnh của P5.
 
-Đơn vị đo là PHIÊN (QĐ-006): từ lúc bắt đầu nạp ảnh lên tool đến lúc hoàn thành. Bốn nút: Bắt đầu, Tạm dừng/Tiếp tục, Hủy (có xác nhận), Xong (lưu & xuất).
+Đơn vị đo là PHIÊN (QĐ-006): từ lúc bắt đầu nạp ảnh lên tool đến lúc hoàn thành. Thao tác: bắt đầu (tự chạy khi bấm Nạp ảnh), tạm dừng/tiếp tục (nút Dừng/Tiếp tục ở đầu trang), hủy (có xác nhận; hộp Đóng trang: Bỏ phiên đồng hồ), xong (lưu & xuất; hộp Đóng trang: Lưu số đo).
 Bấm từng mặt ("Xong mặt này → mặt tiếp") chỉ là TUỲ CHỌN cho ai muốn đo chi tiết; nếu chỉ đo cả phiên thì giây/mặt = giây phiên (không tính lúc tạm dừng) ÷ số mặt
 và cột `uoc_luong_chia_deu` = 1 để thống kê biết đây là ước lượng chứ không phải đo từng mặt.
 
@@ -799,8 +799,8 @@ class DongHo:
                 thong_bao.append(f"Không đọc được nhãn ({type(e).__name__}): gói chỉ có thời gian.")
                 ket_qua, info = [], dict(co_nhan=False, co_nhap=False, nhan_file="", canh_bao=["nhan_loi"])
         if cfg is not None and not info["co_nhan"]:
-            thong_bao.append("Chưa có nhãn đã xuất cho phiên này (raw/<task>_" + st["nguoi"] + "_<DDMM>.xml): gói chỉ có thời gian. Chạy collect --reviewer "
-                             + st["nguoi"] + " rồi dùng \"Xuất lại gói\".")
+            thong_bao.append("Chưa có nhãn đã xuất cho phiên này (raw/<task>_" + st["nguoi"] + "_<DDMM>.xml): gói chỉ có thời gian. Lần sau chạy collect --reviewer "
+                             + st["nguoi"] + " TRƯỚC khi bấm Lưu số đo; gói này gửi nhóm trưởng kèm nhãn xuất riêng (raw/).")
         elif st["dieu_kien"] == "assisted" and not info["co_nhap"]:
             thong_bao.append("Không tìm thấy nháp của đợt (runs/<đợt>/xml/prelabel.xml): gói có nhãn cuối nhưng không có nháp, điểm đã sửa và NME của nháp.")
         mat_do = []

@@ -65,7 +65,7 @@ def test_build_ui_co_hai_tab_moi_co_lượt_va_che_do_nap(world, tmp_path):
                  'loc-load-cfg', 'loc-save-cfg', 'loc-ten', 'loc-warn', 'loc-overwrite-ok', 'tab-caidat', 'tab-hop'):
         assert want in ids, want
     titles = [getattr(b, 'label', None) for b in demo.blocks.values() if getattr(b, 'elem_id', None) in ('tab-hop', 'tab-dongho', 'tab-thongke', 'tab-loc', 'tab-caidat')]
-    assert titles == ['Họp team', 'Đồng hồ', 'Thống kê', 'Lọc dữ liệu', 'Cài đặt']        # Đồng hồ sau Họp team; Thống kê, Lọc dữ liệu đặt trước "Cài đặt"
+    assert titles == ['Họp team', 'Thống kê', 'Lọc dữ liệu', 'Cài đặt']        # không còn tab Đồng hồ (chip ở đầu trang); Thống kê, Lọc dữ liệu đặt trước "Cài đặt"
     os.makedirs('runs/_nap', exist_ok=True)
     ctx2 = ra.AppCtx(reviewer='P2', run_dir=os.path.join('runs', '_nap'), nap_only=True)
     demo2, _ = ra.build_ui(None, ctx2)                                                        # --nap: store None vẫn dựng đủ

@@ -10,8 +10,8 @@ Sửa điểm không làm ở đây (làm trong CVAT).
 Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
 ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà
 không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team",
-"Đồng hồ" (dong_ho.py + dong_ho_ui.py: bấm giờ gán nhãn theo PHIÊN, thay facetimer: Bắt đầu, Tạm dừng/Tiếp tục, Hủy có xác nhận, Xong (lưu & xuất gói kết quả `outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip`
-gửi nhóm trưởng, và dòng `outputs\\timing\\timing_<Pk>.csv` đúng định dạng facetimer; nguồn sự thật là đồng hồ phía server, trạng thái ghi ra file nên đóng tab không mất; đóng trang thì tự tạm dừng),
+Đồng hồ bấm giờ (dong_ho.py + dong_ho_ui.py, KHÔNG có tab riêng): chip ⏱ ở đầu trang thấy ở mọi tab, tự chạy khi bấm Nạp ảnh, MỘT nút Dừng/Tiếp tục; lưu số đo (dòng `outputs\\timing\\timing_<Pk>.csv`
+đúng định dạng facetimer và gói kết quả `outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip` gửi nhóm trưởng) hoặc bỏ phiên nằm trong hộp "Đóng trang rà soát?"; nguồn sự thật là đồng hồ phía server, trạng thái ghi ra file nên đóng tab không mất; đóng trang thì tự tạm dừng),
 "Thống kê" (thong_ke.py + thong_ke_html.py + thong_ke_ui.py: CHỈ BA chỉ số của thí nghiệm hai nhóm độc lập (QĐ-006): NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa, so sánh thời gian manual với
 assisted; đọc gói kết quả, nhãn raw\\ và timing; chỉ đọc, tính khi chọn tab, xuất CSV + HTML tĩnh không ảnh mặt; nhóm trưởng dùng tool\\tong_ket.py với các gói của thành viên), "Lọc dữ liệu" (loc_du_lieu.py + loc_ui.py: bộ lọc ảnh đã có nhãn sửa tay thành bộ train/val/test cho model landmark khác sau này, chỉ chuẩn bị
 dữ liệu, không train, xem trước = dry-run, ghi dưới outputs\\train_sets), "Cài đặt" (cai_dat.py + cai_dat_ui.py: link/token/tổ chức CVAT, người rà mặc định, đường dẫn ảnh và model, t_flip của cờ low_conf).
@@ -55,7 +55,7 @@ import ca_kho  # noqa: E402  (ca khó, tab Ca khó và Họp team; chỉ thư vi
 import dot_anh  # noqa: E402
 import cai_dat  # noqa: E402  (cài đặt dùng chung cả tiến trình: CVAT, người rà, đường dẫn; chỉ thư viện chuẩn)
 import cai_dat_ui  # noqa: E402  (tab Cài đặt; không import gradio ở đầu module)
-import dong_ho_ui  # noqa: E402  (tab Đồng hồ: bấm giờ theo phiên; không import gradio ở đầu module)
+import dong_ho_ui  # noqa: E402  (chip đồng hồ ở đầu trang: bấm giờ theo phiên; không import gradio ở đầu module)
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
 import loc_ui  # noqa: E402  (tab Lọc dữ liệu; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
@@ -1554,9 +1554,7 @@ class AppCtx:
     closing: bool = False              # đã xác nhận "Đóng trang rà soát" (một lần duy nhất cho mọi tab): mọi handler ghi từ chối
     close_lock: object = dataclasses.field(default_factory=threading.Lock, repr=False)
     dong_ho: object = None             # dong_ho.DongHo của thư mục dự án (dong_ho_ui.get_dh); trạng thái nằm trong file nên dựng lại ctx không mất phiên
-    dh_auto: object = None             # {nguoi, dieu_kien} khi bật "Tự bắt đầu đồng hồ khi nạp ảnh"
-    dh_started: object = dataclasses.field(default_factory=set, repr=False)      # lượt đã bắt đầu đồng hồ (không gợi ý lại)
-    dh_dismissed: object = dataclasses.field(default_factory=set, repr=False)    # lượt đã bỏ qua gợi ý
+    dh_started: object = dataclasses.field(default_factory=set, repr=False)      # lượt đã bắt đầu đồng hồ (tự chạy lúc bấm Nạp ảnh)
     demo: object = None
     tmp_dir: str = ""
     runs_root: str = ""
@@ -1602,7 +1600,7 @@ class AppCtx:
         self.tmp_dir = os.environ.get("GRADIO_TEMP_DIR") or os.path.abspath(os.path.join(self.run_dir, "_tmp"))
 
 
-def _nap_tab(gr, demo, store, ctx):
+def _nap_tab(gr, demo, store, ctx, dh=None):
     """Tab "Nạp ảnh": kéo thả -> kiểm file -> tạo lượt mới -> prepare (tiến trình con) -> Rà lượt này. Sự kiện dùng concurrency_id
     "nap" / "nap_tick" / "nap_huy", KHÔNG dùng "m28", để rà tiếp được trong lúc prepare chạy."""
     job = ctx.job
@@ -1725,7 +1723,7 @@ def _nap_tab(gr, demo, store, ctx):
             job.start(run, ctx.runs_root, ctx.project_root)
         except RunError as e:
             return refuse(str(e))
-        dong_ho_ui.auto_start(gr, ctx, run, len(plan_st["plan"]["ok"]))     # ô "Tự bắt đầu đồng hồ khi nạp ảnh" bật thì đồng hồ bắt đầu ngay lúc nạp
+        dong_ho_ui.auto_start(gr, ctx, run, len(plan_st["plan"]["ok"]))     # bấm Nạp ảnh là đồng hồ bắt đầu chạy (đã có phiên thì giữ nguyên)
         ctx.auto_open = run if open_after else None
         text = (f"Đã nạp {len(plan_st['plan']['ok'])} ảnh vào runs\\{run}\\inbox, đang chạy prepare"
                 + (": xong thì trang tự mở rà soát lượt này." if open_after else "."))
@@ -1810,8 +1808,11 @@ def _nap_tab(gr, demo, store, ctx):
     nap_load = (on_load, [plan_state], [env_html, name_tb] + job_outs, dict(opts, concurrency_id="nap"))
     demo.load(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])
     drop.change(on_files, [drop, plan_state], [plan_state, gal, rej, count, b_start_open, b_start], **nap)
-    b_start.click(on_start, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
-    b_start_open.click(on_start_open, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
+    ev_start = b_start.click(on_start, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
+    ev_open = b_start_open.click(on_start_open, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
+    if dh is not None:                                                  # chip đồng hồ cập nhật ngay sau khi Nạp (không chờ nhịp 15 giây)
+        for ev in (ev_start, ev_open):
+            ev.then(dh.refresh, None, dh.outs, **dh.opts)
     b_retry.click(on_retry, [plan_state], [msg] + job_outs, **nap)
     b_cancel.click(on_cancel, [plan_state], [msg] + job_outs, **dict(opts, concurrency_id="nap_huy"))
     timer.tick(on_tick, [plan_state], job_outs, **dict(opts, concurrency_id="nap_tick"))
@@ -1834,6 +1835,7 @@ def _close_bar(gr, demo, store, ctx):
             with gr.Row(elem_classes=["m28-modal-btns"]):
                 b_ok = gr.Button("Đóng trang rà soát", variant="stop", elem_id="close-confirm-ok")
                 b_no = gr.Button("Huỷ", elem_id="close-confirm-cancel")
+                dh_btn = dong_ho_ui.close_buttons(gr, ctx, body, lambda extra: close_body_html(store, extra))      # Lưu số đo / Bỏ phiên đồng hồ (chỉ hiện khi đang có phiên)
     opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="dong")
     outs = [modal, body, msg, closed]
     hide = gr.update(visible=False)
@@ -1866,10 +1868,10 @@ def _close_bar(gr, demo, store, ctx):
     def on_cancel():
         return hide, "", "", gr.update()
 
-    b_dong.click(on_open, None, outs, **opts)
+    b_dong.click(on_open, None, outs, **opts).then(dh_btn.show, None, dh_btn.show_outs, **dong_ho_ui.OPTS)
     b_ok.click(on_confirm, None, outs, **opts)
     b_no.click(on_cancel, None, outs, **opts)
-    return types.SimpleNamespace(button=b_dong, modal=modal)
+    return types.SimpleNamespace(button=b_dong, modal=modal, dh_events=dh_btn.events)
 
 
 def build_ui(store, ctx=None):
@@ -1887,6 +1889,9 @@ def build_ui(store, ctx=None):
         header = gr.HTML(HEAD_NAP_HTML.format(rev=html.escape(ctx.reviewer)) if store is None else "", elem_id="progress",
                          apply_default_css=False)
         close_ui = _close_bar(gr, demo, store, ctx)
+        dh = dong_ho_ui.chip(gr, demo, ctx)                                  # chip đồng hồ + nút Dừng/Tiếp tục ở mọi tab
+        for ev in close_ui.dh_events:                                        # Lưu số đo / Bỏ phiên trong hộp Đóng trang: chip cập nhật ngay
+            ev.then(dh.refresh, None, dh.outs, **dh.opts)
         with gr.Tabs(elem_id="tabs", selected="ra" if store is not None else "nap") as tabs:
             with gr.Tab("Rà soát", id="ra", elem_id="tab-ra") as tab_ra:
                 if store is None:
@@ -1895,7 +1900,7 @@ def build_ui(store, ctx=None):
                 else:
                     review = _review_tab(gr, demo, store, ctx, header)
             with gr.Tab("Nạp ảnh", id="nap", elem_id="tab-nap") as tab_nap:
-                nap_load = _nap_tab(gr, demo, store, ctx)
+                nap_load = _nap_tab(gr, demo, store, ctx, dh)
             with gr.Tab("Các đợt", id="dot", elem_id="tab-dot") as tab_dot:
                 refresh, dot_ses, dot_outs, dot_opts = dot_ui.dot_tab(
                     gr, demo, store, ctx, dict(Store=Store, switch_js=NAP_SWITCH_JS, run_name=run_name))
@@ -1903,8 +1908,6 @@ def build_ui(store, ctx=None):
                 ck_fn, ck_in, ck_out, ck_opts = ca_kho.member_tab(gr, demo, store, ctx)
             with gr.Tab("Họp team", id="hop", elem_id="tab-hop"):
                 ca_kho.meeting_tab(gr, demo, ctx)
-            with gr.Tab("Đồng hồ", id="dongho", elem_id="tab-dongho") as tab_dh:
-                dh_fn, dh_in, dh_out, dh_opts = dong_ho_ui.dong_ho_tab(gr, demo, store, ctx)
             with gr.Tab("Thống kê", id="thongke", elem_id="tab-thongke") as tab_tk:
                 tk_fn, tk_in, tk_out, tk_opts = thong_ke_ui.stats_tab(gr, demo, store, ctx)
             with gr.Tab("Lọc dữ liệu", id="loc", elem_id="tab-loc") as tab_loc:
@@ -1919,7 +1922,6 @@ def build_ui(store, ctx=None):
                 cd_fn, cd_in, cd_out, cd_opts = cai_dat_ui.settings_tab(gr, demo, store, ctx, after_cvat, run_name, after_model)
         tab_ck.select(ck_fn, ck_in, ck_out, **ck_opts)                      # tab Ca khó tự làm mới khi chọn (ca vừa đánh dấu ở tab Rà soát)
         tab_dot.select(refresh, [dot_ses], dot_outs, **dot_opts)           # tự làm mới khi chọn tab (không quét lại mỗi giây)
-        tab_dh.select(dh_fn, dh_in, dh_out, **dh_opts)                      # Đồng hồ: đọc lại file trạng thái khi chọn tab (đồng hồ có thể vừa đổi ở tab khác)
         tab_tk.select(tk_fn, tk_in, tk_out, **tk_opts)                      # Thống kê: tính khi chọn tab, không tính lúc mở trang
         tab_loc.select(lc_fn, lc_in, lc_out, **lc_opts)                     # Lọc dữ liệu: làm mới danh sách lượt/người rà/cấu hình khi chọn tab
         tab_nap.select(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])  # kiểm lại model/cấu hình khi chọn tab (vừa đổi đường dẫn ở tab Cài đặt)

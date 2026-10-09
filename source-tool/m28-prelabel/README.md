@@ -26,7 +26,7 @@ Thí nghiệm chia **hai nhóm độc lập**: `manual` (gán tay hoàn toàn) v
 
 | Việc | Ở đâu | Làm gì |
 |---|---|---|
-| Bấm giờ | tab **Đồng hồ** (thay `facetimer.py`) | Bắt đầu (hoặc bấm gợi ý sau khi nạp ảnh xong), Tạm dừng/Tiếp tục, Hủy (gõ HUY), **Xong (lưu & xuất)**. Đo cả **phiên**; bấm từng mặt chỉ là tuỳ chọn. Ghi `outputs/timing/timing_<Pk>.csv` (12 cột đầu đúng facetimer, cột thêm cuối) và gói kết quả `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (+ `.json`, không ảnh) để **gửi nhóm trưởng**. |
+| Bấm giờ | chip ⏱ **ở đầu trang** (thay `facetimer.py`; không còn tab riêng) | **Tự chạy khi bấm Nạp ảnh** (người rà của trang, nhóm lấy từ file nhóm, không có thì assisted); **một nút Dừng/Tiếp tục**. Muốn lưu: *Đóng trang rà soát* → **Lưu số đo** (hoặc **Bỏ phiên đồng hồ**, bấm hai lần). Chạy `collect` trước khi Lưu số đo để gói có nhãn. Đo cả **phiên**. Ghi `outputs/timing/timing_<Pk>.csv` (12 cột đầu đúng facetimer, cột thêm cuối) và gói kết quả `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (+ `.json`, không ảnh) để **gửi nhóm trưởng**. |
 | Thống kê | tab **Thống kê**, `python tool/thong_ke.py` | Chỉ **ba chỉ số**: NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa (nhóm assisted), so sánh thời gian manual với assisted (KTC 90% bằng cluster bootstrap). |
 | Tổng kết | `python tool/tong_ket.py --vao <thư mục chứa các gói> --ra outputs/tong_ket/` | Của nhóm trưởng: gộp gói của thành viên (kiểm sha256, loại gói hỏng/trùng), cùng ba chỉ số, CSV + HTML tĩnh. Không cần ảnh hay CVAT. |
 
