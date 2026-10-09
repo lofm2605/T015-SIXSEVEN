@@ -8,7 +8,7 @@ Sửa điểm không làm ở đây (làm trong CVAT).
     python tool\\review_app.py --nap P2              # chưa có lượt nào: chỉ mở tab "Nạp ảnh" (kéo thả ảnh -> prepare -> rà)
 
 Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
-ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi nút "Rà lượt này" chuyển trang sang lượt mới mà
+ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi "Upload & Open" tự chuyển trang sang lượt mới (hoặc "Rà đợt này" ở tab Các đợt) mà
 không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team",
 Đồng hồ bấm giờ (dong_ho.py + dong_ho_ui.py, KHÔNG có tab riêng): chip ⏱ ở đầu trang thấy ở mọi tab, tự chạy khi bấm Nạp ảnh, MỘT nút Dừng/Tiếp tục; lưu số đo (dòng `outputs\\timing\\timing_<Pk>.csv`
 đúng định dạng facetimer và gói kết quả `outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip` gửi nhóm trưởng) hoặc bỏ phiên nằm trong hộp "Đóng trang rà soát?"; nguồn sự thật là đồng hồ phía server, trạng thái ghi ra file nên đóng tab không mất; đóng trang thì tự tạm dừng),
@@ -908,7 +908,7 @@ def close_check(store, ctx):
     if ctx.switch_to is not None:
         return False, "Đang chuyển sang lượt mới: chờ trang tải lại rồi hãy đóng.", "warn"
     if ctx.job.running:
-        return False, f"Đang chuẩn bị lượt {ctx.job.run}: chờ xong hoặc bấm Huỷ.", "warn"
+        return False, f"Đang chuẩn bị lượt {ctx.job.run}: chờ xong hoặc bấm Cancel ở tab Nạp ảnh.", "warn"
     if ctx.push_job.running or ctx.del_job.running:
         busy = ctx.push_job if ctx.push_job.running else ctx.del_job
         return False, f"Đang {'đẩy' if busy is ctx.push_job else 'xoá task của'} lượt {busy.run} (CVAT): chờ xong hoặc bấm Huỷ.", "warn"
@@ -1211,7 +1211,7 @@ kbd { display: inline-block; min-width: 20px; padding: 0 5px; text-align: center
 #tabs > .tab-wrapper button, #tabs > .tab-container button { font-size: 15px; font-weight: 700; padding: 6px 16px; }
 #tab-ra, #tab-nap { padding: 8px 0 0 !important; }
 #tab-nap { max-width: 1120px; margin: 0 auto; width: 100%; gap: 10px; }
-#nap-warn, #nap-env, #nap-count, #nap-rejected, #nap-msg, #nap-prog, #nap-summary, #nap-oldnote { padding: 0 !important; }
+#nap-warn, #nap-env, #nap-count, #nap-rejected, #nap-msg, #nap-prog, #nap-summary { padding: 0 !important; }
 .nap-box { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5; color: var(--body-text-color);
   border: 1px solid var(--bc, #9ca3af); background: color-mix(in srgb, var(--bc, #9ca3af) 14%, transparent); }
 .nap-box ul { margin: 6px 0 0 20px; padding: 0; }
@@ -1242,11 +1242,9 @@ kbd { display: inline-block; min-width: 20px; padding: 0 5px; text-align: center
 #nap-btns { gap: 10px; flex-wrap: wrap; }
 #nap-btns button { min-height: 48px; font-size: 16px; font-weight: 800; min-width: 140px !important; }
 #nap-start:not(:disabled), #nap-start-open:not(:disabled) { background: #1677ff !important; border-color: #0f5fd1 !important; color: #fff !important; }
-#nap-start:disabled, #nap-start-open:disabled, #nap-retry:disabled, #nap-cancel:disabled, #nap-go:disabled { opacity: .45; cursor: not-allowed; }
+#nap-start:disabled, #nap-start-open:disabled, #nap-retry:disabled, #nap-cancel:disabled { opacity: .45; cursor: not-allowed; }
 #nap-retry { background: var(--background-fill-secondary) !important; color: var(--body-text-color) !important;
   border: 1px solid var(--border-color-primary) !important; }
-#nap-go { min-height: 56px; font-size: 18px; font-weight: 800; }
-#nap-go:not(:disabled) { background: #16a34a !important; border-color: #15803d !important; color: #fff !important; }
 #nap-log textarea { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.4; }
 .nap-prog { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-radius: 10px;
   background: var(--block-background-fill); border: 1px solid var(--border-color-primary); }
@@ -1506,7 +1504,7 @@ NAP_WARN_HTML = ('<div class="nap-box nap-warn"><b>Ảnh mặt người thật c
                  'ảnh chụp màn hình trang này hay file kết quả vào chat AI hay dịch vụ ngoài nào.<br>'
                  f'Nhận .jpg, .jpeg, .png; tối đa {nap_anh.MAX_BYTES // 1048576} MB mỗi ảnh và {nap_anh.MAX_FILES} ảnh mỗi lần. '
                  'Mỗi lần nạp tạo một lượt mới trong <code>runs\\</code>; lượt đang rà dở không bị đụng tới.</div>')
-NO_RUN_HTML = ('<div class="m28-empty">Chưa có lượt nào: nạp ảnh ở tab <b>Nạp ảnh</b>, rồi bấm <b>Rà lượt này</b>.</div>')
+NO_RUN_HTML = ('<div class="m28-empty">Chưa có lượt nào: nạp ảnh ở tab <b>Nạp ảnh</b> bằng <b>Upload &amp; Open</b> (hoặc mở đợt ở tab <b>Các đợt</b> → <b>Rà đợt này</b>).</div>')
 HEAD_NAP_HTML = ('<div class="m28-head"><div class="m28-top"><div class="m28-title">Rà soát nhãn nháp M28</div>'
                  '<div class="m28-sub">chưa có lượt nào · người rà <b>{rev}</b></div></div></div>')
 
@@ -1549,8 +1547,8 @@ class AppCtx:
     smoke_job: object = None           # nap_anh.SmokeJob: kiểm tra nhanh CVAT (cvat_smoke.py) bằng tiến trình con
     push_pending: object = None        # dot_anh.Pending: yêu cầu xác nhận đẩy (mã ngẫu nhiên)
     dot_pending: object = None         # dot_anh.Pending: yêu cầu xác nhận xoá ở tab Các đợt
-    switch_to: object = None           # (run_dir, Store) khi bấm "Rà lượt này"
-    auto_open: object = None           # tên lượt vừa bấm "Nạp & Mở": chuẩn bị xong thì tự làm như bấm "Rà lượt này" (một lần)
+    switch_to: object = None           # (run_dir, Store) khi chuyển lượt (Upload & Open xong, hoặc Rà đợt này ở tab Các đợt)
+    auto_open: object = None           # tên lượt vừa bấm "Upload & Open": chuẩn bị xong thì tự chuyển trang sang lượt đó (một lần)
     closing: bool = False              # đã xác nhận "Đóng trang rà soát" (một lần duy nhất cho mọi tab): mọi handler ghi từ chối
     close_lock: object = dataclasses.field(default_factory=threading.Lock, repr=False)
     dong_ho: object = None             # dong_ho.DongHo của thư mục dự án (dong_ho_ui.get_dh); trạng thái nằm trong file nên dựng lại ctx không mất phiên
@@ -1562,7 +1560,7 @@ class AppCtx:
     layout_error: object = None
 
     def next_reviewer(self):
-        """Tên người rà cho LƯỢT MỞ TIẾP THEO (Rà lượt này, chuyển đợt): tên mặc định đã lưu ở tab Cài đặt, không có thì tên của trang này.
+        """Tên người rà cho LƯỢT MỞ TIẾP THEO (Upload & Open, chuyển đợt): tên mặc định đã lưu ở tab Cài đặt, không có thì tên của trang này.
         `reviewer` của ctx KHÔNG đổi giữa chừng: lượt đang mở vẫn ghi vào triage_<tên cũ>.csv."""
         return cai_dat.get().next_reviewer(self.reviewer)
 
@@ -1601,7 +1599,7 @@ class AppCtx:
 
 
 def _nap_tab(gr, demo, store, ctx, dh=None):
-    """Tab "Nạp ảnh": kéo thả -> kiểm file -> tạo lượt mới -> prepare (tiến trình con) -> Rà lượt này. Sự kiện dùng concurrency_id
+    """Tab "Nạp ảnh": kéo thả -> kiểm file -> tạo lượt mới -> prepare (tiến trình con) -> tự mở lượt (Upload & Open). Sự kiện dùng concurrency_id
     "nap" / "nap_tick" / "nap_huy", KHÔNG dùng "m28", để rà tiếp được trong lúc prepare chạy."""
     job = ctx.job
     thumb_dir = os.path.join(ctx.tmp_dir, "nap_thumbs")
@@ -1620,35 +1618,22 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
     note_tb = gr.Textbox(label=f"Ghi chú về đợt này (không bắt buộc, tối đa {nap_anh.NOTE_MAX} ký tự)", max_length=nap_anh.NOTE_MAX, lines=2,
                          max_lines=4, elem_id="nap-ghichu", placeholder="Ví dụ: ảnh buổi sáng, camera cửa vào")
     with gr.Row(elem_id="nap-btns"):
-        b_start_open = gr.Button("Nạp & Mở", variant="primary", elem_id="nap-start-open", interactive=False)
-        b_start = gr.Button("Nạp & Tiếp tục", variant="primary", elem_id="nap-start", interactive=False)
-        b_cancel = gr.Button("Huỷ", variant="stop", elem_id="nap-cancel", interactive=False)
-        b_retry = gr.Button("Thử lại", elem_id="nap-retry", interactive=False)
-    gr.HTML('<div class="nap-note"><b>Nạp &amp; Mở</b>: chuẩn bị xong thì tự mở trang rà soát lượt này. <b>Nạp &amp; Tiếp tục</b>: chuẩn bị xong vẫn ở lại tab này '
-            '(để nạp thêm đợt khác, rồi bấm <b>Rà lượt này</b> khi cần).</div>', elem_id="nap-btn-note", apply_default_css=False)
+        b_start_open = gr.Button("Upload & Open", variant="primary", elem_id="nap-start-open", interactive=False)
+        b_start = gr.Button("Upload & Continue", variant="primary", elem_id="nap-start", interactive=False)
+        b_cancel = gr.Button("Cancel", variant="stop", elem_id="nap-cancel", interactive=False)
+        b_retry = gr.Button("Retry", elem_id="nap-retry", interactive=False)
+    gr.HTML('<div class="nap-note"><b>Upload &amp; Open</b>: chuẩn bị xong thì tự mở trang rà soát lượt này. <b>Upload &amp; Continue</b>: chuẩn bị xong vẫn ở lại tab này '
+            '(để nạp thêm đợt khác); mở đợt đó sau ở tab <b>Các đợt</b> → <b>Rà đợt này</b>.</div>', elem_id="nap-btn-note", apply_default_css=False)
     msg = gr.HTML(elem_id="nap-msg", apply_default_css=False)
     prog = gr.HTML(elem_id="nap-prog", apply_default_css=False)
     log_tb = gr.Textbox(label="Log prepare", lines=10, max_lines=14, interactive=False, autoscroll=True, elem_id="nap-log")
     summary = gr.HTML(elem_id="nap-summary", apply_default_css=False)
-    old_note = gr.HTML(elem_id="nap-oldnote", apply_default_css=False)
-    b_go = gr.Button("Rà lượt này", variant="primary", elem_id="nap-go", interactive=False)
     target = gr.Textbox(visible="hidden", elem_id="nap-target")
     timer = gr.Timer(1.0, active=False)
     plan_state = gr.State(None)
 
     opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1)
-    job_outs = [prog, log_tb, summary, b_start_open, b_start, b_cancel, b_retry, b_go, old_note, timer]
-
-    def note_old():
-        """Ghi chú về lượt đang rà dở (nằm cạnh nút Rà lượt này)."""
-        if store is None:
-            return ""
-        old, p = run_name(store.run_dir), store.progress()
-        return ('<div class="nap-note">Lượt <b>%s</b> còn <b>%d</b> mặt chưa rà; các lần bấm đã lưu trong <code>triage_%s.csv</code> '
-                'nên không mất gì. Mở lại bằng lệnh <code>%s</code>.<br>Nếu bạn mở trang bằng <code>m28.py review --run %s</code> thì lệnh đó '
-                'sẽ báo chưa bấm Xong cho lượt cũ: gõ lại sau.</div>'
-                % (html.escape(old), p["remaining"], html.escape(store.reviewer),
-                   html.escape(nap_anh.reopen_command(store.run_dir, store.reviewer)), html.escape(old)))
+    job_outs = [prog, log_tb, summary, b_start_open, b_start, b_cancel, b_retry, timer]
 
     def job_update(snap, n_ok):
         """Tuple cập nhật đúng thứ tự job_outs từ ảnh chụp của job."""
@@ -1669,7 +1654,7 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         return (nap_anh.progress_html(snap, prog_v) if prog_v else "", "\n".join(snap["lines"]), extra, can_start, can_start,
                 gr.update(interactive=running and not snap.get("cancelling")),
                 gr.update(interactive=usable and st in ("loi", "da_huy") and not running),
-                gr.update(interactive=go_ok and not running), note_old(), gr.Timer(active=running))
+                gr.Timer(active=running))
 
     def box(text, level="info"):
         return f'<div class="m28-msg m-{level}" role="status">{html.escape(text)}</div>' if text else ""
@@ -1702,7 +1687,7 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         return (plan_st, gr.update(value=items, visible=bool(items)), nap_anh.rejected_html(plan), nap_anh.count_html(plan), can_start, can_start)
 
     def start(files, name, note, plan_st, open_after):
-        """Chung cho Nạp & Tiếp tục (open_after=False) và Nạp & Mở (True: chuẩn bị xong thì tự mở trang rà soát, xem on_auto_open)."""
+        """Chung cho Upload & Continue (open_after=False) và Upload & Open (True: chuẩn bị xong thì tự mở trang rà soát, xem on_auto_open)."""
         def refuse(text):
             gr.Warning(text, title="Chưa bắt đầu được")
             return ((gr.update(), plan_st, gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), box(text, "warn"))
@@ -1710,7 +1695,7 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         if ctx.closing:
             return refuse(nap_anh.CLOSING_MSG)
         if job.running:
-            return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Huỷ.")
+            return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Cancel.")
         if ctx.layout_error:
             return refuse(ctx.layout_error)
         env["errs"] = nap_anh.preflight(ctx.project_root)
@@ -1744,7 +1729,7 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         if ctx.closing:
             return refuse(nap_anh.CLOSING_MSG)
         if job.running:
-            return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Huỷ.")
+            return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Cancel.")
         if job.state not in ("loi", "da_huy") or not job.run:
             return refuse("Chưa có lượt nào bị lỗi hoặc bị huỷ để thử lại.")
         env["errs"] = nap_anh.preflight(ctx.project_root)
@@ -1779,9 +1764,9 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         if ctx.smoke_job.running:
             return refuse("Đang chạy kiểm tra nhanh CVAT (tab Cài đặt): chờ xong rồi chuyển lượt.")
         if snap["state"] == "dang_chay":
-            return refuse(f"Đang chuẩn bị lượt {snap['run']}: chờ xong hoặc bấm Huỷ.")
+            return refuse(f"Đang chuẩn bị lượt {snap['run']}: chờ xong hoặc bấm Cancel (tab Nạp ảnh).")
         if snap["state"] != "xong":
-            return refuse("Chưa chuẩn bị xong lượt nào: bấm Nạp & Mở hoặc Nạp & Tiếp tục (hoặc Thử lại) và chờ xong.")
+            return refuse("Chưa chuẩn bị xong lượt nào: bấm Upload & Open hoặc Upload & Continue (hoặc Retry) và chờ xong.")
         res = nap_anh.read_prepare_result(snap["run_dir"], _read_no_face)
         if not res["n_queue"]:
             return refuse("Lượt này không có mặt nào để rà.")
@@ -1795,8 +1780,8 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         return box(f"Đang chuyển sang lượt {snap['run']}: trang mất kết nối 1–3 giây rồi tự tải lại.", "ok"), "Rà soát M28 · " + snap["run"]
 
     def on_auto_open(plan_st):
-        """Chạy mỗi nhịp của đồng hồ: lượt vừa bấm Nạp & Mở chuẩn bị xong thì làm đúng như bấm Rà lượt này (on_go: mọi kiểm tra vẫn nguyên). Một lần duy nhất;
-        lỗi, huỷ hoặc không có mặt nào để rà thì thôi, bấm Rà lượt này tay khi cần."""
+        """Chạy mỗi nhịp của đồng hồ: lượt vừa bấm Upload & Open chuẩn bị xong thì chuyển trang sang lượt đó (on_go: mọi kiểm tra vẫn nguyên). Một lần duy nhất;
+        lỗi, huỷ hoặc không có mặt nào để rà thì thôi (mở tay ở tab Các đợt → Rà đợt này khi cần)."""
         act = nap_anh.auto_open_action(ctx.auto_open, job.snapshot())
         if act in ("none", "wait"):
             return gr.skip(), ""
@@ -1817,7 +1802,6 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
     b_cancel.click(on_cancel, [plan_state], [msg] + job_outs, **dict(opts, concurrency_id="nap_huy"))
     timer.tick(on_tick, [plan_state], job_outs, **dict(opts, concurrency_id="nap_tick"))
     timer.tick(on_auto_open, [plan_state], [msg, target], **dict(opts, concurrency_id="nap_tick")).then(None, [target], None, js=NAP_SWITCH_JS)
-    b_go.click(on_go, [plan_state], [msg, target], **nap).then(None, [target], None, js=NAP_SWITCH_JS)
     return nap_load                         # build_ui gọi lại khi chọn tab Nạp ảnh: model/cấu hình vừa cài ở tab Cài đặt có hiệu lực ngay
 
 
@@ -2030,7 +2014,7 @@ def main(argv=None):
                       f"Mở {url} nếu trình duyệt chưa tự mở (chỉ máy này vào được).\n"
                       "Rà xong bấm Xong, rồi bấm 'Đóng trang rà soát' (sau Xong vẫn Đẩy lên CVAT, xem Các đợt, xuất Ca khó được); "
                       "Ctrl+C để đóng giữa chừng (gõ lại đúng lệnh để làm tiếp).", flush=True)
-            while demo.is_running:                    # nút 'Đóng trang rà soát' (hoặc Rà lượt này) gọi demo.close() và vòng này kết thúc; Xong không tắt gì
+            while demo.is_running:                    # nút 'Đóng trang rà soát' (hoặc chuyển lượt) gọi demo.close() và vòng này kết thúc; Xong không tắt gì
                 time.sleep(0.2)
             if ctx.switch_to is None:
                 if store is None:

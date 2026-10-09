@@ -412,9 +412,9 @@ def count_files(path, exts=EXTS):
 
 
 def auto_open_action(run, snap):
-    """Việc của nút Nạp & Mở ở mỗi nhịp đồng hồ: `run` = lượt đang chờ tự mở (None = không chờ), `snap` = job.snapshot().
-    'none' không chờ gì; 'wait' lượt đó còn đang chuẩn bị; 'go' lượt đó chuẩn bị xong → làm như bấm Rà lượt này (một lần);
-    'drop' lượt đó lỗi, bị huỷ hoặc job đã sang lượt khác → bỏ yêu cầu (bấm Rà lượt này tay khi cần)."""
+    """Việc của nút Upload & Open ở mỗi nhịp đồng hồ: `run` = lượt đang chờ tự mở (None = không chờ), `snap` = job.snapshot().
+    'none' không chờ gì; 'wait' lượt đó còn đang chuẩn bị; 'go' lượt đó chuẩn bị xong → chuyển trang sang lượt đó (một lần);
+    'drop' lượt đó lỗi, bị huỷ hoặc job đã sang lượt khác → bỏ yêu cầu (mở tay ở tab Các đợt → Rà đợt này khi cần)."""
     if not run:
         return "none"
     if snap.get("run") != run:
@@ -539,7 +539,7 @@ class PrepareJob(ChildJob):
         """Chạy prepare cho lượt `run` (thư mục runs_root/run đã có inbox/). Đang chạy thì RunError."""
         with self._lock:
             if self.running:
-                raise RunError(f"Đang chuẩn bị lượt {self.run}: chờ xong hoặc bấm Huỷ.")
+                raise RunError(f"Đang chuẩn bị lượt {self.run}: chờ xong hoặc bấm Cancel ở tab Nạp ảnh.")
             run_dir = os.path.join(runs_root, run)
             if not _inside(run_dir, runs_root) or not os.path.isdir(os.path.join(run_dir, "inbox")):
                 raise RunError(f"Lượt {run} chưa có thư mục inbox: không chạy được.")
@@ -853,8 +853,8 @@ def failure_html(snap):
     if st == "loi":
         return ('<div class="nap-box nap-err" role="alert"><b>prepare dừng với lỗi'
                 + (f" (mã {snap['returncode']})" if snap["returncode"] is not None else "")
-                + '.</b> Xem dòng cuối của log bên trên, sửa nguyên nhân rồi bấm <b>Thử lại</b> (bước đã xong được bỏ qua).</div>')
+                + '.</b> Xem dòng cuối của log bên trên, sửa nguyên nhân rồi bấm <b>Retry</b> (bước đã xong được bỏ qua).</div>')
     if st == "da_huy":
-        return ('<div class="nap-box nap-warn" role="status"><b>Đã huỷ.</b> Ảnh vẫn nằm trong inbox của lượt; bấm <b>Thử lại</b> để chạy tiếp '
+        return ('<div class="nap-box nap-warn" role="status"><b>Đã huỷ.</b> Ảnh vẫn nằm trong inbox của lượt; bấm <b>Retry</b> để chạy tiếp '
                 "(lượt dở nằm trong runs\\, xoá tay nếu không cần).</div>")
     return ""

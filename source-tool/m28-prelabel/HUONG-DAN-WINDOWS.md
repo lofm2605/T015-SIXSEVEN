@@ -104,7 +104,7 @@ Cần `face_landmarker.task` (mục 3, cùng thư mục chạy lệnh) và `conf
 python tool\review_app.py --nap P1
 ```
 Trình duyệt mở http://127.0.0.1:7860. Ở tab **Nạp ảnh**: kéo thả ảnh .jpg/.jpeg/.png (tối đa 25 MB mỗi ảnh, 200 ảnh mỗi lần) vào ô lớn, kiểm danh sách ảnh bị loại,
-bấm **Nạp & Mở** (chờ thanh tiến độ xong, trang tự chuyển sang rà) hoặc **Nạp & Tiếp tục** (ở lại tab này; xong thì bấm **Rà lượt này** khi cần). Có nút Huỷ, Thử lại, không gõ lệnh nào.
+bấm **Upload & Open** (chờ thanh tiến độ xong, trang tự chuyển sang rà) hoặc **Upload & Continue** (ở lại tab này; mở đợt đó sau ở tab **Các đợt** → **Rà đợt này**). Có nút Cancel, Retry, không gõ lệnh nào.
 Ảnh nằm ở `runs\NAP_001\inbox` (tên đã làm sạch; tên gốc ở `runs\NAP_001\nap_ten_goc.csv`, log ở `runs\NAP_001\nap_log.txt`). Đang rà dở lượt khác thì vẫn nạp được:
 lượt cũ không bị đụng, mở lại bằng lệnh cmd in ra (ví dụ `python tool\review_app.py runs\F5 P1`). Ảnh mặt người thật chỉ xử lý trên máy bạn, không đưa vào chat AI.
 
@@ -126,7 +126,7 @@ Sau họp xoá các gói zip đã nhận nếu không cần nữa.
 
 **Quy trình một buổi (mỗi người):**
 1. Đầu buổi **khôi phục task của hôm nay** (file sao lưu P4 phát) rồi mở trang: `chay.bat` mục 1 (hoặc `python tool\review_app.py --nap P5`).
-2. **Nạp ảnh** ở tab Nạp ảnh (**Nạp & Tiếp tục** hoặc **Nạp & Mở**): đồng hồ ⏱ ở đầu trang **tự chạy** cho người rà của trang (phải là P1–P5; đặt ở tab Cài đặt). Nhóm lấy từ file nhóm, người chưa có trong file thì mặc định `assisted` và dòng bấm giờ ghi cờ `chua_co_nhom`. Đã có phiên thì giữ nguyên, không đè.
+2. **Nạp ảnh** ở tab Nạp ảnh (**Upload & Continue** hoặc **Upload & Open**): đồng hồ ⏱ ở đầu trang **tự chạy** cho người rà của trang (phải là P1–P5; đặt ở tab Cài đặt). Nhóm lấy từ file nhóm, người chưa có trong file thì mặc định `assisted` và dòng bấm giờ ghi cờ `chua_co_nhom`. Đã có phiên thì giữ nguyên, không đè.
 3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm nút **Dừng** cạnh đồng hồ, quay lại bấm **Tiếp tục** (cùng một nút, đổi chữ). Không còn tab Đồng hồ.
 4. Xong việc: `python tool\m28.py collect --task demo-<đợt> --reviewer P<số của bạn>` **trước**, rồi bấm **Đóng trang rà soát** → **Lưu số đo**. Trang ghi `outputs\timing\timing_P<số>.csv` và gói **`outputs\ket_qua\ketqua_P<số>_<DDMM>_<đợt>.zip`**: **gửi file `.zip` này cho nhóm trưởng** (Drive riêng tư của đội; gói không có ảnh, token, email hay đường dẫn). Chưa thấy nhãn đã xuất trong `raw\` thì trang nhắc chạy `collect` trước; bấm Lưu số đo thêm lần nữa mới lưu gói chỉ có thời gian. Sau khi lưu, bấm **Huỷ** để ở lại trang hoặc **Đóng trang rà soát** để tắt.
 5. Quên bấm, nghỉ lâu, qua nửa đêm, tắt trang đột ngột: phiên vẫn lưu được, kèm cờ `canh_bao` trong dòng bấm giờ để thống kê đánh dấu (không còn nút Sửa thời gian trên giao diện); khi có cảnh báo chưa xử lý, Lưu số đo hỏi bằng cách bấm thêm một lần. Đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, bấm **Tiếp tục**. Muốn bỏ phiên (không lưu gì): hộp Đóng trang → **Bỏ phiên đồng hồ**, bấm hai lần.

@@ -18,7 +18,7 @@ Sáu pha (A-F):
   E  sửa theo đợt kiểm 6/10: đổi bộ lọc, lưới rỗng, dải xanh sau Xong (không lớp phủ), phím tắt/tab cũ không ghi sau Xong, gõ chữ ở tab khác
      được, hộp Đóng (cảnh báo khi chưa Xong, Huỷ, Esc, focus mặc định ở Huỷ), Host lạ bị chặn, cổng bận, tab thứ hai sau Xong, bấm lặp.
   F  tab "Nạp ảnh": kéo thả (set_input_files) ảnh in-cabin thật + ảnh xấu vào trang đang rà dở F5UP, tạo lượt NAP_001, prepare thật (MediaPipe),
-     tóm tắt, màn hẹp 420 px, "Rà lượt này" (trang tự tải lại cùng cổng, lượt F5UP không bị đụng), Huỷ rồi Thử lại (NAP_002), thiếu model
+     tóm tắt, màn hẹp 420 px, "Rà đợt này" ở tab Các đợt (trang tự tải lại cùng cổng, lượt F5UP không bị đụng), Cancel rồi Retry (NAP_002), thiếu model
      (khung đỏ, khoá nút), nút Đóng bị từ chối khi prepare đang chạy, và chế độ `review_app.py --nap` từ trang trống (Đóng ở chế độ này). Cần thêm --imgs (mặc định <work>/data/frames).
 Mọi tiến trình đã mở được dọn ở `finally`. Cổng 7871–7879, M28_NO_BROWSER=1.
 """
@@ -756,6 +756,14 @@ def _goto_tab(pg):
     pg.wait_for_selector('#nap-drop', timeout=15000)
 
 
+def _open_run(pg, run):
+    """Mở một đợt bằng nút "Rà đợt này" ở tab Các đợt (tab Nạp ảnh không còn nút Rà lượt này)."""
+    pg.get_by_role('tab', name='Các đợt').click()
+    sel = f'#dot-root [data-act="ra"][data-run="{run}"]'
+    pg.wait_for_selector(sel + ':not([disabled])', timeout=30000)
+    pg.click(sel)
+
+
 def _drop(pg, files, n_ok, n_rej):
     pg.set_input_files('#nap-drop input[type=file]', files)
     pg.wait_for_function("([a, b]) => { const t = document.querySelector('#nap-count')?.innerText || ''; "
@@ -845,17 +853,16 @@ def phase_f(pw, W, shots, ports, imgs_dir):
         summ = pg.inner_text('#nap-summary')
         check('Mặt dùng được' in summ and 'Không thấy mặt' in summ and 'Vào hàng đợi rà' in summ and 'xam.png' in summ
               and 'mặt lớn nhất' in summ and 'm28.py push --run NAP_001' in summ, f'tóm tắt có thẻ số, xam.png, ghi chú nhiều mặt, lệnh push: {summ[:160]!r}')
-        check('Xong' in pg.inner_text('#nap-prog') and pg.locator('#nap-go').is_enabled(), 'nút Rà lượt này bật')
+        check('Xong' in pg.inner_text('#nap-prog') and pg.locator('#nap-go').count() == 0, 'xong prepare; không còn nút Rà lượt này')
         pg.screenshot(path=os.path.join(shots, 'upload_03_ket_qua_desktop.png'), full_page=True)
         pg.set_viewport_size({'width': 420, 'height': 900})
         pg.wait_for_timeout(600)
         check(pg.evaluate('document.documentElement.scrollWidth') <= 420, f"420 px: không cuộn ngang (scrollWidth {pg.evaluate('document.documentElement.scrollWidth')})")
-        check(pg.locator('#nap-go').bounding_box()['height'] >= 48, 'nút Rà lượt này đủ to ở màn hẹp')
         pg.screenshot(path=os.path.join(shots, 'upload_04_hep.png'), full_page=True)
         pg.set_viewport_size({'width': 1440, 'height': 900})
         pg.wait_for_timeout(400)
-        # 5. chuyển sang NAP_001
-        pg.click('#nap-go')
+        # 5. chuyển sang NAP_001 (tab Các đợt → Rà đợt này)
+        _open_run(pg, 'NAP_001')
         pg.wait_for_function("document.title === 'Rà soát M28 · NAP_001'", timeout=60000)
         pg.wait_for_selector('#info .face-name', timeout=60000)
         pg.wait_for_function("() => { const i = document.querySelector('#big img'); return i && i.complete && i.naturalWidth > 0; }", timeout=30000)
@@ -881,10 +888,10 @@ def phase_f(pw, W, shots, ports, imgs_dir):
         txt = open(out_log, encoding='utf-8').read()
         check('Chuyển sang lượt NAP_001' in txt and 'F5UP còn 3 mặt chưa rà' in txt and 'review_app.py runs\\F5UP P2' in txt,
               'cmd in lượt cũ còn 3 mặt và lệnh mở lại')
-        # 4. Huỷ và Thử lại (từ trang NAP_001)
+        # 4. Cancel và Retry (từ trang NAP_001)
         _goto_tab(pg)
-        note = pg.inner_text('#nap-oldnote')
-        check('NAP_001' in note and 'chưa rà' in note and 'triage_P2.csv' in note, f'ghi chú lượt đang rà dở: {note[:120]!r}')
+        check(pg.locator('#nap-start-open').inner_text().strip() == 'Upload & Open' and pg.locator('#nap-retry').inner_text().strip() == 'Retry',
+              'nút tab Nạp ảnh ghi tiếng Anh')
         check('NAP_002' in (pg.locator('#nap-name textarea, #nap-name input').first.get_attribute('placeholder') or ''), 'ô tên lượt gợi ý NAP_002')
         _drop(pg, inp['six'][:3], 3, 0)
         pg.click('#nap-start')
@@ -893,11 +900,11 @@ def phase_f(pw, W, shots, ports, imgs_dir):
         pg.wait_for_function("(document.querySelector('#nap-summary')?.innerText || '').includes('Đã huỷ')", timeout=30000)
         n2 = os.path.join(runs, 'NAP_002')
         check(os.path.isdir(os.path.join(n2, 'inbox')) and os.path.getsize(os.path.join(n2, 'nap_log.txt')) > 0, 'NAP_002: sau Huỷ còn inbox và log')
-        check(pg.locator('#nap-retry').is_enabled() and pg.locator('#nap-cancel').is_disabled() and pg.locator('#nap-go').is_disabled(),
-              'sau Huỷ: Thử lại bật, Huỷ và Rà lượt này khoá')
+        check(pg.locator('#nap-retry').is_enabled() and pg.locator('#nap-cancel').is_disabled(),
+              'sau Cancel: Retry bật, Cancel khoá')
         pg.click('#nap-retry')
         pg.wait_for_selector('#nap-summary .nap-sum', timeout=300000)
-        check(len(json.load(open(os.path.join(n2, 'flags', 'flags.json'), encoding='utf-8'))) >= 2, 'Thử lại: NAP_002 chạy xong, có flags.json')
+        check(len(json.load(open(os.path.join(n2, 'flags', 'flags.json'), encoding='utf-8'))) >= 2, 'Retry: NAP_002 chạy xong, có flags.json')
         pg.screenshot(path=os.path.join(shots, 'upload_07_huy_thu_lai.png'), full_page=True)
         check(ui.external() == [], 'không có request ra ngoài 127.0.0.1')
         check(not ui.errors or all('Failed to load resource' in e or 'ERR_' in e or 'WebSocket' in e for e in ui.errors), f'không lỗi JS: {ui.errors[:3]}')
@@ -953,10 +960,8 @@ def phase_f(pw, W, shots, ports, imgs_dir):
         check(pg.title() == 'Rà soát M28 · Nạp ảnh' and 'Đủ model và cấu hình' in pg.inner_text('#nap-env'), 'chế độ --nap: tiêu đề và môi trường đủ')
         _drop(pg, inp['six'][:4], 4, 0)
         pg.fill('#nap-name textarea, #nap-name input', 'KHACH_A')
-        pg.click('#nap-start')
-        pg.wait_for_selector('#nap-summary .nap-sum', timeout=300000)
-        pg.click('#nap-go')
-        pg.wait_for_function("document.title === 'Rà soát M28 · KHACH_A'", timeout=60000)
+        pg.click('#nap-start-open')                              # Upload & Open: chuẩn bị xong thì trang tự mở lượt
+        pg.wait_for_function("document.title === 'Rà soát M28 · KHACH_A'", timeout=300000)
         pg.wait_for_selector('#info .face-name', timeout=60000)
         check(os.path.isdir(os.path.join(W3, 'runs', 'KHACH_A', 'inbox')) and ui.progress()[1] >= 3, f'từ trang trống sang lượt KHACH_A: {ui.progress()}')
         check(not os.path.exists(os.path.join(W3, 'runs', 'KHACH_A', 'review', 'triage_P2.csv')), 'chưa bấm gì thì chưa có triage')

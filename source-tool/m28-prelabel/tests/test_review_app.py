@@ -987,7 +987,7 @@ def test_close_check_refuses_while_jobs_run_or_switching(five):
     assert ra.close_check(None, ctx)[0]                                # chế độ --nap
     ctx.job = busy_job('NAP_007')
     ok, msg, lv = ra.close_check(s, ctx)
-    assert not ok and lv == 'warn' and 'Đang chuẩn bị lượt NAP_007' in msg and 'chờ xong hoặc bấm Huỷ' in msg
+    assert not ok and lv == 'warn' and 'Đang chuẩn bị lượt NAP_007' in msg and 'chờ xong hoặc bấm Cancel ở tab Nạp ảnh' in msg
     ctx.job = ra.AppCtx(reviewer='P2', run_dir=five).job
     ctx.push_job = busy_job('R1')
     ok, msg, lv = ra.close_check(s, ctx)
@@ -1013,7 +1013,7 @@ def test_close_flag_is_set_once_and_blocks_every_writer(five):
     assert ctx.begin_close() is False                                  # lần hai (tab khác / bấm đúp): không đặt lại
     ok, msg, lv = ra.close_check(s, ctx)
     assert not ok and 'đang đóng' in msg
-    assert not ctx.begin_switch(('x', None))                           # Rà lượt này sau khi đóng: từ chối
+    assert not ctx.begin_switch(('x', None))                           # chuyển lượt sau khi đóng: từ chối
     assert ctx.switch_to is None
     s.closed = True
     ses = ra.new_session(s)
@@ -1067,7 +1067,7 @@ def test_xong_no_longer_closes_server_source():
     src = open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()
     body = src[src.index('    def on_xong(ses):'):src.index('    def on_reselect(ses):')]
     assert 'demo.close' not in body and 'Timer' not in body and 'job.running' not in body    # Xong không tắt gì, không cần từ chối vì job
-    assert src.count('demo.close(verbose=False)') == 3                 # nút Đóng, 'Rà lượt này' (tab Nạp ảnh), KeyboardInterrupt; chuyển lượt từ tab Các đợt nằm ở dot_ui
+    assert src.count('demo.close(verbose=False)') == 3                 # nút Đóng, chuyển lượt khi Upload & Open xong (tab Nạp ảnh), KeyboardInterrupt; chuyển lượt từ tab Các đợt nằm ở dot_ui
     assert 'elem_id="btn-dong"' in src and 'close_once' not in src
 
 

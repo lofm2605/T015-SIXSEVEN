@@ -1086,7 +1086,7 @@ def test_tflip_html_and_confirm_text():
 # ---------- giao diện Gradio: dựng được, đủ elem_id, handler gọi trực tiếp ----------
 OLD_IDS = ('btn-push', 'push-panel', 'push-msg', 'push-prog', 'push-log', 'push-cancel', 'push-confirm', 'push-confirm-ok', 'push-confirm-cancel', 'push-result',
            'tab-dot', 'dot-root', 'dot-act', 'dot-act-go', 'dot-modal', 'dot-modal-ok', 'dot-modal-cancel', 'btn-nhan', 'btn-xong', 'tab-ra', 'tab-nap', 'shown',
-           'tabs', 'btn-dong', 'close-confirm', 'close-confirm-ok', 'tab-cakho', 'tab-hop', 'nap-go', 'progress')
+           'tabs', 'btn-dong', 'close-confirm', 'close-confirm-ok', 'tab-cakho', 'tab-hop', 'progress')
 NEW_IDS = ('tab-caidat', 'cd-cvat-status', 'cd-url', 'cd-token', 'cd-eye', 'cd-org', 'cd-remember', 'cd-remember-note', 'cd-save', 'cd-test', 'cd-forget', 'cd-cvat-msg',
            'cd-forget-confirm', 'cd-forget-ok', 'cd-forget-cancel', 'cd-reviewer-info', 'cd-reviewer', 'cd-reviewer-save', 'cd-paths-info', 'cd-images', 'cd-images-check',
            'cd-images-save', 'cd-model', 'cd-model-check', 'cd-model-save', 'cd-tflip-info', 'cd-tflip', 'cd-tflip-ack', 'cd-tflip-set', 'cd-tflip-null', 'cd-tflip-confirm',

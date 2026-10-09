@@ -123,7 +123,7 @@ def test_nap_anh_starts_the_clock_for_the_page_reviewer_and_wires_the_chip(app):
     assert v['dot'] == 'NAP_008' and v['n_mat'] == 12 and v['dieu_kien'] == 'assisted' and 'NAP_008' in ctx.dh_started          # không có file nhóm: mặc định assisted
     src = open(os.path.join(TOOL, 'review_app.py'), encoding='utf-8').read()
     assert 'dong_ho_ui.auto_start(gr, ctx, run,' in src and src.index('job.start(run, ctx.runs_root, ctx.project_root)') < src.index('dong_ho_ui.auto_start(')
-    assert 'for ev in (ev_start, ev_open):' in src and 'ev.then(dh.refresh, None, dh.outs, **dh.opts)' in src                  # chip cập nhật ngay sau Nạp & Tiếp tục / Nạp & Mở
+    assert 'for ev in (ev_start, ev_open):' in src and 'ev.then(dh.refresh, None, dh.outs, **dh.opts)' in src                  # chip cập nhật ngay sau Upload & Continue / Upload & Open
 
 
 def test_auto_start_takes_the_group_from_the_config_file(app):

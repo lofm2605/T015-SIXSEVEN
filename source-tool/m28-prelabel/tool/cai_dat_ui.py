@@ -164,7 +164,7 @@ def reviewer_info_html(snap, ctx_reviewer, run_name, next_name):
     if next_name != ctx_reviewer:
         out.append(f"Lượt đang mở vẫn ghi vào <code>triage_{_e(ctx_reviewer)}.csv</code>; từ lượt sau dùng <b>{_e(next_name)}</b>.")
     out.append("Đổi tên KHÔNG áp dụng ngay cho lượt đang mở vì phần rà dở nằm ở file theo tên cũ. Tên mới có hiệu lực ở lượt kế tiếp "
-               "(bấm <b>Rà lượt này</b> ở tab Nạp ảnh, hoặc chuyển đợt ở tab Các đợt). Mở lại trang bằng dòng lệnh thì tên là tên trong lệnh.")
+               "(Upload &amp; Open ở tab Nạp ảnh, hoặc Rà đợt này ở tab Các đợt). Mở lại trang bằng dòng lệnh thì tên là tên trong lệnh.")
     return "".join(f'<div class="cd-note">{x}</div>' for x in out)
 
 
