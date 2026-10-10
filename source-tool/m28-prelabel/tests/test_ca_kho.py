@@ -650,7 +650,7 @@ def test_next_number():
 
 def test_repo_that_dang_trong_va_tim_duoc():
     pb, qd = ck.find_repo_docs()
-    assert pb and qd and os.path.basename(pb) == 'problem-backlog.md' and os.path.dirname(os.path.abspath(pb)) == REPO
+    assert pb and qd and os.path.basename(pb) == 'problem-backlog.md' and os.path.dirname(os.path.abspath(pb)) in (REPO, os.path.join(REPO, 'report-tool'))
     assert ck.next_number(ck.read_text(pb), 'P') >= 1 and ck.next_number(ck.read_text(qd), 'QĐ') >= 1
     assert ck.find_repo_docs('/')[0] is None
 
@@ -659,9 +659,20 @@ def test_repo_that_dang_trong_va_tim_duoc():
 TEMPLATE_RE = re.compile(r'```markdown\n(.*?)```', re.DOTALL)
 
 
+def repo_doc(name):
+    """problem-backlog.md / so-quyet-dinh.md của repo chứa tool: ở gốc repo (repo đội) hoặc report-tool/ (repo project của khoá); không có thì bỏ qua bài."""
+    for p in (os.path.join(REPO, name), os.path.join(REPO, 'report-tool', name)):
+        if os.path.isfile(p):
+            return p
+    pytest.skip(f'repo này không có {name}')
+
+
 def template_labels(path, head):
     text = open(path, encoding='utf-8').read()
-    block = [b for b in TEMPLATE_RE.findall(text) if b.startswith(head)][0]
+    blocks = [b for b in TEMPLATE_RE.findall(text) if b.startswith(head)]
+    if not blocks:
+        pytest.skip(f'{os.path.basename(path)} của repo này không có mẫu {head}')
+    block = blocks[0]
     return [m.group(1) for m in re.finditer(r'^- \*\*(.+?):\*\*', block, re.MULTILINE)], block
 
 
@@ -684,8 +695,8 @@ def test_bien_ban_khop_mau_repo(proj):
     m.set_fields('P1|CKA|F_001.png', 'da_chot', 'Chỉ sửa trong CVAT', now=at(33))    # SWAP: không vào backlog, vẫn có QĐ
     res = minutes_of(m)
     md = res['md']
-    pb_labels, pb_block = template_labels(os.path.join(REPO, 'problem-backlog.md'), '## P-NNN')
-    qd_labels, qd_block = template_labels(os.path.join(REPO, 'so-quyet-dinh.md'), '## QĐ-NNN')
+    pb_labels, pb_block = template_labels(repo_doc('problem-backlog.md'), '## P-NNN')
+    qd_labels, qd_block = template_labels(repo_doc('so-quyet-dinh.md'), '## QĐ-NNN')
     fenced = TEMPLATE_RE.findall(md)
     p_blocks = [b for b in fenced if '## P-001' in b][0].split('\n\n## ')
     qd_blocks = [b for b in fenced if '## QĐ-001' in b][0].split('\n\n## ')
@@ -768,8 +779,8 @@ def test_write_minutes_khong_dung_repo_docs(proj, tmp_path):
     docs = tmp_path / 'docs'
     docs.mkdir()
     pb, qd = docs / 'problem-backlog.md', docs / 'so-quyet-dinh.md'
-    shutil.copy(os.path.join(REPO, 'problem-backlog.md'), pb)
-    shutil.copy(os.path.join(REPO, 'so-quyet-dinh.md'), qd)
+    shutil.copy(repo_doc('problem-backlog.md'), pb)
+    shutil.copy(repo_doc('so-quyet-dinh.md'), qd)
     h = [hashlib.sha256(p.read_bytes()).hexdigest() for p in (pb, qd)]
     res = ck.write_minutes(m, str(pb), str(qd), now=at(60))
     assert [hashlib.sha256(p.read_bytes()).hexdigest() for p in (pb, qd)] == h
@@ -839,3 +850,14 @@ def test_ca_kho_khong_import_gradio_hay_review_app():
 def test_serve_dir_chi_outputs_ca_kho(tmp_path):
     p = ck.serve_dir(str(tmp_path))
     assert p == os.path.join(str(tmp_path), 'outputs', 'ca_kho') and os.path.isdir(p)
+
+
+def test_tim_repo_docs_trong_report_tool_cua_repo_project(tmp_path):
+    """Repo project của khoá để problem-backlog.md và so-quyet-dinh.md trong report-tool/ (không ở gốc): vẫn tìm được từ thư mục tool."""
+    tool = tmp_path / 'source-tool' / 'm28-prelabel' / 'tool'
+    tool.mkdir(parents=True)
+    (tmp_path / 'report-tool').mkdir()
+    for n in ('problem-backlog.md', 'so-quyet-dinh.md'):
+        (tmp_path / 'report-tool' / n).write_text('# x\n', encoding='utf-8')
+    pb, qd = ck.find_repo_docs(str(tool))
+    assert pb == str(tmp_path / 'report-tool' / 'problem-backlog.md') and qd == str(tmp_path / 'report-tool' / 'so-quyet-dinh.md')

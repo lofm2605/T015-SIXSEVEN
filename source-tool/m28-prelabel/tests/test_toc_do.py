@@ -165,6 +165,9 @@ def test_giay_ra_tom_tat_bo_ngoai_lai_dem_rieng():
 
 
 def test_timing_cols_khop_facetimer():
-    src = open(os.path.join(HERE, '..', '..', '..', 'de-tai-m28', 'p5-thi-nghiem.md'), encoding='utf-8').read()
+    p = os.path.join(HERE, '..', '..', '..', 'de-tai-m28', 'p5-thi-nghiem.md')
+    if not os.path.isfile(p):
+        pytest.skip('repo này không có bản chụp kế hoạch de-tai-m28/')
+    src = open(p, encoding='utf-8').read()
     assert '"date", "person", "condition", "task", "job", "block", "seq"' in src and td.TIMING_COLS == TIMING_COLS
     assert len(td.TIMING_COLS) == 12

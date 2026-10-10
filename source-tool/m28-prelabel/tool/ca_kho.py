@@ -1032,12 +1032,14 @@ class Meeting:
 
 # ---------- biên bản ----------
 def find_repo_docs(start=TOOL_DIR):
-    """(đường dẫn problem-backlog.md, đường dẫn so-quyet-dinh.md): đi lên tối đa 4 cấp từ `start`; không thấy thì None."""
+    """(đường dẫn problem-backlog.md, đường dẫn so-quyet-dinh.md): đi lên tối đa 4 cấp từ `start`, mỗi cấp xem thư mục đó rồi thư mục con report-tool/
+    (bố cục repo project của khoá); không thấy thì None."""
     cur = os.path.abspath(start)
     for _ in range(5):
-        pb, qd = os.path.join(cur, "problem-backlog.md"), os.path.join(cur, "so-quyet-dinh.md")
-        if os.path.isfile(pb) or os.path.isfile(qd):
-            return (pb if os.path.isfile(pb) else None), (qd if os.path.isfile(qd) else None)
+        for d in (cur, os.path.join(cur, "report-tool")):
+            pb, qd = os.path.join(d, "problem-backlog.md"), os.path.join(d, "so-quyet-dinh.md")
+            if os.path.isfile(pb) or os.path.isfile(qd):
+                return (pb if os.path.isfile(pb) else None), (qd if os.path.isfile(qd) else None)
         parent = os.path.dirname(cur)
         if parent == cur:
             break
