@@ -615,6 +615,111 @@ class DeleteTaskJob(ChildJob):
                          f"xoa task --run {run} --confirm-name {task}")
 
 
+NGUOI_DO_RE = re.compile(r"P[1-5]")     # người của đồng hồ / gói kết quả (dong_ho.NGUOI_OK)
+EXIT_CHUA_XONG = 3                      # = m28core.collect.EXIT_CHUA_XONG: --require-completed chặn vì còn job chưa completed
+DONG_XML, DONG_CHUA_XONG = "COLLECT_XML: ", "COLLECT_JOBS_PENDING: "
+
+
+def collect_cmd(task, person, tool_dir=None, python=None, force=False):
+    """Lệnh gộp job của nút Merge jobs & Finish: collect cả task thành MỘT file raw/<task>_<Pk>_<DDMM>.xml (--overwrite: xuất lại nhãn mới nhất,
+    --no-per-job: không tách file job). force=False thêm --require-completed (còn job chưa completed thì chưa xuất, thoát mã 3).
+    Token KHÔNG ở đây: đi qua môi trường của tiến trình con."""
+    tool_dir = TOOL_DIR if tool_dir is None else tool_dir
+    cmd = [python or sys.executable, "-u", os.path.join(tool_dir, "m28.py"), "collect", "--task", task, "--reviewer", person, "--overwrite", "--no-per-job"]
+    return cmd if force else cmd + ["--require-completed"]
+
+
+class CollectJob(ChildJob):
+    """Gộp các job của task CVAT của MỘT đợt thành một file (`m28.py collect`, tiến trình con; chỉ tiến trình con gọi mạng). Log: runs/<lượt>/collect_log.txt.
+    force: bỏ --require-completed (người dùng đã xác nhận gộp dù còn job chưa completed)."""
+    KIND = "collect"
+    LOG_NAME = "collect_log.txt"
+    NEEDS_CVAT = True
+
+    def __init__(self, popen=subprocess.Popen):
+        super().__init__(popen)
+        self.person = self.task = None
+        self.force = False
+
+    def start(self, run, runs_root, project_root, person, task, force=False, tool_dir=None, python=None):
+        with self._lock:
+            if self.running:
+                raise RunError(f"Đang gộp job của đợt {self.run}: chờ xong hoặc bấm Cancel ở khung gộp job của tab Các đợt.")
+            run_dir = _check_cvat_start(self, run, runs_root, task)
+            if not isinstance(person, str) or not NGUOI_DO_RE.fullmatch(person):
+                raise RunError(f"Người {person!r} không hợp lệ: đồng hồ và gói kết quả chỉ nhận P1 đến P5 (đặt người rà ở tab Cài đặt).")
+            self.person, self.task, self.force = person, task, bool(force)
+            self._launch(run, run_dir, collect_cmd(task, person, tool_dir, python, force), project_root,
+                         f"collect --task {task} --reviewer {person} --overwrite --no-per-job" + ("" if force else " --require-completed"))
+
+    def snapshot(self):
+        s = super().snapshot()
+        with self._lock:
+            s.update(person=self.person, task=self.task, force=self.force)
+        return s
+
+
+def _json_dong(lines, prefix):
+    out = []
+    for ln in lines:
+        if ln.startswith(prefix):
+            try:
+                d = json.loads(ln[len(prefix):])
+            except ValueError:
+                continue
+            if isinstance(d, dict):
+                out.append(d)
+    return out
+
+
+def _so(v):
+    """Số nguyên thật (không nhận bool) hoặc None."""
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _jobs_sach(jobs):
+    """Danh sách job từ dòng máy đọc, chỉ giữ trường cần và đúng kiểu (giá trị từ tiến trình con, không tin mù). kind: nhan | gan_tay | khong_ro."""
+    out = []
+    for j in jobs if isinstance(jobs, list) else []:
+        if not isinstance(j, dict) or _so(j.get("id")) is None:
+            continue
+        out.append(dict(id=j["id"], state=str(j.get("state", ""))[:40], stage=str(j.get("stage", ""))[:40], type=str(j.get("type") or "annotation")[:40],
+                        start=_so(j.get("start")), stop=_so(j.get("stop")), n=_so(j.get("n")),
+                        kind=j.get("kind") if j.get("kind") in ("nhan", "gan_tay") else "khong_ro"))
+    return out
+
+
+def read_collect_result(lines, project_root, task, person):
+    """Kết quả của CollectJob từ các dòng log: dict(xml=đường dẫn tuyệt đối | None, xml_rel, jobs=[...], pending=[...] | None).
+    Chỉ nhận file nằm NGAY trong <project>/raw (không nhận thư mục con như raw/_cu/), tên đúng <task>_<person>_<DDMM>.xml (không đoán tên theo ngày
+    của trang: tiến trình con có thể chạy qua nửa đêm). pending: danh sách job chưa completed khi --require-completed chặn (None nếu không bị chặn)."""
+    raw_dir = os.path.join(project_root, "raw")
+    out = dict(xml=None, xml_rel="", jobs=[], pending=None)
+    pat = re.compile(re.escape(task) + "_" + re.escape(person) + r"_\d{4}\.xml")
+    for d in _json_dong(lines, DONG_XML):
+        if d.get("task") != task or d.get("nguoi") != person or not isinstance(d.get("xml"), str):
+            continue
+        rel = d["xml"].replace("\\", "/")
+        if not pat.fullmatch(os.path.basename(rel)):
+            continue
+        p = os.path.normpath(os.path.join(project_root, *rel.split("/")))
+        try:
+            ngay_raw = os.path.dirname(os.path.realpath(p)) == os.path.realpath(raw_dir)
+        except (OSError, ValueError):
+            ngay_raw = False
+        if not ngay_raw or not _inside(p, raw_dir) or not os.path.isfile(p):
+            continue
+        out.update(xml=p, xml_rel=os.path.join("raw", os.path.basename(p)), jobs=_jobs_sach(d.get("jobs")))
+    for d in _json_dong(lines, DONG_CHUA_XONG):
+        if d.get("task") != task:
+            continue
+        jobs = _jobs_sach(d.get("jobs"))
+        pend = d.get("pending") if isinstance(d.get("pending"), list) else []
+        ids = {i for i in pend if isinstance(i, int) and not isinstance(i, bool)}
+        out.update(jobs=jobs, pending=[j for j in jobs if j["id"] in ids])
+    return out
+
+
 SMOKE_DIR = "_smoke"                # runs/_smoke/: nơi cvat_smoke.py ghi dữ liệu giả, đánh dấu dang_mo.json và báo cáo
 SMOKE_N = 12                        # số bước của cvat_smoke.py
 SMOKE_LINE = re.compile(r"^\[(\d+)/12\] ([^:]+): (.*)$")

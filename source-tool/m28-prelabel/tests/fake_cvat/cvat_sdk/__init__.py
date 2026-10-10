@@ -17,6 +17,9 @@ Giả lỗi theo lệnh bằng biến môi trường M28_FAKE_CVAT_CONTROL (JSON
   remove_fail: true             Task.remove ném 500 (không xoá được task)
   sublabel_order_shuffle: true  project tạo ra có sublabel đảo ngược thứ tự (để thử nhánh "thứ tự lệch")
   svg_label_ids: true           project tạo ra có sublabel id và svg đổi data-label-name thành data-label-id như server thật
+  export_fail: true             Task.export_dataset ném 500 (không ghi file zip nào) để thử collect --overwrite giữ nguyên bản cũ
+Job có `type` (mặc định "annotation" như server thật; test đặt "ground_truth" bằng khoá `type` trong bản ghi job của trạng thái). Đổi
+`state` của job (ví dụ "completed") cũng sửa thẳng bản ghi job trong trạng thái.
 Cho tool/cvat_smoke.py: projects.retrieve(id) (404 nếu không có), Project.get_tasks(), Project.remove() (xoá luôn task của project như server
 thật), Project.fetch(); xuất nhãn ghi width/height thật của ảnh PNG đã tải lên (không đọc được thì 512).
 Thuộc tính M28_FAKE_CVAT = True đánh dấu gói giả: tool/cai_dat_thu.py bỏ qua tiền kiểm HTTP /api/server/about (không có server HTTP);
@@ -282,6 +285,7 @@ class Job:
     def __init__(self, rec):
         self.id, self.start_frame, self.stop_frame = rec["id"], rec["start_frame"], rec["stop_frame"]
         self.stage, self.state = rec["stage"], rec["state"]
+        self.type = rec.get("type", "annotation")
 
 
 class Task:
@@ -365,6 +369,9 @@ class Task:
         rec = self._rec()
         if format_name != "CVAT for images 1.1":
             raise ApiException(status=400, reason="Bad Request")
+        if _control().get("export_fail"):
+            raise ApiException(status=500, reason="Server Error", http_resp=_Model(dict(status=500, reason="Server Error",
+                                                                                         data="export crashed (giả)")))
         ann = (rec["annotations"] or {}).get("by_name", {})
         drop = bool(_control().get("drop_point"))
         out = ['<?xml version="1.0" encoding="utf-8"?>', "<annotations>", "  <version>1.1</version>"]

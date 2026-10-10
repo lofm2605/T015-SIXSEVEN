@@ -211,6 +211,31 @@ def test_xay_ket_qua_final_draft_changed_points_and_nme(tmp_path):
     assert goi_kq.xay_ket_qua(root, cfg, 'assisted', 'NAP_001', None) == ([], dict(co_nhan=False, co_nhap=False, nhan_file='', canh_bao=['chua_co_nhan']))
 
 
+def test_ket_qua_tu_nhan_da_doc_trung_xay_ket_qua_tu_file(tmp_path):
+    import eval50
+    root = du_an(tmp_path)
+    cfg = cfg_real()
+    anh = {f'F_{i:03d}.png': mat_mau(i) for i in range(1, 4)}
+    viet_nhap(root, 'NAP_001', anh)
+    lp = viet_nhan(root, 'demo-NAP_001', 'P5', '1410', {k: {n: (x + (6.0 if n == 'mattrai_3' else 0.0), y) for n, (x, y) in v.items()} for k, v in anh.items()})
+    labels = eval50.read_labels(lp, cfg, warn=lambda *_a: None)
+    for dk in ('assisted', 'manual'):
+        kq, info = goi_kq.xay_ket_qua(root, cfg, dk, 'NAP_001', lp)
+        kq2, co_nhap = goi_kq.ket_qua_tu_nhan(root, cfg, dk, 'NAP_001', labels)
+        assert kq2 == kq and co_nhap == info['co_nhap'] == (dk == 'assisted')
+    assert goi_kq.ket_qua_tu_nhan(root, cfg, 'assisted', 'KHONG_CO', labels)[1] is False
+
+
+def test_ghi_goi_thu_muc_khac_mac_dinh_van_la_outputs_ket_qua(tmp_path):
+    root = du_an(tmp_path)
+    r = goi_kq.ghi_goi(root, nd_mau(ket_qua=[mat_kq()]), ddmm='1410', thu_muc=os.path.join('outputs', 'goi_nhom'))
+    assert r == dict(ten='ketqua_P5_1410_NAP_001', zip=os.path.join('outputs', 'goi_nhom', 'ketqua_P5_1410_NAP_001.zip'),
+                     json=os.path.join('outputs', 'goi_nhom', 'ketqua_P5_1410_NAP_001.json'))
+    assert sorted(os.listdir(os.path.join(root, 'outputs', 'goi_nhom'))) == ['ketqua_P5_1410_NAP_001.json', 'ketqua_P5_1410_NAP_001.zip']
+    assert not os.path.exists(os.path.join(root, 'outputs', 'ket_qua'))
+    assert ghi(root, nd_mau(ket_qua=[mat_kq()]))['zip'] == os.path.join('outputs', 'ket_qua', 'ketqua_P5_1410_NAP_001.zip')
+
+
 def test_xay_ket_qua_old_label_or_empty_file(tmp_path):
     root = du_an(tmp_path)
     p = os.path.join(root, 'raw', 'demo-X_P5_1410.xml')

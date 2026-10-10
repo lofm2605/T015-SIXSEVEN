@@ -754,7 +754,7 @@ def test_package_without_labels_has_time_only_and_a_hint_then_reexport_after_col
     v = d.bat_dau('P5', 'assisted', dot='NAP_001', task='demo-NAP_001', n_mat=2)
     g.tick(60)
     r = d.xong_luu('P5', v['rev'])
-    assert any('collect' in t for t in r['thong_bao'])
+    assert any('Merge jobs & Finish' in t for t in r['thong_bao'])
     nd, _w = goi_kq.doc_goi(os.path.join(root, r['goi']['zip']))
     assert nd['ket_qua'] == [] and nd['co_nhan'] is False
     ls = d.goi_da_luu('P5')

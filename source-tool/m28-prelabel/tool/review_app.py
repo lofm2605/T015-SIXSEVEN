@@ -9,7 +9,8 @@ Sửa điểm không làm ở đây (làm trong CVAT).
 
 Trang có các tab: "Rà soát" (như cũ, thêm khung "Đẩy lên CVAT" dưới nút Xong: logic day_cvat.py, giao diện dot_ui.py), "Nạp ảnh" (logic
 ở nap_anh.py: tạo lượt mới NAP_xxx từ ảnh kéo thả, chạy prepare bằng tiến trình con, rồi "Upload & Open" tự chuyển trang sang lượt mới (hoặc "Review batch" ở tab Các đợt) mà
-không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT), "Ca khó", "Họp team",
+không gõ lệnh), "Các đợt" (dot_anh.py + dot_ui.py: thẻ đợt, lưới ảnh, xoá mềm ảnh/đợt, thùng rác, xoá task trên CVAT; nút "Merge jobs & Finish" của gop_job.py gộp mọi job
+của task thành MỘT file raw\\<task>_<Pk>_<DDMM>.xml rồi dừng và lưu đồng hồ của đợt), "Ca khó", "Họp team",
 Đồng hồ bấm giờ (dong_ho.py + dong_ho_ui.py, KHÔNG có tab riêng): chip ⏱ ở đầu trang thấy ở mọi tab, MỖI ĐỢT MỘT ĐỒNG HỒ (QĐ-007: giờ đợt này không lẫn đợt khác), tự chạy khi bấm Nạp ảnh, MỘT nút Pause/Resume; Save timing (dòng `outputs\\timing\\timing_<Pk>.csv`
 đúng định dạng facetimer và gói kết quả `outputs\\ket_qua\\ketqua_<Pk>_<DDMM>_<đợt>.zip` gửi nhóm trưởng) hoặc Discard session nằm trong hộp "Đóng trang rà soát?"; nguồn sự thật là đồng hồ phía server, trạng thái ghi ra file nên đóng tab không mất; đóng trang thì tự tạm dừng),
 "Thống kê" (thong_ke.py + thong_ke_html.py + thong_ke_ui.py: CHỈ BA chỉ số của thí nghiệm hai nhóm độc lập (QĐ-006): NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa, so sánh thời gian manual với
@@ -17,7 +18,7 @@ assisted; đọc gói kết quả, nhãn raw\\ và timing; chỉ đọc, tính k
 dữ liệu, không train, xem trước = dry-run, ghi dưới outputs\\train_sets), "Cài đặt" (cai_dat.py + cai_dat_ui.py: link/token/tổ chức CVAT, người rà mặc định, đường dẫn ảnh và model, t_flip của cờ low_conf).
 Nút Xong chỉ ghi done.txt và khoá việc bấm quyết định (hiện dải xanh ở đầu trang); trang KHÔNG tự tắt, vẫn Đẩy lên CVAT, xem Các đợt,
 xuất Ca khó được. Chỗ duy nhất tắt trang là nút "Close page" (có hộp xác nhận, đứng trên các tab), Ctrl+C, hoặc chuyển lượt.
-Trang KHÔNG gọi mạng: đẩy lên CVAT, xoá task và "Thử kết nối CVAT" chạy bằng tiến trình con (`m28.py push ...`, cai_dat_thu.py). Link/token CVAT
+Trang KHÔNG gọi mạng: đẩy lên CVAT, xoá task, gộp job và "Thử kết nối CVAT" chạy bằng tiến trình con (`m28.py push ...`, `m28.py collect ...`, cai_dat_thu.py). Link/token CVAT
 lấy từ cai_dat.py: giá trị vừa Save ở tab Cài đặt > biến môi trường CVAT_URL/CVAT_ACCESS_TOKEN > file đã lưu ngoài repo (chỉ khi bật "Nhớ trên máy
 này"); token chỉ vào tiến trình con qua môi trường của nó, không bao giờ qua đối số dòng lệnh, log, runs/ hay HTML.
 
@@ -57,6 +58,7 @@ import cai_dat  # noqa: E402  (cài đặt dùng chung cả tiến trình: CVAT,
 import cai_dat_ui  # noqa: E402  (tab Cài đặt; không import gradio ở đầu module)
 import dong_ho_ui  # noqa: E402  (chip đồng hồ ở đầu trang: bấm giờ theo phiên; không import gradio ở đầu module)
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
+import gop_job  # noqa: E402  (Merge jobs & Finish: yêu cầu gộp còn dở chặn chuyển lượt; không gradio, không mạng)
 import loc_ui  # noqa: E402  (tab Lọc dữ liệu; không import gradio ở đầu module)
 import nap_anh  # noqa: E402  (logic tab Nạp ảnh; chỉ thư viện chuẩn)
 import thong_ke_ui  # noqa: E402  (tab Thống kê; không import gradio ở đầu module)
@@ -914,6 +916,9 @@ def close_check(store, ctx):
         return False, f"Đang {'đẩy' if busy is ctx.push_job else 'xoá task của'} lượt {busy.run} (CVAT): chờ xong hoặc bấm Cancel.", "warn"
     if ctx.smoke_job.running:
         return False, "Đang chạy kiểm tra nhanh CVAT (tab Cài đặt): chờ xong hoặc bấm Cancel check.", "warn"
+    if ctx.collect_job.running:
+        return False, (f"Đang gộp job CVAT của lượt {ctx.collect_job.run} (Merge jobs & Finish, tab Các đợt): chờ xong hoặc bấm Cancel ở khung gộp job "
+                       "của tab Các đợt."), "warn"
     return True, "", "info"
 
 
@@ -1545,6 +1550,9 @@ class AppCtx:
     push_job: object = None            # nap_anh.PushJob: đẩy lên CVAT bằng tiến trình con
     del_job: object = None             # nap_anh.DeleteTaskJob: xoá task trên CVAT bằng tiến trình con
     smoke_job: object = None           # nap_anh.SmokeJob: kiểm tra nhanh CVAT (cvat_smoke.py) bằng tiến trình con
+    collect_job: object = None         # nap_anh.CollectJob: gộp job của task CVAT một đợt (nút Merge jobs & Finish) bằng tiến trình con
+    gop: object = None                 # yêu cầu Merge jobs & Finish đang dở: dict(run, person, task, was_running, phase, force, ...) (gop_job.py)
+    gop_lock: object = dataclasses.field(default=None, repr=False)        # threading.Lock: kết quả job gộp được xử lý đúng một lần dù nhiều tab cùng tick
     push_pending: object = None        # dot_anh.Pending: yêu cầu xác nhận đẩy (mã ngẫu nhiên)
     dot_pending: object = None         # dot_anh.Pending: yêu cầu xác nhận xoá ở tab Các đợt
     switch_to: object = None           # (run_dir, Store) khi chuyển lượt (Upload & Open xong, hoặc Review batch ở tab Các đợt)
@@ -1590,6 +1598,10 @@ class AppCtx:
             self.del_job = nap_anh.DeleteTaskJob()
         if self.smoke_job is None:
             self.smoke_job = nap_anh.SmokeJob()
+        if self.collect_job is None:
+            self.collect_job = nap_anh.CollectJob()
+        if self.gop_lock is None:
+            self.gop_lock = threading.Lock()
         if self.push_pending is None:
             self.push_pending = dot_anh.Pending()
         if self.dot_pending is None:
@@ -1698,6 +1710,11 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
             return refuse(f"Đang chuẩn bị lượt {job.run}: chờ xong hoặc bấm Cancel.")
         if ctx.layout_error:
             return refuse(ctx.layout_error)
+        if open_after:                                                  # Upload & Open sẽ chuyển trang (ctx mới): yêu cầu Merge jobs & Finish còn dở thì mất
+            why = gop_job.block_reason(ctx, dong_ho_ui.get_dh(ctx), "bấm Upload & Open (hoặc bấm Upload & Continue: không chuyển trang)",
+                                       again="Bấm Upload & Open lại.")
+            if why:
+                return refuse(why)
         env["errs"] = nap_anh.preflight(ctx.project_root)
         if env["errs"]:
             return refuse("Thiếu model hoặc cấu hình, xem khung đỏ ở đầu tab: " + env["errs"][0])
@@ -1763,6 +1780,13 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
             return refuse(f"Đang làm việc với CVAT cho lượt {busy.run}: chờ xong rồi chuyển lượt.")
         if ctx.smoke_job.running:
             return refuse("Đang chạy kiểm tra nhanh CVAT (tab Cài đặt): chờ xong rồi chuyển lượt.")
+        later = f"Mở lượt {snap['run']} ở tab Các đợt → Review batch." if snap.get("run") else ""
+        if ctx.collect_job.running:
+            return refuse(f"Đang gộp job CVAT của lượt {ctx.collect_job.run} (tab Các đợt): chờ xong hoặc bấm Cancel ở khung gộp job của tab Các đợt "
+                          f"rồi mới chuyển lượt. {later}".strip())
+        why = gop_job.block_reason(ctx, dong_ho_ui.get_dh(ctx), "chuyển lượt", again=later)
+        if why:                                                         # chuyển lượt dựng ctx mới: yêu cầu Merge jobs & Finish còn dở (hộp Merge anyway / Cancel) sẽ mất
+            return refuse(why if ctx.gop is None else f"{why} {later}".strip())
         if snap["state"] == "dang_chay":
             return refuse(f"Đang chuẩn bị lượt {snap['run']}: chờ xong hoặc bấm Cancel (tab Nạp ảnh).")
         if snap["state"] != "xong":
@@ -1887,7 +1911,7 @@ def build_ui(store, ctx=None):
                 nap_load = _nap_tab(gr, demo, store, ctx, dh)
             with gr.Tab("Các đợt", id="dot", elem_id="tab-dot") as tab_dot:
                 refresh, dot_ses, dot_outs, dot_opts = dot_ui.dot_tab(
-                    gr, demo, store, ctx, dict(Store=Store, switch_js=NAP_SWITCH_JS, run_name=run_name))
+                    gr, demo, store, ctx, dict(Store=Store, switch_js=NAP_SWITCH_JS, run_name=run_name, dh=dh))
             with gr.Tab("Ca khó", id="cakho", elem_id="tab-cakho") as tab_ck:
                 ck_fn, ck_in, ck_out, ck_opts = ca_kho.member_tab(gr, demo, store, ctx)
             with gr.Tab("Họp team", id="hop", elem_id="tab-hop"):
@@ -2048,11 +2072,14 @@ def main(argv=None):
             demo.close(verbose=False)
         return 0
     finally:
-        for j in (ctx.job, ctx.push_job, ctx.del_job, ctx.smoke_job):
+        for j in (ctx.job, ctx.push_job, ctx.del_job, ctx.smoke_job, ctx.collect_job):
             if j.running:
                 if j is ctx.smoke_job:
                     print("Đóng trang khi kiểm tra nhanh CVAT còn chạy: đã dừng; lần chạy sau (python tool\\cvat_smoke.py) tự dọn task demo-smoke "
                           "còn dở nhờ runs\\_smoke\\dang_mo.json.", flush=True)
+                elif j is ctx.collect_job:
+                    print(f"Đóng trang khi đang gộp job CVAT của lượt {j.run}: đã dừng (đồng hồ của đợt đang tạm dừng, chưa lưu). Mở lại trang, bấm Merge jobs & Finish "
+                          f"ở thẻ đợt (tab Các đợt), hoặc chạy python tool\\m28.py collect --task {j.task} --reviewer {j.person} --overwrite.", flush=True)
                 elif j is not ctx.job:
                     print(f"Đóng trang khi còn việc CVAT đang chạy cho lượt {j.run}: đã dừng; xem runs\\{j.run}\\push.json và chạy "
                           f"python tool\\m28.py push --run {j.run} --resume hoặc --cleanup nếu task đã tạo dở.", flush=True)

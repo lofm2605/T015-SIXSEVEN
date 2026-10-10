@@ -13,6 +13,7 @@ import csv
 import inspect
 import json
 import os
+import re
 import sys
 import types
 import zipfile
@@ -884,3 +885,20 @@ def test_signatures_match_real_sdk(cvat, monkeypatch):
         assert {'job_file_mapping', 'image_quality', 'use_cache'} <= set(models.DataRequest.openapi_types)
     finally:
         real.restore()
+
+
+@pytest.mark.parametrize('server, ok', [('2.77.0', True), ('2.77.3', True), ('2.78.0', True), ('2.79.0', False), ('2.76.1', False), ('3.0.0', False)])
+def test_server_one_minor_newer_is_accepted_like_the_sdk_supported_list(cvat, monkeypatch, capsys, server, ok):
+    """cvat-sdk 2.77 khai hỗ trợ server 2.77 và 2.78 (máy chủ repo chạy CVAT 2.78.0): pipeline.json vẫn ghim 2.77.0, server mới hơn MỘT bậc vẫn đẩy được,
+    kèm dòng nhắc; xa hơn thì dừng như cũ, không tạo task."""
+    monkeypatch.setenv('M28_FAKE_CVAT_CONTROL', json.dumps({'version': server}))
+    w = make_run(n_nhan=2, n_tay=0)
+    if ok:
+        do_push(w)
+        out = capsys.readouterr().out
+        assert calls(cvat, 'tasks.create_from_data') and (('mới hơn cvat_version' in out) == server.startswith('2.78'))
+    else:
+        with pytest.raises(SystemExit, match=f'Bản server CVAT là {re.escape(server)}'):
+            do_push(w)
+        assert calls(cvat, 'tasks.create_from_data') == []
+    assert cvat_io.ban_chap_nhan('2.77.0') == {(2, 77), (2, 78)}

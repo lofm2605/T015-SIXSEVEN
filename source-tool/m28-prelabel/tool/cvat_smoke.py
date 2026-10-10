@@ -2,7 +2,8 @@
 
     python tool\\cvat_smoke.py [--dry-run] [--url URL] [--org ORG] [--giu-task] [--giu-project] [--timeout GIAY]
 
-Dùng để từng người chạy trên máy có CVAT 2.77 thật, xem phần nào chạy được, và gửi báo cáo cho P4 khi có HỎNG. Token CHỈ lấy từ biến
+Dùng để từng người chạy trên máy có CVAT thật (2.77, hoặc 2.78 như máy chủ repo: cùng tập bản mà cvat_io.check_version của push/collect nhận, tức
+cvat_io.ban_chap_nhan(cvat_version của config\\pipeline.json)), xem phần nào chạy được, và gửi báo cáo cho P4 khi có HỎNG. Token CHỈ lấy từ biến
 môi trường CVAT_ACCESS_TOKEN hoặc từ cấu hình tab Cài đặt (đã bật "Nhớ trên máy này"); KHÔNG có cờ --token. Link CVAT_URL cũng lấy từ đó
 (--url / --org chỉ ghi đè link / tổ chức, token giữ nguyên nguồn). Chỉ gọi tới đúng link đó.
 
@@ -10,6 +11,8 @@ Các bước (mã cố định; in `[k/12] <tên bước>: ...`; kết quả Đ�
    1 Cấu hình cục bộ   2 XML nháp cục bộ   3 Link và token   4 Kết nối và phiên bản   5 Project và label skeleton   6 Dọn demo-smoke cũ
    7 Tạo task và job   8 Nhập XML nháp   9 Xuất và đọc lại (collect thật)   10 Bảo vệ an toàn   11 Xoá task demo-smoke   12 Project sau khi chạy
 Không gọi lại logic của push/collect: bước 7-9, 11 gọi push.push, collect.collect, push.delete_task; bước 5 gọi push.get_project_id.
+Bước 9 còn thử hai cờ của nút Merge jobs & Finish trên server thật (không thêm lời gọi SDK nào): --require-completed với job còn mới phải thoát mã 3
+và không ghi gì; --overwrite phải xuất lại, chuyển bản cũ vào raw\\_cu và đọc state/stage/type của job về dạng chữ thường (ví dụ new).
 
 Dữ liệu giả (sinh trong runs/_smoke/<giờ>/): 4 ảnh PNG xám/nhiễu kích thước khác nhau (hai ảnh Nhận, một Gán tay CÓ nháp, một Gán tay TRỐNG).
 Hai ảnh Nhận (không phải một) và pipeline tạm job_size=1 để có ba job (Nhận, Nhận, Gán tay) và thử luôn thứ tự frame qua nhiều job.
@@ -54,7 +57,7 @@ REVIEWER = "SMOKE"
 # label trên CVAT: MỘT skeleton cho mỗi nhóm (tên label = tên nhóm, QĐ-004); label face50 một skeleton là bản CŨ
 SMOKE_DIR = "_smoke"
 MARKER = "dang_mo.json"
-WANT_SERVER = "2.77."
+SDK_PIN = cvat_io.DEFAULT_PIPELINE["cvat_version"]     # bản cvat-sdk của nhóm (QĐ-009 giữ 2.77.0); cvat_version nhận được = ban_chap_nhan(SDK_PIN)
 TOL_PX = 0.05
 DAT, HONG, BO = "ĐẠT", "HỎNG", "BỎ QUA"
 NAMES = {1: "Cấu hình cục bộ", 2: "XML nháp cục bộ", 3: "Link và token", 4: "Kết nối và phiên bản", 5: "Project và label skeleton",
@@ -66,7 +69,13 @@ KIND_VI = {"bad_url": "sai link", "bad_token": "sai token", "server_down": "serv
 # (tên file, (rộng, cao), vai): hai Nhận, một Gán tay có nháp, một Gán tay trống
 IMAGES = [("smoke_A.png", (320, 240), "nhan"), ("smoke_B.png", (240, 360), "nhan"),
           ("smoke_C.png", (256, 256), "tay_nhap"), ("smoke_D.png", (200, 300), "tay_trong")]
+JOB_STATES, JOB_STAGES = ("new", "in progress", "rejected", "completed"), ("annotation", "validation", "acceptance")     # giá trị chữ của CVAT 2.77/2.78
 S = cvat_io.scrub
+
+
+def ban_text(want):
+    """Các bản server mà push/collect nhận với cvat_version `want` (đúng cvat_io.ban_chap_nhan), dạng chữ: "2.77.x, 2.78.x"."""
+    return ", ".join(f"{a}.{b}.x" for a, b in sorted(cvat_io.ban_chap_nhan(want))) or "(không đọc được bản)"
 
 
 # ---------- ảnh PNG xám và XML nháp (chỉ thư viện chuẩn) ----------
@@ -316,8 +325,9 @@ class Smoke:
         n_svg = sum(lb["svg"].count('data-type="edge"') for lb in self.labels)
         if len(self.labels) != 7 or len(low) != 50 or n_svg != n_edge:
             return HONG, f"{len(self.labels)} label (cần 7), {len(low)}/50 sublabel kèm low_conf, {n_svg} cạnh (cần {n_edge})."
-        if not str(self.pipe["cvat_version"]).startswith(WANT_SERVER):
-            return HONG, f"cvat_version trong config\\pipeline.json là {self.pipe['cvat_version']}, không phải {WANT_SERVER}x."
+        if cvat_io._mm(self.pipe["cvat_version"]) not in cvat_io.ban_chap_nhan(SDK_PIN):
+            return HONG, (f"cvat_version trong config\\pipeline.json là {self.pipe['cvat_version']}, ngoài các bản cvat-sdk {SDK_PIN} của nhóm hỗ trợ "
+                          f"({ban_text(SDK_PIN)}): trả về {SDK_PIN} (QĐ-009; server 2.78 vẫn chạy được với bản này).")
         return DAT, f"{len(self.labels)} label skeleton theo nhóm: 50 điểm kèm low_conf, {n_edge} cạnh khớp m28_config.json; cvat_version {self.pipe['cvat_version']}."
 
     # --- bước 2 ---
@@ -411,14 +421,21 @@ class Smoke:
 
     # --- bước 4 ---
     def s4(self):
-        res = cai_dat_thu.check(self.env, self.pipe["cvat_version"], self.pipe["project"], probe_timeout=float(self.o.timeout))
+        want = self.pipe["cvat_version"]
+        with contextlib.redirect_stdout(_Tee(self.out)):          # dòng "Lưu ý: server … mới hơn" của check_version in cùng chỗ (đã lọc token)
+            res = cai_dat_thu.check(self.env, want, self.pipe["project"], probe_timeout=float(self.o.timeout))
         self.server_version, self.username = res["server_version"], res["username"]
         if not res["ok"]:
             return HONG, f"{KIND_VI.get(res['error_kind'], 'lỗi khác')}: {res['message']}"
-        if not self.server_version.startswith(WANT_SERVER):
-            return HONG, f"server là bản {self.server_version}, không phải {WANT_SERVER}x: dùng đúng CVAT 2.77 của nhóm (cvat-sdk cũng phải 2.77.0)."
+        got = cvat_io._mm(self.server_version)
+        if got not in cvat_io.ban_chap_nhan(want):                # đúng tập bản mà check_version của push/collect nhận
+            return HONG, (f"server là bản {self.server_version}; với cvat_version {want} của config\\pipeline.json, push/collect chỉ nhận {ban_text(want)}: "
+                          "dùng đúng CVAT của nhóm.")
         sdk = sdk_version()
-        return DAT, (f"server CVAT {self.server_version}, cvat-sdk {sdk}, tài khoản {self.username or '?'}"
+        mm = cvat_io._mm(want)
+        newer = (f" (mới hơn cvat_version {want} của config\\pipeline.json một bậc minor: cvat-sdk {mm[0]}.{mm[1]} khai hỗ trợ bản này nên được nhận, "
+                 "push/collect chạy như với bản cùng minor; cả đội nên dùng cùng một bản CVAT)") if got != mm else ""
+        return DAT, (f"server CVAT {self.server_version}{newer}, cvat-sdk {sdk}, tài khoản {self.username or '?'}"
                      + (f", tổ chức {self.env['org']}" if self.env["org"] else ", không dùng tổ chức") + ".")
 
     # --- bước 5 ---
@@ -568,8 +585,7 @@ class Smoke:
         else:
             sub.append(f"push tự kiểm: {chk['n_day_du']}/{chk['n_nhan']} mặt Nhận đủ điểm, {chk['n_tay_nhap_day_du']}/{chk['n_tay_nhap']} Gán tay có nháp "
                        "đủ điểm và low_conf=true, Gán tay trống không có nhãn")
-        args = types.SimpleNamespace(task=[TASK], reviewer=REVIEWER, skip_export=False, dry_run=False, pipeline=self.pipe_smoke,
-                                     config=os.path.join(self.root, "config", "m28_config.json"), tag=None)
+        args = self.collect_args()
         from m28core import collect
         cwd = os.getcwd()
         tee = _Tee(self.out)
@@ -600,13 +616,161 @@ class Smoke:
         bad += self.s9_jobs(raw_dir, names_raw, raws[0], jobs, want_jobs)
         if not os.path.exists(os.path.join(self.run_dir, "outputs", f"collect_{TASK}.md")):
             bad.append(f"collect không ghi outputs\\collect_{TASK}.md")
-        if bad:
-            return HONG, "nhãn xuất ra khác nhãn đã nhập: " + "; ".join(bad), sub
+        bad_co, sub_co = self.s9_flags(raw_dir, raws[0], jobs) if jobs else ([], [])     # sau mọi kiểm ở trên: --overwrite dời file cũ
+        if bad or bad_co:
+            parts = (["nhãn xuất ra khác nhãn đã nhập: " + "; ".join(bad)] if bad else []) + \
+                    (["cờ collect của nút Merge jobs & Finish: " + "; ".join(bad_co)] if bad_co else [])
+            return HONG, "; ".join(parts), sub + sub_co
         sub.append(f"collect ghi {raws[0]} (+ .txt, {len(jobs)} job) và báo cáo collect_{TASK}.md")
         sub.append(f"tách theo job (offline, từ file cả task): {len(jobs)} file _job<id>.xml với số ảnh {want_jobs}, job cuối chứa đúng ảnh Gán tay; "
                    "id ảnh trong file xuất = số frame trong task (giả định của tach_job)")
         return DAT, (f"3 mặt x 50 điểm đúng tên, đúng thứ tự, low_conf giữ nguyên, sai số toạ độ lớn nhất {worst:.3f}px (cho phép {TOL_PX}), "
-                     "kích thước và tên ảnh khớp, Gán tay trống không có nhãn."), sub
+                     "kích thước và tên ảnh khớp, Gán tay trống không có nhãn."), sub + sub_co
+
+    def collect_args(self, **flags):
+        """Đối số của collect.collect cho task demo-smoke (giống m28.py collect --task demo-smoke --reviewer SMOKE), thêm cờ theo flags."""
+        d = dict(task=[TASK], reviewer=REVIEWER, skip_export=False, dry_run=False, pipeline=self.pipe_smoke,
+                 config=os.path.join(self.root, "config", "m28_config.json"), tag=None)
+        d.update(flags)
+        return types.SimpleNamespace(**d)
+
+    def collect_quiet(self, **flags):
+        """Chạy collect.collect trong runs\\_smoke\\<giờ> với cờ, không in ra màn hình (giữ chữ để đọc dòng máy đọc). Trả (mã SystemExit | None, chữ)."""
+        from m28core import collect
+        tee = _Tee(types.SimpleNamespace(write=lambda s: None, flush=lambda: None))
+        cwd, code = os.getcwd(), None
+        os.chdir(self.run_dir)
+        try:
+            with contextlib.redirect_stdout(tee):
+                collect.collect(self.collect_args(**flags))
+        except SystemExit as e:
+            code = e.code if e.code is not None else 0
+        finally:
+            os.chdir(cwd)
+        return code, tee.text()
+
+    @staticmethod
+    def machine_lines(text, prefix):
+        """Các dòng `<prefix>{JSON}` của collect: dict, hoặc None cho dòng JSON hỏng."""
+        out = []
+        for ln in text.splitlines():
+            if ln.startswith(prefix):
+                try:
+                    d = json.loads(ln[len(prefix):])
+                except ValueError:
+                    d = None
+                out.append(d if isinstance(d, dict) else None)
+        return out
+
+    @staticmethod
+    def job_text_problems(jobs, tag):
+        """Job trong dòng máy đọc phải có state/stage/type là CHỮ THƯỜNG của CVAT (không phải repr của enum SDK), loại annotation, chưa completed."""
+        if not isinstance(jobs, list) or not jobs:
+            return [f"{tag} dòng máy đọc không có danh sách job"]
+        bad = []
+        for j in jobs:
+            if not isinstance(j, dict):
+                bad.append(f"{tag} job không phải đối tượng JSON: {j!r}")
+                continue
+            st, sg, ty = j.get("state"), j.get("stage"), j.get("type")
+            if not isinstance(st, str) or st not in JOB_STATES or not isinstance(sg, str) or sg not in JOB_STAGES:
+                bad.append(f"{tag} job {j.get('id')}: state {st!r} / stage {sg!r} không phải chữ thường của CVAT ({'/'.join(JOB_STATES)})")
+            elif st == "completed":
+                bad.append(f"{tag} job {j.get('id')} của task smoke lại ở state completed (smoke không bấm Finish the job)")
+            if ty != "annotation":
+                bad.append(f"{tag} job {j.get('id')}: type {ty!r} (cần 'annotation')")
+        return bad[:6]
+
+    def s9_flags(self, raw_dir, xml_name, jobs):
+        """Hai cờ của collect mà nút Merge jobs & Finish dùng, thử trên CVAT THẬT (chỉ tasks.list, get_jobs, export_dataset như collect thường):
+        (a) --require-completed khi job còn mới: thoát mã 3 (EXIT_CHUA_XONG), không ghi/đổi file nào trong raw\\ và outputs\\, đúng 1 dòng
+            COLLECT_JOBS_PENDING là JSON hợp lệ liệt kê đủ job;
+        (b) --overwrite: xuất lại; bản cũ (.xml, .txt, file job) chuyển vào raw\\_cu (bản .xml cũ còn nguyên byte), bản mới ghi đúng chỗ và khớp nhãn
+            đã nhập; dòng COLLECT_XML moi=true có state/stage/type của job là chữ thường (ví dụ new).
+        Trả (danh sách vấn đề, các dòng con)."""
+        from m28core import collect
+        bad, sub = [], []
+        ids = sorted(j["id"] for j in jobs)
+        stem = xml_name[:-4]
+        xml_path = os.path.join(raw_dir, xml_name)
+        cu_dir = os.path.join(raw_dir, collect.CU)
+
+        def snap():
+            out = []
+            for d in ("raw", "outputs"):
+                for dp, _dn, fn in os.walk(os.path.join(self.run_dir, d)):
+                    for f in fn:
+                        st = os.stat(os.path.join(dp, f))
+                        out.append((os.path.relpath(os.path.join(dp, f), self.run_dir), st.st_size, st.st_mtime_ns))
+            return sorted(out)
+
+        def why(code):
+            return "collect chạy hết, không chặn" if code is None else f"collect dừng: {S(code)[:200]}" if isinstance(code, str) else f"collect thoát mã {code}"
+
+        # (a) --require-completed
+        before = snap()
+        code, text = self.collect_quiet(require_completed=True)
+        pend = self.machine_lines(text, collect.DONG_CHUA_XONG)
+        if code != collect.EXIT_CHUA_XONG:
+            bad.append(f"(a) --require-completed khi job còn mới: {why(code)} (cần thoát mã {collect.EXIT_CHUA_XONG})")
+        elif snap() != before:
+            bad.append("(a) --require-completed đã chặn nhưng vẫn ghi hoặc đổi file trong raw\\ hay outputs\\")
+        elif len(pend) != 1 or pend[0] is None or pend[0].get("task") != TASK:
+            bad.append(f"(a) cần đúng 1 dòng {collect.DONG_CHUA_XONG.rstrip(": ")} JSON hợp lệ của {TASK}, thấy {len(pend)} dòng")
+        elif sorted(i for i in (pend[0].get("pending") if isinstance(pend[0].get("pending"), list) else []) if isinstance(i, int)) != ids:
+            bad.append(f"(a) pending {pend[0].get('pending')} khác các job của task {ids} (job mới đều chưa completed)")
+        else:
+            probs = self.job_text_problems(pend[0].get("jobs"), "(a)")
+            bad += probs
+            if not probs:
+                sub.append(f"(a) --require-completed: {len(ids)} job chưa completed nên thoát mã {collect.EXIT_CHUA_XONG}, không ghi file nào; "
+                           f"dòng {collect.DONG_CHUA_XONG.rstrip(": ")} liệt kê đủ job (state {', '.join(j['state'] for j in pend[0]['jobs'])})")
+        # (b) --overwrite
+        with open(xml_path, "rb") as f:
+            old_data = f.read()
+        olds = sorted(p for p in os.listdir(raw_dir) if p in (xml_name, stem + ".txt") or p.startswith(stem + "_job"))
+        cu_before = set(os.listdir(cu_dir)) if os.path.isdir(cu_dir) else set()
+        code, text = self.collect_quiet(overwrite=True)
+        if code is not None:
+            bad.append(f"(b) --overwrite: {why(code)}")
+            return bad, sub
+        cu_new = sorted(set(os.listdir(cu_dir)) - cu_before) if os.path.isdir(cu_dir) else []
+
+        def moved(p):
+            s, e = os.path.splitext(p)
+            return [q for q in cu_new if re.fullmatch(re.escape(s) + r"\.cu\d{6}(-\d+)?" + re.escape(e), q)]
+        not_moved = [p for p in olds if len(moved(p)) != 1]
+        if not_moved:
+            bad.append(f"(b) --overwrite không chuyển {not_moved} vào raw\\_cu (mới thấy trong raw\\_cu: {cu_new[:6]})")
+        else:
+            with open(os.path.join(cu_dir, moved(xml_name)[0]), "rb") as f:
+                if f.read() != old_data:
+                    bad.append(f"(b) bản cũ trong raw\\_cu ({moved(xml_name)[0]}) không còn nguyên byte như {xml_name}")
+        if not os.path.isfile(xml_path) or not os.path.isfile(xml_path[:-4] + ".txt"):
+            bad.append(f"(b) --overwrite không ghi lại {xml_name} (+ .txt) sau khi dời bản cũ")
+        else:
+            with open(xml_path, "rb") as f:
+                probs, _w = compare_ann(cvat_io.parse_annotations(f.read()), self.expect, self.names)
+            bad += [f"(b) bản xuất lại: {p}" for p in probs]
+            txt_jobs = collect._jobs_from_txt(xml_path[:-4] + ".txt") or []          # .txt chỉ giữ từ đầu của state ("in progress" -> "in")
+            if sorted(j["id"] for j in txt_jobs) != ids or any(not re.fullmatch(r"[a-z][a-z ]*", j["state"]) for j in txt_jobs):
+                bad.append(f"(b) .txt mới ghi job {[(j['id'], j['state']) for j in txt_jobs]} (cần job {ids}, state là chữ thường của CVAT)")
+        lines = [d for d in self.machine_lines(text, collect.DONG_XML) if d is None or (d.get("task") == TASK and d.get("nguoi") == REVIEWER)]
+        if len(lines) != 1 or lines[0] is None or lines[0].get("moi") is not True or lines[0].get("xml") != f"raw/{xml_name}":
+            bad.append(f"(b) cần đúng 1 dòng {collect.DONG_XML.rstrip(": ")} JSON hợp lệ với moi=true và xml=raw/{xml_name} (thấy "
+                       f"{[d and (d.get('xml'), d.get('moi')) for d in lines]}; nếu vừa qua nửa đêm thì chạy lại)")
+        else:
+            got = lines[0].get("jobs")
+            probs = self.job_text_problems(got, "(b)")
+            got_ids = sorted(j["id"] for j in got if isinstance(j, dict) and isinstance(j.get("id"), int)) if isinstance(got, list) else None
+            if not probs and got_ids != ids:
+                probs.append(f"(b) jobs của dòng {collect.DONG_XML.rstrip(": ")} ({got_ids}) khác các job của task {ids}")
+            bad += probs
+            if not probs and not not_moved:
+                sub.append(f"(b) --overwrite: xuất lại; bản cũ ({len(olds)} file: .xml, .txt, file job) chuyển vào raw\\_cu còn nguyên, bản mới ghi lại "
+                           f"đúng chỗ và khớp nhãn đã nhập; dòng {collect.DONG_XML.rstrip(": ")} moi=true, job đọc về dạng chữ: "
+                           + ", ".join(f"{j['id']} {j['stage']}/{j['state']}/{j['type']}" for j in got))
+        return bad, sub
 
     def s9_jobs(self, raw_dir, names_raw, xml_name, jobs, want_jobs):
         """Kiểm file job do collect tách (mặc định bật cho demo-…): đúng số file, số ảnh [1, 1, 2], job cuối chứa đúng ảnh Gán tay, id ảnh = số frame của task.

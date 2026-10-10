@@ -553,6 +553,26 @@ def test_collect_per_job_flags_are_passed_and_rejected_elsewhere(tmp_path, world
     assert len(world.collect) == 4
 
 
+def test_collect_overwrite_and_require_completed_flags(tmp_path, world):
+    m28.main(['collect', '--task', 'demo-x'])
+    assert world.collect[-1].overwrite is False and world.collect[-1].require_completed is False
+    m28.main(['collect', '--task', 'demo-x', '--reviewer', 'P1', '--overwrite', '--no-per-job', '--require-completed'])     # lệnh của Merge jobs & Finish
+    a = world.collect[-1]
+    assert a.overwrite is True and a.require_completed is True and a.per_job is False and a.reviewer == 'P1'
+    m28.main(['collect', '--task', 'demo-x', '--overwrite'])
+    assert world.collect[-1].overwrite is True and world.collect[-1].require_completed is False
+    m28.main(['collect', '--task', 'm28-manual', '--skip-export'])                         # --skip-export một mình vẫn được
+    n = len(world.collect)
+    for bad in (['collect', '--task', 'demo-x', '--overwrite', '--skip-export'], ['collect', '--task', 'demo-x', '--require-completed', '--skip-export'],
+                ['push', '--run', 'A', '--overwrite'], ['push', '--run', 'A', '--require-completed'], ['prepare', '--run', 'A', '--overwrite'],
+                ['review', '--run', 'A', '--require-completed'], ['all', '--run', 'A', '--overwrite'], ['collect', '--overwrite'],
+                ['collect', '--task', 'demo-x', '--require-completed=yes']):
+        with pytest.raises(SystemExit) as e:
+            m28.main(bad)
+        assert e.value.code == 2, bad
+    assert len(world.collect) == n and world.push == []                                    # bị từ chối trước khi gọi bước nào
+
+
 def test_run_required_and_log(tmp_path, world):
     with pytest.raises(SystemExit) as e:
         m28.main(['prepare'])

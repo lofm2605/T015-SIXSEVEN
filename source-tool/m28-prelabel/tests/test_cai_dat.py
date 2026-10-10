@@ -1295,6 +1295,42 @@ def test_gradio_handlers_reviewer_paths_tflip(world, monkeypatch, tmp_path):
     ctx.closing = False
 
 
+def test_collect_job_running_blocks_cvat_settings_tflip_and_quick_check(world):
+    """Job gộp (Merge jobs & Finish) đang chạy: tiến trình con đang dùng token hiện tại, nên từ chối đổi cài đặt CVAT, đổi t_flip và chạy kiểm tra nhanh."""
+    demo, ctx, store = build(world)
+    H = handlers(demo)
+    smoke_open = next(f for f in demo.fns.values() if f.fn is not None and getattr(f.fn, '__module__', '') == 'cai_dat_ui' and f.fn.__name__ == 'on_smoke_open')
+    ctx.collect_job.state, ctx.collect_job.run = 'dang_chay', 'Khoi'
+    m = as_map(H['on_save'][0], H['on_save'][0].fn(URL, TOKEN, '', False, None))
+    assert 'gộp job CVAT của lượt Khoi' in m['cd-cvat-msg'] and 'chờ xong' in m['cd-cvat-msg'] and cai_dat.get().effective()['token'] != TOKEN
+    m = as_map(H['on_forget_open'][0], H['on_forget_open'][0].fn(None))
+    assert 'gộp job CVAT' in m['cd-cvat-msg']
+    set_h = H['on_tflip'][0]
+    assert 'gộp job CVAT (lượt Khoi)' in as_map(set_h, set_h.fn('0,05', False, None))['cd-tflip-msg']
+    assert 'gộp job của lượt Khoi' in text_of(as_map(smoke_open, smoke_open.fn()))
+    ctx.collect_job.state = 'chua'
+    m = as_map(H['on_save'][0], H['on_save'][0].fn(URL, TOKEN, '', False, cai_dat.get().rev))
+    assert 'gộp job' not in m['cd-cvat-msg']
+
+
+def test_collect_busy_messages_point_to_the_cancel_button_that_exists(world):
+    """Các câu 'bấm Cancel' khi job gộp chạy phải trỏ đúng nút có thật: Cancel ở khung gộp job của tab Các đợt (#dot-gop-cancel)."""
+    demo, ctx, store = build(world)
+    H = handlers(demo)
+    btn = [b for b in demo.blocks.values() if getattr(b, 'elem_id', None) == 'dot-gop-cancel']
+    assert len(btn) == 1 and btn[0].value == 'Cancel'
+    smoke_open = next(f for f in demo.fns.values() if f.fn is not None and getattr(f.fn, '__module__', '') == 'cai_dat_ui' and f.fn.__name__ == 'on_smoke_open')
+    ctx.collect_job.state, ctx.collect_job.run = 'dang_chay', 'Khoi'
+    hint = 'bấm Cancel ở khung gộp job của tab Các đợt'
+    assert hint in text_of(as_map(smoke_open, smoke_open.fn()))
+    assert hint in as_map(H['on_save'][0], H['on_save'][0].fn(URL, TOKEN, '', False, None))['cd-cvat-msg']
+    ok, msg, _lv = ra.close_check(store, ctx)
+    assert not ok and hint in msg
+    with pytest.raises(na.RunError, match=hint):
+        ctx.collect_job.start('Khoi', 'runs', str(world), 'P2', 'demo-Khoi')
+    ctx.collect_job.state = 'chua'
+
+
 def test_on_show_reloads_only_when_rev_changed(world):
     demo, ctx, store = build(world)
     show = handlers(demo)['on_show'][0]

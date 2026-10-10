@@ -548,3 +548,11 @@ def test_steps_collect_module_still_wired(monkeypatch):
     monkeypatch.setitem(sys.modules, 'm28core.collect', mod)
     ns = types.SimpleNamespace(task=['demo-x'], per_job=None, job=[1])
     assert steps.collect(ns, None) is True and called[0].job == [1]
+
+
+def test_state_with_a_space_like_in_progress_is_read_whole():
+    """CVAT có state "in progress" (có dấu cách): đọc lại từ .txt phải ra đủ "in progress", cả dòng mới lẫn dòng cũ không có ` | `."""
+    j = core.parse_job_line("job 7: 8 frame, stage annotation, state in progress | frames 8-15 | loai nhan")
+    assert (j["state"], j["start"], j["stop"], j["kind"]) == ("in progress", 8, 15, "nhan")
+    assert core.parse_job_line("job 7: 8 frame, stage annotation, state in progress")["state"] == "in progress"
+    assert core.parse_job_line("job 7: 8 frame, stage acceptance, state completed | frames 0-7")["state"] == "completed"

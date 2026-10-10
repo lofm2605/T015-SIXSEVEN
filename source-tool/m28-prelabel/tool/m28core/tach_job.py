@@ -27,7 +27,7 @@ from . import cvat_io as io_
 
 KINDS = ("nhan", "gan_tay", "khong_ro")
 JOB_RE = re.compile(r"^(?P<goc>(?P<task>.+)_(?P<who>[A-Za-z0-9-]+)_(?P<day>\d{4}))_job(?P<job>\d{1,9})\.xml$")
-OLD_JOB_LINE = re.compile(r"job (\d+): (\d+) frame, stage (\S+), state (\S+)")      # đúng biểu thức cũ của collect._jobs_from_txt
+OLD_JOB_LINE = re.compile(r"job (\d+): (\d+) frame, stage (\S+), state ([^|]*[^|\s])")      # state có thể có dấu cách ("in progress" của CVAT): lấy tới trước " |"
 GHI_CHU = ("tách offline từ file cả task, không gọi CVAT; id/name ảnh giữ như file cả task; <meta> giữ nguyên trừ số ảnh; "
            "chỉ để đọc/đo, KHÔNG dùng để nhập lại vào CVAT")
 

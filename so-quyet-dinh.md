@@ -18,9 +18,10 @@ cũ được gán theo cách cũ.
 | [QĐ-003](#qđ-003) | Định nghĩa 50 điểm DMS (7 nhóm, không viền hàm), trái/phải theo ảnh, config v3 | 07/10/2026 | QĐ-002 | Bị thay một phần bởi QĐ-004 (cách dựng label CVAT: bảy label theo nhóm, màu theo nhóm); phần còn lại hiệu lực |
 | [QĐ-004](#qđ-004) | Tách label `face50` thành bảy label skeleton theo nhóm, mỗi nhóm một màu (bảng màu hình minh hoạ DMS) | 07/10/2026 | QĐ-003 | Hiệu lực |
 | [QĐ-005](#qđ-005) | Bộ lọc dữ liệu train chỉ chuẩn bị dữ liệu (chưa train), kèm trang Thống kê chỉ số model và tốc độ gán | 08/10/2026 | Chủ repo | Bị thay một phần bởi QĐ-006 (trang Thống kê chỉ còn ba chỉ số, thiết kế hai nhóm độc lập); bộ lọc vẫn hiệu lực |
-| [QĐ-006](#qđ-006) | Thí nghiệm hai nhóm độc lập (manual / assisted) thay cho ghép cặp; đồng hồ bấm giờ theo phiên thay facetimer; Thống kê chỉ ba chỉ số; gói kết quả cho nhóm trưởng | 09/10/2026 | Chủ repo | Hiệu lực (chờ P5 và mentor đồng ý trước 14/10); phần đồng hồ bổ sung bởi QĐ-007 (mỗi đợt một phiên) |
-| [QĐ-007](#qđ-007) | Đồng hồ bấm giờ tính MỖI ĐỢT MỘT PHIÊN (giờ đợt này không lẫn vào đợt khác) | 09/10/2026 | Chủ repo | Hiệu lực (chờ P5 duyệt gói theo đợt) |
+| [QĐ-006](#qđ-006) | Thí nghiệm hai nhóm độc lập (manual / assisted) thay cho ghép cặp; đồng hồ bấm giờ theo phiên thay facetimer; Thống kê chỉ ba chỉ số; gói kết quả cho nhóm trưởng | 09/10/2026 | Chủ repo | Hiệu lực (chờ P5 và mentor đồng ý trước 14/10); phần đồng hồ bổ sung bởi QĐ-007 (mỗi đợt một phiên) và QĐ-009 (Merge jobs & Finish, nhập tay ở Thống kê) |
+| [QĐ-007](#qđ-007) | Đồng hồ bấm giờ tính MỖI ĐỢT MỘT PHIÊN (giờ đợt này không lẫn vào đợt khác) | 09/10/2026 | Chủ repo | Hiệu lực (chờ P5 duyệt gói theo đợt); cách lưu một đợt bổ sung bởi QĐ-009 |
 | [QĐ-008](#qđ-008) | Bộ 200 ảnh chung cho hai nhóm MANUAL / ASSISTED: chọn theo độ khó khi gán 50 điểm DMS, hai gói A/B, nháp thống nhất, PNG | 09/10/2026 | Chủ repo | Hiệu lực |
+| [QĐ-009](#qđ-009) | Nút **Merge jobs & Finish** (gộp mọi job của task thành một file, dừng và lưu đồng hồ của đợt một lần); nhóm manual nhập tay thời gian + file CVAT ở tab Thống kê | 11/10/2026 | Chủ repo | Hiệu lực (chờ P5, P4 duyệt) |
 
 **Trạng thái:** Hiệu lực · Bị thay bởi QĐ-xxx · Huỷ (ghi lý do)
 
@@ -182,7 +183,7 @@ cũ được gán theo cách cũ.
   - [ ] Xác nhận mẫu tên file theo job `<task>_<người>_<DDMM>_job<id>.xml` và task `demo-…` cho thí nghiệm (@P4)
   - [ ] Duyệt chip đồng hồ ở đầu trang và hộp Đóng trang (@P2)
   - [ ] Cập nhật `CLAUDE.md` (đã sửa đoạn Thí nghiệm) và bản Claude Docs: tab P5 còn ghi `facetimer.py` và ghép cặp, Kế hoạch còn "đủ 5 người" (chủ repo)
-- **Trạng thái:** Hiệu lực (chờ P5 và mentor đồng ý trước 14/10)
+- **Trạng thái:** Hiệu lực (chờ P5 và mentor đồng ý trước 14/10); bổ sung bởi QĐ-007 và QĐ-009
 
 ## QĐ-007
 
@@ -206,7 +207,7 @@ cũ được gán theo cách cũ.
   - [ ] Đồng ý dòng bấm giờ và gói theo đợt (mỗi đợt một gói, nhóm trưởng nhận nhiều gói của một người) (@P5, mentor, trước 14/10)
   - [ ] Duyệt chip có giờ đợt khác ghi mờ, ô chọn đợt trong hộp Đóng trang và chip giờ trên thẻ đợt (@P2)
   - [ ] Kiểm `thong_ke` / `tong_ket` với một người có hai gói (hai đợt) khi có số đo thật (@P5)
-- **Trạng thái:** Hiệu lực (chờ P5 duyệt gói theo đợt)
+- **Trạng thái:** Hiệu lực (chờ P5 duyệt gói theo đợt); bổ sung bởi QĐ-009 (Merge jobs & Finish)
 
 ## QĐ-008
 
@@ -236,6 +237,34 @@ cũ được gán theo cách cũ.
   - [ ] P4 thử tạo task tay (project bảy label, Image quality 95, Segment size 8) và nhập `prelabel.xml` trên CVAT thật; thử `push` và `collect` với bộ 200 (chưa thử CVAT thật)
   - [ ] Điền `"bo_anh": "bo200_v1"` vào `config/nhom_thi_nghiem.json` khi máy làm tool đồng hồ/thống kê gộp code (file đó không sửa ở phiên này)
 - **Trạng thái:** Hiệu lực
+
+## QĐ-009
+
+**Nút Merge jobs & Finish: gộp mọi job của task thành một file, rồi dừng và lưu đồng hồ của đợt trong một lần bấm; nhóm manual nhập tay thời gian + file CVAT ở tab Thống kê**
+
+- **Ngày:** 11/10/2026
+- **Người tham gia:** chủ repo (chốt), P5 (chờ duyệt: mốc dừng đồng hồ, cách đếm số mặt), P4 (chờ duyệt: `collect --overwrite`, `--require-completed`, `raw\_cu\`), P2 (thẻ đợt, hộp xác nhận)
+- **Xuất phát từ:** chủ repo mô tả luồng làm việc thật: bấm Nạp ảnh thì đồng hồ của đợt (= một task CVAT) chạy; rà nháp, đẩy lên CVAT, sửa trong CVAT; xong thì quay lại tool, gộp các job của task thành một file, lúc đó đồng hồ tắt và ghi lại để gửi nhóm trưởng thống kê. Nhóm manual tự gán tay trong CVAT, không dùng tool, nên ở Thống kê phải nhập tay được thời gian và file.
+- **Bối cảnh:** trước đó việc kết thúc một đợt gồm hai bước rời: chạy `m28.py collect` ở cmd, rồi bấm Save timing ở hộp Close page. Người gán dễ quên collect (gói chỉ có thời gian), và `collect` không ghi đè file đã xuất trong ngày nên nhãn sửa thêm sau lần collect đầu không vào gói. Nhóm manual không có đồng hồ trong tool nên không có gói kết quả nào cho nhóm trưởng.
+- **Các phương án đã cân nhắc:**
+  1. *Giữ hai bước rời (collect ở cmd + Save timing).* Loại: dễ quên, dễ lấy nhãn cũ.
+  2. *Xuất từng job rồi ghép theo tên ảnh.* Loại: file xuất cả task của CVAT đã chứa mọi job (task dựng bằng `job_file_mapping`, các job không chồng nhau), thêm lời gọi SDK mới mà không thêm thông tin.
+  3. *Một nút trên thẻ đợt chạy `collect` cả task (xuất lại bản mới nhất) rồi `xong_luu` đồng hồ của đợt đó.* **Chọn.**
+- **Quyết định:**
+  - Nút **Merge jobs & Finish** trên thẻ đợt (tab Các đợt) của đợt đã đẩy CVAT xong. Bấm → hộp xác nhận (task, người, giờ đồng hồ, cảnh báo đồng hồ chưa xử lý; xác nhận là chấp nhận các cảnh báo đó) → **đồng hồ tạm dừng ngay lúc bấm** (thời gian xuất và đọc cảnh báo không tính) → tiến trình con chạy `m28.py collect --task <task> --reviewer <Pk> --overwrite --no-per-job --require-completed` → xong thì lưu đồng hồ đúng một lần (`timing_<Pk>.csv` + gói `ketqua_<Pk>_<DDMM>_<đợt>.zip` có nhãn từ file vừa gộp).
+  - **File gộp** là file xuất cả task `raw\<task>_<Pk>_<DDMM>.xml` (CVAT for images 1.1, gộp mọi job). `--overwrite`: xuất lại dù hôm nay đã collect; xuất xong mới chuyển bản cũ (`.xml`, `.txt`, file job) vào `raw\_cu\` với tên `<tên>.cu<HHMMSS>.<đuôi>`, không xoá gì.
+  - **Job chưa completed** (chưa bấm Finish the job trong CVAT): `--require-completed` không xuất gì, thoát mã 3 và liệt kê job; trang hỏi lần hai **Merge anyway** (gộp nhãn hiện có trên server, ghi danh sách job chưa xong vào `runs\<đợt>\gop_job.json`) hoặc Cancel (quay lại CVAT, đồng hồ chạy tiếp nếu lúc bấm nó đang chạy). Lỗi hoặc huỷ: đồng hồ chạy tiếp như trước khi bấm.
+  - **Số mặt** chia giờ = số ảnh có nhãn trong file gộp (không còn là số ảnh đã nạp, vốn gồm cả ảnh Bỏ/không thấy mặt); nhóm manual nhập tay cũng đếm như vậy.
+  - Đợt không còn phiên đồng hồ (đã Save timing hoặc Discard trước đó): nút vẫn gộp; nếu đã có gói của đợt thì gắn nhãn vào gói đó (`xuat_lai_goi`, giữ nguyên số đo thời gian).
+  - **Nhập tay ở tab Thống kê** (nhóm manual, không dùng tool): người, nhóm, đợt/bộ ảnh, thời gian làm (h:mm:ss, mm:ss hoặc số phút), ngày, file xuất từ CVAT (`.xml` CVAT for images 1.1 hoặc `.zip` CVAT xuất, không kèm ảnh; nhiều file một lần được, ghép theo tên ảnh), bấm **Add manual entry** → ghi thành gói kết quả thật (cùng định dạng, `nguon_nhap = "nhap_tay"`) vào `outputs\goi_nhom\`, nên Thống kê và `tong_ket.py` tính như gói của đồng hồ. Đã có gói của cùng người + đợt thì từ chối (không tính giờ hai lần). **Remove entry** chỉ chuyển gói vào `outputs\goi_nhom\_da_bo\`.
+  - Giữ cvat-sdk/cvat-cli **2.77.0** và `cvat_version` 2.77.0 trong `config/pipeline.json` (chủ repo chọn). Máy chủ repo chạy CVAT 2.78.0, nằm trong danh sách bản server mà chính SDK 2.77 khai hỗ trợ (2.77, 2.78), nên phép kiểm bản của tool (`cvat_io.check_version`, dùng cho push, collect, Test CVAT connection) nay nhận server **đúng bản ghim hoặc mới hơn một bậc minor**, kèm một dòng nhắc cả đội nên dùng cùng bản; xa hơn thì vẫn dừng như cũ. Trạng thái job trên server 2.78: `new`, `in progress`, `completed`, `rejected`.
+- **Hạn chế:** ảnh khởi động (001, 002 của bộ 200) vẫn chưa bị loại khỏi giờ khi đồng hồ chỉ đo cả phiên (cả hai nhóm như nhau); nhãn chưa bấm Save trong CVAT không được xuất; nhập tay tin thời gian người gõ; nút mới và `--overwrite`/`--require-completed` mới thử bằng CVAT giả, bước 9 của `cvat_smoke.py` (chạy được ở `chay.bat` mục 4) kiểm chúng trên CVAT thật.
+- **Việc phải làm theo:**
+  - [ ] Chạy `chay.bat` mục 4 (kiểm tra nhanh CVAT) trên CVAT thật bằng token của mình, rồi thử một đợt nhỏ: Nạp ảnh → push → sửa → Merge jobs & Finish (@P4, chủ repo)
+  - [ ] Đồng ý mốc dừng đồng hồ (lúc bấm nút) và cách đếm số mặt (ảnh có nhãn trong file gộp) (@P5)
+  - [ ] Nhóm trưởng thử nhập tay một người nhóm manual và kiểm số trên tab Thống kê (@nhóm trưởng)
+  - [ ] Cập nhật bản Claude Docs (tab P4, P5) theo luồng mới (chủ repo)
+- **Trạng thái:** Hiệu lực (chờ P5, P4 duyệt)
 
 ---
 

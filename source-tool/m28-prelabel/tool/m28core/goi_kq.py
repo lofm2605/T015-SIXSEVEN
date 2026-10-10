@@ -7,6 +7,8 @@ Ghi `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (+ bản `.json` đọc đ
 KHÔNG chứa ảnh, token, email, tên máy, đường dẫn tuyệt đối; có `sha256` của phần nội dung và số phiên bản định dạng. `doc_goi` kiểm lại tất cả (sha256, cấu trúc,
 rò rỉ riêng tư) trước khi tin; `quet` gộp nhiều gói, loại gói hỏng/trùng với lý do rõ. Nhãn lấy từ file nhãn đã xuất (raw\\<task>_<người>_<DDMM>.xml) và nháp từ
 runs\\<đợt>\\xml\\prelabel.xml (đúng toạ độ đã nhập vào CVAT). Numpy chỉ nạp lười ở các hàm cần đo (cùng eval50).
+Bản NHẬP TAY của nhóm trưởng cho người nhóm manual gán thẳng trong CVAT (m28core/nhap_tay.py, mục "Nhập tay" của tab Thống kê) là gói cùng định dạng, thêm trường
+nguon_nhap="nhap_tay", ghi vào outputs/goi_nhom (ghi_goi(..., thu_muc=...)).
 """
 import datetime
 import hashlib
@@ -130,18 +132,19 @@ def _cung_phien(path, phien):
     return bool(nd and nd.get("phien") == phien)
 
 
-def ghi_goi(project_root, noi_dung, ddmm=None):
-    """Ghi gói (zip + json) vào <project>/outputs/ket_qua/. Tên: ketqua_<Pk>_<DDMM>_<đợt>; đã có gói của PHIÊN KHÁC cùng tên thì thêm -2, -3...; đã có gói của
-    đúng phiên này thì ghi lại (chạy lại "Xong" khi lần trước hỏng giữa chừng). Từ chối nếu nội dung rò riêng tư. Trả dict(ten, zip, json) (đường dẫn tương đối)."""
+def ghi_goi(project_root, noi_dung, ddmm=None, thu_muc=THU_MUC):
+    """Ghi gói (zip + json) vào <project>/<thu_muc>/ (mặc định outputs/ket_qua; bản nhập tay của nhóm trưởng ghi vào outputs/goi_nhom). Tên: ketqua_<Pk>_<DDMM>_<đợt>;
+    đã có gói của PHIÊN KHÁC cùng tên thì thêm -2, -3...; đã có gói của đúng phiên này thì ghi lại (chạy lại "Xong" khi lần trước hỏng giữa chừng). Từ chối nếu nội dung rò
+    riêng tư. Trả dict(ten, zip, json) (đường dẫn tương đối)."""
     probs = kiem_rieng_tu(noi_dung)
     if probs:
         raise GoiLoi("Gói kết quả bị chặn vì " + ", ".join(probs) + " (ví dụ trong ghi chú): sửa ghi chú rồi lưu lại. Không ghi gì.")
     vo = dong_goi(noi_dung)
-    d = os.path.join(project_root, THU_MUC)
+    d = os.path.join(project_root, thu_muc)
     try:
         os.makedirs(d, exist_ok=True)
     except OSError as e:
-        raise GoiLoi(f"Không tạo được thư mục {THU_MUC} ({type(e).__name__}).")
+        raise GoiLoi(f"Không tạo được thư mục {thu_muc} ({type(e).__name__}).")
     ddmm = ddmm or datetime.datetime.now().strftime("%d%m")
     base = ten_goi(noi_dung["nguoi"], ddmm, noi_dung.get("dot"))
     ten, k = base, 1
@@ -156,8 +159,8 @@ def ghi_goi(project_root, noi_dung, ddmm=None):
         _atomic_write(pz, _zip_bytes(vo, noi_dung))
         _atomic_write(pj, json.dumps(vo, ensure_ascii=False, indent=1, sort_keys=True).encode("utf-8"))
     except OSError as e:
-        raise GoiLoi(f"Không ghi được gói kết quả vào {THU_MUC} ({type(e).__name__}: file đang mở ở chương trình khác, hết chỗ hoặc không có quyền?).")
-    rel = lambda p: os.path.join(THU_MUC, os.path.basename(p))      # noqa: E731
+        raise GoiLoi(f"Không ghi được gói kết quả vào {thu_muc} ({type(e).__name__}: file đang mở ở chương trình khác, hết chỗ hoặc không có quyền?).")
+    rel = lambda p: os.path.join(thu_muc, os.path.basename(p))      # noqa: E731
     return dict(ten=ten, zip=rel(pz), json=rel(pj))
 
 
@@ -357,7 +360,6 @@ def xay_ket_qua(project_root, cfg, dieu_kien, dot, label_path=None, nguong_sua=N
     """Kết quả theo mặt của một người. Trả (list mặt, dict thông tin: co_nhan, co_nhap, nhan_file (chỉ tên file), canh_bao=[chuỗi]).
     Mỗi mặt: anh, nhan_cuoi {điểm: [x, y]} (điểm outside/thiếu không có mặt), và với assisted có nháp: nhap, diem_da_sua [tên điểm], nme_nhap_so_nhan_cuoi (% IOD)."""
     import eval50
-    from m28core import so_sanh
     info = dict(co_nhan=False, co_nhap=False, nhan_file="", canh_bao=[])
     if not label_path or not os.path.isfile(label_path):
         info["canh_bao"].append("chua_co_nhan")
@@ -368,10 +370,19 @@ def xay_ket_qua(project_root, cfg, dieu_kien, dot, label_path=None, nguong_sua=N
     if not labels:
         info["canh_bao"].append("nhan_rong")
         return [], info
-    draft = nhap_cua_dot(project_root, dot, cfg) if dieu_kien == "assisted" else None
-    info["co_nhap"] = bool(draft)
-    if dieu_kien == "assisted" and not draft:
+    out, co_nhap = ket_qua_tu_nhan(project_root, cfg, dieu_kien, dot, labels, nguong_sua)
+    info["co_nhap"] = co_nhap
+    if dieu_kien == "assisted" and not co_nhap:
         info["canh_bao"].append("thieu_nhap")
+    return out, info
+
+
+def ket_qua_tu_nhan(project_root, cfg, dieu_kien, dot, labels, nguong_sua=NGUONG_SUA_MAC_DINH):
+    """Phần dựng của xay_ket_qua từ nhãn ĐÃ ĐỌC ({tên ảnh không đuôi: {điểm: [x, y]}}, ví dụ gộp từ nhiều file theo job của mục Nhập tay). Trả (list mặt, co_nhap):
+    nhóm assisted thì nháp lấy ở runs/<đợt>/ của máy này (nhap_cua_dot); không có nháp thì các mặt chỉ có nhãn cuối."""
+    import eval50
+    from m28core import so_sanh
+    draft = nhap_cua_dot(project_root, dot, cfg) if dieu_kien == "assisted" else None
     names = {p["name"] for p in cfg["points"]}
     out = []
     for stem in sorted(labels):
@@ -385,4 +396,4 @@ def xay_ket_qua(project_root, cfg, dieu_kien, dot, label_path=None, nguong_sua=N
             sc = eval50.face_scores(r["nhap"], fin, cfg)
             r["nme_nhap_so_nhan_cuoi"] = round(sc["nme"], 4) if sc.get("ok") else None
         out.append(r)
-    return out, info
+    return out, bool(draft)

@@ -997,6 +997,12 @@ def test_close_check_refuses_while_jobs_run_or_switching(five):
     ok, msg, lv = ra.close_check(s, ctx)
     assert not ok and 'xoá task của lượt R2 (CVAT)' in msg
     ctx.del_job = ra.AppCtx(reviewer='P2', run_dir=five).del_job
+    assert type(ctx.collect_job).__name__ == 'CollectJob' and ctx.gop is None and ctx.gop_lock.acquire(blocking=False)       # job gộp của Merge jobs & Finish
+    ctx.gop_lock.release()
+    ctx.collect_job = busy_job('R3')
+    ok, msg, lv = ra.close_check(s, ctx)
+    assert not ok and lv == 'warn' and 'gộp job CVAT của lượt R3' in msg and 'Merge jobs & Finish' in msg
+    ctx.collect_job = ra.AppCtx(reviewer='P2', run_dir=five).collect_job
     ctx.switch_to = (five, s)
     ok, msg, lv = ra.close_check(s, ctx)
     assert not ok and lv == 'warn' and 'chuyển' in msg

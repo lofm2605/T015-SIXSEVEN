@@ -389,7 +389,7 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
         return d
 
     def refuse_why(cvat_busy=False):
-        """Lý do từ chối ghi (trang đang đóng; hoặc, với cài đặt CVAT, đang đẩy/xoá task) hoặc ''."""
+        """Lý do từ chối ghi (trang đang đóng; hoặc, với cài đặt CVAT, đang đẩy/xoá task/gộp job/kiểm tra nhanh) hoặc ''."""
         if ctx.closing:
             return nap_anh.CLOSING_MSG
         if cvat_busy:
@@ -398,6 +398,9 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
                     return f"Đang {what} lượt {j.run} lên CVAT: chờ xong rồi mới đổi cài đặt CVAT (tiến trình con đang dùng token hiện tại)."
             if ctx.smoke_job.running:
                 return "Đang chạy kiểm tra nhanh CVAT: chờ xong hoặc bấm Cancel check rồi mới đổi cài đặt CVAT (tiến trình con đang dùng token hiện tại)."
+            if ctx.collect_job.running:
+                return (f"Đang gộp job CVAT của lượt {ctx.collect_job.run} (Merge jobs & Finish): chờ xong (hoặc bấm Cancel ở khung gộp job của tab Các đợt) "
+                        "rồi mới đổi cài đặt CVAT (tiến trình con đang dùng token hiện tại).")
         return ""
 
     def safe_with(where):
@@ -519,7 +522,8 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
 
     # ---------- t_flip ----------
     def tflip_busy():
-        for j, what in ((ctx.job, "chuẩn bị ảnh"), (ctx.push_job, "đẩy lên CVAT"), (ctx.del_job, "xoá task"), (ctx.smoke_job, "kiểm tra nhanh CVAT")):
+        for j, what in ((ctx.job, "chuẩn bị ảnh"), (ctx.push_job, "đẩy lên CVAT"), (ctx.del_job, "xoá task"), (ctx.smoke_job, "kiểm tra nhanh CVAT"),
+                        (ctx.collect_job, "gộp job CVAT")):
             if j.running:
                 return f"Đang {what} (lượt {j.run}): chờ xong rồi đổi t_flip."
         b = cai_dat.busy_runs(ctx.runs_root)
@@ -588,14 +592,15 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
     sm_job = ctx.smoke_job
 
     def smoke_busy():
-        """Lý do không chạy được kiểm tra nhanh lúc này (đang đóng, đang chuyển lượt, đẩy/xoá task/kiểm tra nhanh khác đang chạy) hoặc ''."""
+        """Lý do không chạy được kiểm tra nhanh lúc này (đang đóng, đang chuyển lượt, đẩy/xoá task/gộp job/kiểm tra nhanh khác đang chạy) hoặc ''."""
         if ctx.closing:
             return nap_anh.CLOSING_MSG
         if ctx.switch_to is not None:
             return "Trang đang chuyển sang lượt khác: chờ rồi thử lại."
-        for j, what in ((ctx.push_job, "đẩy lượt"), (ctx.del_job, "xoá task của lượt"), (sm_job, "chạy kiểm tra nhanh CVAT")):
+        for j, what in ((ctx.push_job, "đẩy lượt"), (ctx.del_job, "xoá task của lượt"), (ctx.collect_job, "gộp job của lượt"), (sm_job, "chạy kiểm tra nhanh CVAT")):
             if j.running:
-                return f"Đang {what}" + ("" if j is sm_job else f" {j.run} (CVAT)") + ": chờ xong hoặc bấm Cancel rồi mới chạy kiểm tra nhanh."
+                huy = " hoặc bấm Cancel ở khung gộp job của tab Các đợt" if j is ctx.collect_job else " hoặc bấm Cancel"    # job gộp: nút Cancel nằm ở tab Các đợt
+                return f"Đang {what}" + ("" if j is sm_job else f" {j.run} (CVAT)") + f": chờ xong{huy} rồi mới chạy kiểm tra nhanh."
         return ""
 
     def smoke_render(note="", level="warn", modal=None):

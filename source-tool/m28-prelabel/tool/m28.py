@@ -18,6 +18,9 @@ collect còn tách nhãn theo từng job mà push đã chia (offline, từ file 
     python tool\\m28.py collect --task demo-R1610 --reviewer P4                (cả task + file từng job)
     python tool\\m28.py collect --task demo-R1610 --reviewer P4 --no-per-job   (chỉ file cả task như trước)
     python tool\\m28.py collect --task demo-R1610 --reviewer P4 --job 105      (chỉ ghi file của job 105, nhiều --job được)
+    python tool\\m28.py collect --task demo-R1610 --reviewer P4 --overwrite    (xuất lại nhãn mới nhất dù hôm nay đã collect; bản cũ vào raw\\_cu\\)
+    python tool\\m28.py collect --task demo-R1610 --reviewer P4 --overwrite --no-per-job --require-completed
+                                    (nút Merge jobs & Finish: còn job chưa completed thì không xuất gì, thoát mã 3)
 File job chỉ để đọc/đo (eval50, QC), không nhập lại vào CVAT. Tách file đã xuất từ trước: python tool\\tach_job.py --xml raw\\<file>.xml
 """
 import argparse
@@ -93,19 +96,26 @@ def build_parser():
                         "--no-per-job chỉ giữ file cả task")
     p.add_argument("--job", action="append", type=int, default=None, metavar="ID",
                    help="collect: chỉ ghi file của job có id này (dùng nhiều lần được); file cả task vẫn xuất như cũ; tự bật tách job")
+    p.add_argument("--overwrite", action="store_true",
+                   help="collect: xuất lại dù raw\\<task>_<người>_<DDMM>.xml hôm nay đã có (đã sửa thêm trên CVAT sau lần collect trước); xuất xong mới chuyển "
+                        "bản cũ (.xml, .txt, file job) vào raw\\_cu\\, không xoá")
+    p.add_argument("--require-completed", action="store_true", dest="require_completed",
+                   help="collect: còn job chưa completed trên CVAT (chưa bấm Finish the job) thì không xuất gì, in danh sách job và thoát mã 3")
     return p
 
 
 def main(argv=None):
     p = build_parser()
     args = p.parse_args(argv)
-    if args.cmd != "collect" and (args.per_job is not None or args.job):
-        p.error("--per-job, --no-per-job và --job chỉ dùng với lệnh collect")
+    if args.cmd != "collect" and (args.per_job is not None or args.job or args.overwrite or args.require_completed):
+        p.error("--per-job, --no-per-job, --job, --overwrite và --require-completed chỉ dùng với lệnh collect")
     if args.cmd == "collect":
         if not args.task:
             p.error("collect cần --task")
         if args.job and args.per_job is False:
             p.error("--job tự bật tách job nên không đi cùng --no-per-job")
+        if (args.overwrite or args.require_completed) and args.skip_export:
+            p.error("--overwrite và --require-completed cần CVAT nên không đi cùng --skip-export")
         if not steps.collect(args, None):
             raise SystemExit("collect chưa xong (lý do in ở trên).")
         return

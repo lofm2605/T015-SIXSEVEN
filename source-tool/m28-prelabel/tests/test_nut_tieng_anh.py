@@ -20,7 +20,8 @@ VN = re.compile('[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹê�
 NUT_VIET_GIU_LAI = {'Nhận (N)', 'Gán tay (G)', 'Bỏ ảnh (B)', 'Ca khó (K)', 'Xong'}
 NUT_ANH_PHAI_CO = {'Save', 'Cancel', 'Refresh', 'Delete', 'Close page', 'Pause', 'Push to CVAT', 'Upload & Open', 'Upload & Continue', 'Retry', 'Undo (Z)', '← Prev', 'Next →', '‹ Prev page', 'Next page ›',
                    'Export CSV + HTML', 'Preview', 'Create dataset', 'Overwrite', 'Save config', 'Load', 'Show / Hide', 'Test CVAT connection', 'Forget token',
-                   'Run CVAT quick check', 'Save timing', 'Export meeting pack', 'Import packs', 'Present', 'Unmark', 'Confirm delete'}
+                   'Run CVAT quick check', 'Save timing', 'Export meeting pack', 'Import packs', 'Present', 'Unmark', 'Confirm delete',
+                   'Add manual entry', 'Remove entry'}
 
 
 def src(name):
@@ -81,7 +82,7 @@ def test_nut_html_cua_tab_cac_dot_ghi_tieng_anh():
     s = src('dot_anh.py')
     texts = [t.strip() for t in re.findall(r'>([^<>{}]+)</button>', s)]
     assert {'Review batch', 'Push to CVAT', 'View images', 'Restore', 'Delete permanently…', '‹ Prev page', 'Next page ›', '‹ Batch list', 'Delete batch…',
-            'Delete CVAT task…', 'Empty trash…'} <= set(texts), texts
+            'Delete CVAT task…', 'Empty trash…', 'Merge jobs & Finish'} <= set(texts), texts
     assert not [t for t in texts if co_dau(t)], texts
     labels = re.findall(r'(?:aria-label|title)="([^"{}]*(?:\{[a-z]+\}[^"{}]*)?)"', s)
     nut_labels = [l for l in labels if l.startswith(('View', 'Delete', 'Xem', 'Xoá'))]
@@ -91,7 +92,7 @@ def test_nut_html_cua_tab_cac_dot_ghi_tieng_anh():
 def test_nhan_nut_dong_trong_hop_xac_nhan_va_nut_doi_chu():
     dot_ui = src('dot_ui.py')
     ok = re.findall(r'ok_label="([^"]+)"', dot_ui) + re.findall(r'modal\.get\("ok_label", "([^"]+)"\)', dot_ui)
-    assert {'Delete permanently', 'Push to CVAT', 'Delete image', 'Delete batch', 'Delete CVAT task', 'Delete'} <= set(ok), ok
+    assert {'Delete permanently', 'Push to CVAT', 'Delete image', 'Delete batch', 'Delete CVAT task', 'Delete', 'Merge jobs & Finish', 'Merge anyway'} <= set(ok), ok
     assert not [t for t in ok if co_dau(t)], ok
     import dong_ho_ui
     for t in (dong_ho_ui.NUT_DUNG, dong_ho_ui.NUT_TIEP, dong_ho_ui.NUT_BAT_DAU, dong_ho_ui.NUT_BO, dong_ho_ui.NUT_BO_LAN_2):

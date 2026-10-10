@@ -238,12 +238,15 @@ def _mmss(sec):
     return f"{sec // 60:02d}:{sec % 60:02d}"
 
 
-def progress_html(snap, what="Đẩy lên CVAT"):
-    """Thanh tiến độ (kiểu .nap-prog) + trạng thái + thời gian."""
+def progress_html(snap, what="Đẩy lên CVAT", label=None, frac=None):
+    """Thanh tiến độ (kiểu .nap-prog) + trạng thái + thời gian. label/frac: nhãn và tỉ lệ khi đang chạy, cho việc không in dòng '[k/6]'
+    (gộp job: gop_job.progress); None thì tính từ dòng '[k/6]' của push."""
     st = snap["state"]
     if st == "chua":
         return ""
     ph = parse_phase(snap["lines"], st)
+    if st == "dang_chay" and label is not None:
+        ph = dict(ph, label=label, frac=ph["frac"] if frac is None else max(0.0, min(1.0, float(frac))))
     pct = 100 if st == "xong" else round(100 * ph["frac"])
     label = ph["label"] if st == "dang_chay" else STATE_VI[st] + (f" (mã thoát {snap['returncode']})" if st == "loi" and snap["returncode"] is not None else "")
     if st == "dang_chay" and snap.get("cancelling"):
@@ -287,13 +290,22 @@ def result_html(ps, run):
             + (f'<div class="push-open">{open_btn}</div>' if open_btn else "") +
             f'<table class="m28-info"><tr><th>Task</th><td><b>{_e(ps.get("task", "?"))}</b> (id {_e(ps.get("task_id", "?"))})</td></tr>'
             f'<tr><th>Mở trong CVAT</th><td>{link}</td></tr>'
-            f'<tr><th>Số job</th><td><b>{len(jobs)}</b> ({n_nhan} Nhận, {n_tay} Gán tay)</td></tr>{gan}</table>{kiem}{warn}</div>')
+            f'<tr><th>Số job</th><td><b>{len(jobs)}</b> ({n_nhan} Nhận, {n_tay} Gán tay)</td></tr>{gan}</table>{kiem}{warn}'
+            f'<div class="nap-note push-next">{_e(FINISH_HINT)}</div></div>')
 
 
-def next_step(ps, run):
-    """Bước tiếp theo theo push.json sau khi dừng/lỗi/huỷ (tiếng Việt, kèm lệnh cmd)."""
+FINISH_HINT = ("Sửa xong trên CVAT: mở tab Các đợt, bấm Merge jobs & Finish ở thẻ đợt này (đồng hồ dừng và lưu gói kết quả).")
+
+
+def next_step(ps, run, kind="push"):
+    """Bước tiếp theo theo push.json sau khi dừng/lỗi/huỷ (tiếng Việt, kèm lệnh cmd). kind: loại job vừa dừng ('push' | 'xoa_task', = ChildJob.KIND).
+    Đã đẩy xong: sau job đẩy thì nhắc nút Merge jobs & Finish (FINISH_HINT); sau job XOÁ TASK lỗi/huỷ thì KHÔNG (task vẫn còn, việc đang làm là xoá nó)."""
     st = (ps or {}).get("trang_thai")
     tname = (ps or {}).get("task", f"demo-{run}")
+    if st == "xong" and kind == "xoa_task":
+        return f"Task {tname} vẫn còn trên CVAT (chưa xoá gì): sửa nguyên nhân rồi bấm Delete CVAT task lại (tab Các đợt)."
+    if st == "xong":
+        return FINISH_HINT
     if st is None or st == "task_deleted":
         return "Chưa tạo task nào trên CVAT: sửa nguyên nhân rồi bấm Push to CVAT lại."
     if st == "dang_tao":
@@ -306,17 +318,21 @@ def next_step(ps, run):
 
 
 def error_html(snap, ps, run):
-    """Nguyên nhân (dòng cuối của tiến trình con) + bước tiếp theo. Không hiện traceback (nằm trong push_log.txt)."""
-    cause = last_message(snap["lines"]) or "Tiến trình push kết thúc với lỗi."
+    """Nguyên nhân (dòng cuối của tiến trình con) + bước tiếp theo. Không hiện traceback (nằm trong push_log.txt). snap['kind'] (ChildJob.KIND) phân biệt
+    job đẩy và job xoá task (khung Các đợt dùng chung hàm này cho cả hai)."""
+    kind = snap.get("kind") or "push"
+    xoa = kind == "xoa_task"
+    cause = last_message(snap["lines"]) or ("Tiến trình xoá task kết thúc với lỗi." if xoa else "Tiến trình push kết thúc với lỗi.")
     if cause.startswith(("Exception", "ValueError", "KeyError", "TypeError", "OSError")) or "Error:" in cause[:40]:
         cause = "Lỗi không lường trước (" + cause[:160] + "). Chi tiết trong runs\\" + run + "\\push_log.txt."
     cause = cvat_io.scrub(cause)
-    return (f'<div class="nap-box nap-err" role="alert"><b>Đẩy lên CVAT không xong.</b><div class="push-cause">{_e(cause)}</div>'
-            f'<div class="nap-note">{_e(next_step(ps, run))}</div></div>')
+    head = "Xoá task trên CVAT không xong." if xoa else "Đẩy lên CVAT không xong."
+    return (f'<div class="nap-box nap-err" role="alert"><b>{head}</b><div class="push-cause">{_e(cause)}</div>'
+            f'<div class="nap-note">{_e(next_step(ps, run, kind))}</div></div>')
 
 
-def cancelled_html(ps, run):
-    return (f'<div class="nap-box nap-warn" role="status"><b>Đã huỷ.</b> {_e(next_step(ps, run) or "Không có gì dở trên CVAT.")}</div>')
+def cancelled_html(ps, run, kind="push"):
+    return (f'<div class="nap-box nap-warn" role="status"><b>Đã huỷ.</b> {_e(next_step(ps, run, kind) or "Không có gì dở trên CVAT.")}</div>')
 
 
 # ---------- xoá task trên CVAT ----------
@@ -357,5 +373,6 @@ def delete_confirm_html(m):
     items = "".join(f"<li>{_e(x)}</li>" for x in lines)
     return ('<div class="modal-title modal-danger" id="task-modal-title">Xoá task trên CVAT?</div>'
             f'<div class="nap-box nap-err" role="alert"><b>Không hoàn tác được.</b><ul>{items}</ul></div>'
-            f'<div class="nap-note">Nếu cần giữ nhãn đã sửa: đóng hộp này, chạy <code>python tool\\m28.py collect --task {_e(m["task"])} --reviewer {_e("<tên bạn>")}</code> '
+            f'<div class="nap-note">Nếu cần giữ nhãn đã sửa: đóng hộp này, bấm <b>Merge jobs &amp; Finish</b> ở thẻ đợt (hoặc chạy '
+            f'<code>python tool\\m28.py collect --task {_e(m["task"])} --reviewer {_e("<tên bạn>")} --overwrite</code>) '
             'trước, rồi quay lại xoá. Link và token lấy từ tab Cài đặt (hoặc biến môi trường), không nhập ở hộp này.</div>')

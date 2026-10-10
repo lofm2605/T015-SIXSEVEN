@@ -8,6 +8,13 @@ Tách theo JOB (--per-job / --no-per-job / --job <id>): từ file cả task vừ
 raw/<task>_<người>_<DDMM>_job<id>.xml (+ .txt) cho từng job mà push đã chia (module m28core/tach_job.py, không thêm lời gọi CVAT nào).
 Mặc định bật cho task demo-…, tắt cho task khác; --job <id> (nhiều lần được) chỉ ghi file của job đó (file cả task vẫn xuất như cũ) và tự bật tách.
 File job chỉ để đọc/đo (eval50, QC), KHÔNG nhập lại vào CVAT; RAW_RE/latest_raw_files bỏ qua chúng nên không đếm một mặt hai lần.
+--overwrite: file cả task của hôm nay đã có thì vẫn XUẤT LẠI (người gán sửa thêm trên CVAT sau lần collect trước); xuất xong mới chuyển bản cũ (.xml, .txt và file
+job của nó, kể cả .txt/file job sót lại khi .xml đã mất) vào raw/_cu/ (thêm giờ vào tên, không xoá gì) rồi ghi bản mới. Xuất lỗi thì bản cũ nằm nguyên chỗ.
+--require-completed: còn job (loại annotation) chưa ở trạng thái completed trên CVAT thì KHÔNG xuất gì, in danh sách job và thoát mã 3 (EXIT_CHUA_XONG).
+Có --overwrite hoặc --require-completed (chế độ của nút, không --dry-run) mà task demo- không thấy hoặc trùng tên trên CVAT: dừng bằng SystemExit tiếng
+Việt MỘT dòng (tên task, lý do, cách sửa; mã thoát 1) trước khi xuất hay ghi file nào. collect thường vẫn chỉ in "bỏ qua", ghi vào báo cáo và thoát 0.
+Dòng máy đọc (cho trang rà soát, JSON một dòng): `COLLECT_XML: {task, nguoi, xml, jobs, moi}` mỗi file cả task đã ghi (moi=true) hoặc dùng lại (moi=false);
+`COLLECT_JOBS_PENDING: {task, jobs, pending}` khi --require-completed chặn (pending = id job chưa completed; --dry-run chỉ in, không chặn). Nút "Merge jobs & Finish" (tab Các đợt) chạy `collect --task <task> --reviewer <Pk> --overwrite --no-per-job --require-completed`.
 Mọi đường ghi nằm trong raw/ và outputs/ của thư mục chạy.
 """
 import datetime
@@ -26,7 +33,31 @@ from . import tach_job
 from .tach_job import push_jobs  # noqa: F401  (tra loại job từ push.json; dùng cả ở đây lẫn trong tach_job)
 
 RAW, OUT = "raw", "outputs"
+CU = "_cu"                                                     # raw/_cu/: bản xuất cũ bị --overwrite thay (không xoá)
+EXIT_CHUA_XONG = 3                                             # --require-completed: còn job chưa completed, chưa xuất gì
+DONG_XML, DONG_CHUA_XONG = "COLLECT_XML: ", "COLLECT_JOBS_PENDING: "
 RAW_RE = re.compile(r"^(?P<task>.+)_(?P<who>[A-Za-z0-9-]+)_(?P<day>\d{4})\.xml$")
+
+
+def cat_ban_cu(base, raw_dir=RAW, stamp=None):
+    """--overwrite: chuyển <base>.xml, <base>.txt và file job <base>_job<id>.xml/.txt vào raw/_cu/ với tên <tên>.cu<HHMMSS>.<đuôi> (trùng thì thêm -2, -3...).
+    Không xoá gì. Trả danh sách đường dẫn mới (thứ tự: xml, txt, file job)."""
+    stamp = stamp or datetime.datetime.now().strftime("%H%M%S")
+    olds = [base + ".xml", base + ".txt"] + sorted(glob.glob(glob.escape(base) + "_job*.xml") + glob.glob(glob.escape(base) + "_job*.txt"))
+    olds = [p for p in olds if os.path.isfile(p)]
+    if not olds:
+        return []
+    dest_dir = os.path.join(raw_dir, CU)
+    os.makedirs(dest_dir, exist_ok=True)
+    out = []
+    for p in olds:
+        stem, ext = os.path.splitext(os.path.basename(p))
+        dest, k = os.path.join(dest_dir, f"{stem}.cu{stamp}{ext}"), 2
+        while os.path.exists(dest):
+            dest, k = os.path.join(dest_dir, f"{stem}.cu{stamp}-{k}{ext}"), k + 1
+        os.replace(p, dest)
+        out.append(dest)
+    return out
 
 
 def _point_names(cfg_path):
@@ -46,13 +77,27 @@ def _vn_time(dt):
     return str(dt)
 
 
+def _txt(v):
+    """Giá trị chữ của enum cvat-sdk (ModelSimple có .value) hoặc chuỗi thường."""
+    return str(getattr(v, "value", v))
+
+
 def _jobs_info(task, kinds=None):
-    """[dict(id, n, stage, state, start, stop, kind)] của task theo start_frame; kinds = {job_id: nhan|gan_tay} từ push.json (thiếu thì khong_ro)."""
+    """[dict(id, n, stage, state, start, stop, kind, type)] của task theo start_frame; kinds = {job_id: nhan|gan_tay} từ push.json (thiếu thì khong_ro)."""
     out = []
     for j in sorted(task.get_jobs(), key=lambda j: j.start_frame):
-        out.append(dict(id=j.id, n=j.stop_frame - j.start_frame + 1, stage=str(j.stage), state=str(j.state),
-                        start=j.start_frame, stop=j.stop_frame, kind=(kinds or {}).get(j.id, "khong_ro")))
+        out.append(dict(id=j.id, n=j.stop_frame - j.start_frame + 1, stage=_txt(j.stage), state=_txt(j.state),
+                        start=j.start_frame, stop=j.stop_frame, kind=(kinds or {}).get(j.id, "khong_ro"), type=_txt(getattr(j, "type", None) or "annotation")))
     return out
+
+
+def jobs_chua_xong(jobs):
+    """Job loại annotation (bỏ job ground_truth, consensus_replica) có state khác completed; job thiếu `type` (đọc từ .txt) coi là annotation."""
+    return [j for j in jobs if j.get("type", "annotation") == "annotation" and j.get("state") != "completed"]
+
+
+def _may_doc(prefix, obj):
+    print(prefix + json.dumps(obj, ensure_ascii=False, separators=(",", ":")), flush=True)
 
 
 def _meta_text(task, version, url, who, jobs):
@@ -235,8 +280,29 @@ def _dry_plan(name, base_xml, jobs, ids):
               + ("  [được chọn bởi --job]" if ids and sel else ""))
 
 
+def _dung_vi_khong_ro(khong_ro, overwrite, require):
+    """Lý do dừng khi --overwrite/--require-completed gặp task demo- không thấy hoặc trùng tên trên CVAT: MỘT dòng (trang rà soát lấy dòng cuối của
+    tiến trình con làm nguyên nhân), nêu tên task, lý do và cách sửa. khong_ro = [(task, câu lý do, [id trùng] | None nếu không thấy)]."""
+    co = " ".join(f for f, on in (("--overwrite", overwrite), ("--require-completed", require)) if on)
+    sua = []
+    if any(ids is None for _n, _w, ids in khong_ro):
+        sua.append("task không thấy: kiểm link và tổ chức CVAT (tab Cài đặt) đúng server đã đẩy đợt; task đã bị xoá thật thì đẩy lại đợt lên CVAT "
+                   "(nhãn đã sửa trên task cũ không còn)")
+    for name, _w, ids in khong_ro:
+        if ids is None:
+            continue
+        info = push_jobs(name)                                    # chỉ đọc runs/*/push.json: task nào là của đợt đã đẩy
+        keep = info["task_id"] if info and info.get("task_id") in ids else None
+        sua.append(f"task {name} trùng tên: xoá hoặc đổi tên bản thừa trong CVAT, "
+                   + (f"giữ task id {keep} (theo runs\\{info['run']}\\push.json)" if keep is not None else "giữ task có id ghi trong runs\\<đợt>\\push.json"))
+    msg = (f"collect {co} dừng, chưa xuất và chưa ghi file nào: " + "; ".join(w for _n, w, _i in khong_ro) + ". Cách sửa: " + "; ".join(sua)
+           + "; rồi chạy lại (trên trang rà soát: bấm Merge jobs & Finish lại).")
+    return " ".join(msg.split())
+
+
 def collect(args):
-    """Trả True khi xong. Lỗi người dùng sửa được: SystemExit tiếng Việt."""
+    """Trả True khi xong. Lỗi người dùng sửa được: SystemExit tiếng Việt. Với --overwrite hoặc --require-completed (không --dry-run), task demo- không thấy
+    hoặc trùng tên trên CVAT làm DỪNG (SystemExit, mã khác 0) trước khi xuất hay ghi gì; collect thường thì chỉ in, ghi vào 'File còn thiếu' và trả True."""
     t_all = time.time()
     tasks = []
     for t in getattr(args, "task", None) or []:
@@ -247,6 +313,12 @@ def collect(args):
         raise SystemExit("collect cần ít nhất một --task.")
     reviewer = io_.safe_file_part(getattr(args, "reviewer", None) or "RA")
     skip, dry = bool(getattr(args, "skip_export", False)), bool(getattr(args, "dry_run", False))
+    overwrite = bool(getattr(args, "overwrite", False))
+    require = bool(getattr(args, "require_completed", False))
+    if overwrite and skip:
+        raise SystemExit("--overwrite xuất lại từ CVAT nên không đi cùng --skip-export: bỏ một trong hai.")
+    if require and skip:
+        raise SystemExit("--require-completed đọc trạng thái job trên CVAT nên không đi cùng --skip-export: bỏ một trong hai.")
     per_job, job_ids = _tach_mode(args)
     pipe = io_.load_pipeline(getattr(args, "pipeline", None))
     cfg_path = getattr(args, "config", None) or os.path.join("config", "m28_config.json")
@@ -300,16 +372,24 @@ def collect(args):
                 all_tasks = list(client.tasks.list())
                 timings["kết nối"] = time.time() - t0
                 found_tasks = {}
+                strict = (overwrite or require) and not dry     # chế độ của nút Merge jobs & Finish: task demo- thiếu/trùng tên thì DỪNG, không "bỏ qua"
+                khong_ro = []                                   # (task, câu lý do, id trùng hoặc None) của task thiếu/trùng tên trên CVAT
+                sau = " Chạy thật với --overwrite/--require-completed sẽ dừng ở đây." if dry and (overwrite or require) else ""
                 for name in exporting:                          # lượt 1: liệt kê job của mọi task (chưa xuất gì)
                     found = [t for t in all_tasks if t.name == name]
                     if not found:
-                        print(f"{name}: KHÔNG thấy task tên này trên CVAT, bỏ qua.")
+                        print(f"{name}: KHÔNG thấy task tên này trên CVAT" + ("." if strict else ", bỏ qua." + sau))
                         missing.append(f"{name} (không có trên CVAT)")
+                        khong_ro.append((name, f"task {name} không thấy trên CVAT {io_.norm_url(env['url'])} (đã bị xoá hoặc đổi tên trong CVAT, "
+                                               "hoặc link/tổ chức CVAT trỏ sang server khác)", None))
                         continue
                     if len(found) > 1:
-                        print(f"{name}: có {len(found)} task trùng tên (id {[t.id for t in found]}), không biết lấy cái nào: bỏ qua. "
-                              "Xoá hoặc đổi tên bản thừa trong CVAT.")
+                        ids = [t.id for t in found]
+                        print(f"{name}: có {len(found)} task trùng tên (id {ids}), không biết lấy cái nào" + (". " if strict else ": bỏ qua. ")
+                              + "Xoá hoặc đổi tên bản thừa trong CVAT." + sau)
                         missing.append(f"{name} (trùng tên {len(found)} task)")
+                        khong_ro.append((name, f"task {name} trùng tên {len(found)} task trên CVAT (id {', '.join(str(i) for i in ids)}), "
+                                               "không biết gộp task nào", ids))
                         continue
                     task = found[0]
                     doing = f"đọc job của {name}"
@@ -319,10 +399,27 @@ def collect(args):
                     print(f"{name}: id {task.id}, {task.size} ảnh, {len(jobs)} job")
                     for j in jobs:
                         print(f"  {tach_job.job_line(j)}")
+                    if dry and overwrite and os.path.exists(os.path.join(RAW, f"{name}_{reviewer}_{day}.xml")):
+                        print(f"    --overwrite: sẽ xuất lại; bản {name}_{reviewer}_{day}.xml cũ (và .txt, file job) sẽ chuyển vào {os.path.join(RAW, CU)}")
                     if dry and _tach_on(name, per_job, job_ids):
                         _dry_plan(name, os.path.join(RAW, f"{name}_{reviewer}_{day}.xml"), jobs, job_ids)
+                if strict and khong_ro:                                     # trước mọi export và trước --require-completed: chưa ghi gì
+                    raise SystemExit(io_.scrub(_dung_vi_khong_ro(khong_ro, overwrite, require)))
                 if job_ids:
                     _check_job_ids(job_ids, valid_ids(found_tasks))         # trước export_dataset đầu tiên
+                if require:                                                 # --require-completed: còn job chưa completed thì chưa xuất task nào
+                    chan = 0
+                    for name, (task, jobs) in found_tasks.items():
+                        pend = jobs_chua_xong(jobs)
+                        if pend:
+                            chan += 1
+                            print(f"{name}: {len(pend)}/{len(jobs)} job chưa completed trên CVAT: "
+                                  + ", ".join(f"job {j['id']} (frame {j['start']}-{j['stop']}, {j['stage']}/{j['state']})" for j in pend))
+                            _may_doc(DONG_CHUA_XONG, dict(task=name, jobs=jobs, pending=[j["id"] for j in pend]))
+                    if chan and not dry:
+                        print("--require-completed: CHƯA xuất gì. Trong CVAT bấm Finish the job cho các job trên (hoặc chạy lại không có --require-completed "
+                              "để gộp luôn).", flush=True)
+                        raise SystemExit(EXIT_CHUA_XONG)
                 for name, (task, jobs) in found_tasks.items():              # lượt 2: xuất
                     if dry:
                         continue
@@ -330,9 +427,11 @@ def collect(args):
                     xml_path, txt_path = base + ".xml", base + ".txt"
                     if not io_.inside(xml_path, RAW):
                         raise SystemExit(f"Đường dẫn {xml_path} nằm ngoài raw\\: từ chối.")
-                    if os.path.exists(xml_path):
-                        print(f"  {xml_path} đã có: KHÔNG ghi đè, dùng file này (muốn xuất lần hai thì đổi --reviewer hoặc chờ sang ngày khác).")
+                    if os.path.exists(xml_path) and not overwrite:
+                        print(f"  {xml_path} đã có: KHÔNG ghi đè, dùng file này (muốn xuất lại nhãn mới nhất thì thêm --overwrite: bản cũ chuyển vào "
+                              f"{os.path.join(RAW, CU)}, không mất).")
                         files[name] = {reviewer: xml_path}
+                        _may_doc(DONG_XML, dict(task=name, nguoi=reviewer, xml=xml_path.replace(os.sep, "/"), jobs=jobs, moi=False))
                         continue
                     doing = f"xuất nhãn của {name}"
                     t1 = time.time()
@@ -341,6 +440,9 @@ def collect(args):
                         z = os.path.join(tmp, "export.zip")
                         task.export_dataset(io_.FORMAT_EXPORT, z, include_images=False)
                         data = io_.read_zip_annotations(z)
+                    moved = cat_ban_cu(base) if overwrite else []   # --overwrite: xuất xong rồi mới dời bản cũ (lỗi xuất thì bản cũ vẫn nguyên chỗ)
+                    if moved:                                       # gồm cả .txt/file job sót lại khi .xml đã mất: tách job không vấp file job cũ
+                        print(f"  --overwrite: bản cũ chuyển vào {os.path.join(RAW, CU)}: " + ", ".join(os.path.basename(p) for p in moved))
                     tmpx = xml_path + f".tmp{os.getpid()}"
                     with open(tmpx, "wb") as f:
                         f.write(data)
@@ -350,6 +452,7 @@ def collect(args):
                     timings[f"xuất {name}"] = time.time() - t1
                     print(f"  đã ghi {xml_path} và {txt_path}")
                     files[name] = {reviewer: xml_path}
+                    _may_doc(DONG_XML, dict(task=name, nguoi=reviewer, xml=xml_path.replace(os.sep, "/"), jobs=jobs, moi=True))
         except SystemExit:
             raise
         except Exception as e:
@@ -445,7 +548,7 @@ def collect(args):
             if jobs is None:
                 lines.append("  - Chưa có thông tin job (không có file .txt cạnh file xuất).")
             else:
-                pend = [j for j in jobs if j["state"] != "completed"]
+                pend = jobs_chua_xong(jobs)                                 # cùng quy tắc với --require-completed (bỏ job ground_truth)
                 lines.append(f"  - Job: {len(jobs)}" + (f" · **chưa sửa xong (state khác completed): {len(pend)}** "
                              + ", ".join(f"job {j['id']} ({j['stage']}/{j['state']})" for j in pend) if pend else " · tất cả completed"))
             if (name, who) in split_res:

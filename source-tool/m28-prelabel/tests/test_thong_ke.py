@@ -531,3 +531,25 @@ def test_mot_nguoi_hai_dot_co_hai_goi_va_gio_moi_dot_tinh_rieng(tmp_path):
     assert m['n_mat'] == 8 and m['trung_vi'] == pytest.approx(50.0) and m['tb_nhan'] == pytest.approx((40 * 60) ** 0.5)         # 4 mặt 40 giây + 4 mặt 60 giây, không lẫn
     assert st['nguon']['goi'] == ['ketqua_P1_1410_NAP_001.zip', 'ketqua_P1_1410_NAP_002.zip'] and not st['nguon']['goi_hong']       # cả hai đợt được dùng
     assert all('cùng phiên' in why for _t, why in st['nguon']['goi_trung'])                                                       # chỉ bản .json của chính gói đó, không phải đợt này trùng đợt kia
+
+
+def test_cung_nguoi_cung_dot_o_nhieu_goi_thi_canh_bao_tinh_gio_nhieu_lan(goi_world):
+    """P1 đã có gói của đợt NAP_001 (outputs\goi_nhom); thêm một gói khác phiên cùng người + đợt (ví dụ nhập tay trùng với gói đồng hồ): trang cảnh báo rõ."""
+    assert not [c for c in tk.tinh(goi_world)['meta']['canh_bao'] if 'cùng đợt' in c]
+    viet_goi(goi_world, nd_goi('P1', 'manual', 40, phien='P1-tay-NAP_001-abcd1234', bat_dau='2026-10-15T19:00:00+07:00'))
+    c = [x for x in tk.tinh(goi_world)['meta']['canh_bao'] if 'cùng đợt' in x]
+    assert len(c) == 1 and 'P1 có 2 gói cho cùng đợt NAP_001' in c[0] and 'Remove entry' in c[0]
+    assert not [x for x in tk.tinh(goi_world)['meta']['canh_bao'] if 'ảnh trùng tên' in x]                 # cùng đợt: chỉ cảnh báo 'cùng đợt', không lặp
+
+
+def test_cung_nguoi_khac_dot_trung_ten_anh_thi_canh_bao_tinh_gio_hai_lan(goi_world):
+    """C10: cùng một lần làm của P3 ghi dưới hai tên đợt (ví dụ bản nhập tay gõ tên bộ ảnh bo200_v1 rồi thêm lại với tên lượt): cảnh báo theo (người, đợt) im lặng, nên
+    cảnh báo thêm khi hai gói của cùng người có tên ảnh chung dù khác đợt (một người không gán một ảnh hai lần). Thông báo chỉ nêu số ảnh, không nêu tên ảnh."""
+    viet_goi(goi_world, nd_goi('P3', 'assisted', 30.0, anh=ANH[:5], dot='bo200_v1', bo_anh='NAP_001', phien='P3-tay-bo200_v1-abcd1234', bat_dau='2026-10-15T19:00:00+07:00'))
+    st = tk.tinh(goi_world)
+    c = [x for x in st['meta']['canh_bao'] if 'ảnh trùng tên' in x]
+    assert len(c) == 1 and c[0].startswith('P3 có 5 ảnh trùng tên ở hai gói khác đợt') and 'ketqua_P3_1410_NAP_001.zip: đợt NAP_001' in c[0]
+    assert 'ketqua_P3_1410_bo200_v1.zip: đợt bo200_v1' in c[0] and 'tính hai lần' in c[0] and 'Remove entry' in c[0] and 'F_00' not in c[0]
+    assert not [x for x in st['meta']['canh_bao'] if 'cùng đợt' in x] and st['meta']['n_mat_trung'] == 5
+    viet_goi(goi_world, nd_goi('P4', 'assisted', 30.0, anh=['F_101', 'F_102'], dot='NAP_002', phien='P4-20261015-190000-bb01', bat_dau='2026-10-15T19:00:00+07:00'))
+    assert [x for x in tk.tinh(goi_world)['meta']['canh_bao'] if 'ảnh trùng tên' in x] == c                 # đợt khác, ảnh khác: không cảnh báo

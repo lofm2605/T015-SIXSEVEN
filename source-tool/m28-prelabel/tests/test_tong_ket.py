@@ -64,6 +64,16 @@ def test_tong_ket_khong_dung_raw_runs_timing_cua_may_nhom_truong(lead):
     assert 'P9' not in html and '0 file nhãn trong raw' in html and '0 file bấm giờ' in html and '4 gói kết quả' in html
 
 
+def test_tong_ket_chi_tu_doc_ban_nhap_tay_khong_doc_goi_khac_trong_goi_nhom_cua_du_an(lead, capsys):
+    root, goi = lead
+    os.makedirs(os.path.join(root, 'outputs', 'goi_nhom'))
+    viet_goi(root, nd_goi('P5', 'assisted', 30.0, n_nguoi_seed=4), 'outputs/goi_nhom')                 # gói đồng hồ nằm sẵn trong outputs/goi_nhom: không tự đọc (như trước)
+    assert tong_ket.nhap_tay_them(root, [goi]) == []
+    assert tong_ket.main(['--project', root, '--vao', goi, '--ra', 'ra']) == 0
+    out = capsys.readouterr().out
+    assert 'Đã dùng 4 gói' in out and 'Đọc thêm' not in out and 'P5' not in out.split('Đã dùng')[1].split('\n')[0]
+
+
 def test_tong_ket_loai_goi_hong_sua_tay_trung_nhung_van_ra_ket_qua(lead, capsys):
     root, goi = lead
     open(os.path.join(goi, 'hong.zip'), 'wb').write(b'PK\x03\x04 hong')
@@ -112,6 +122,7 @@ def test_tong_ket_ma_thoat_khi_khong_co_goi_nao_hay_duong_dan_sai(tmp_path, caps
         tong_ket.main(['--help'])
     out = capsys.readouterr().out
     assert e.value.code == 0 and '--vao' in out and '--ra' in out and 'nhóm trưởng' in out.lower() + 'nhóm trưởng'
+    assert '--khong-nhap-tay' in out and 'goi_nhom' in out                                       # bản nhập tay (nhóm manual gán thẳng trong CVAT) nằm ở outputs\goi_nhom
 
 
 def test_tong_ket_nhieu_vao_file_le_va_nguong_sua(lead, capsys):

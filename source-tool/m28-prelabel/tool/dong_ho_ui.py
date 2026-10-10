@@ -19,6 +19,7 @@ if TOOL_DIR not in sys.path:
     sys.path.insert(0, TOOL_DIR)
 import cai_dat  # noqa: E402
 import dong_ho  # noqa: E402
+import dot_anh  # noqa: E402
 import nap_anh  # noqa: E402
 from dong_ho import DongHo, DongHoLoi, fmt_giay  # noqa: E402
 from m28core import nhom as nhom_mod  # noqa: E402
@@ -427,11 +428,20 @@ def close_buttons(gr, ctx, body, body_fn):
             return (body_fn(box_html("Không có phiên đồng hồ nào để lưu.")),) + sau_khi([])
         dot = dot_da_chon(ses, dot_v)
         v = next(s for s in ses if s["dot"] == dot)
-        if not d.tim_nhan(p, v.get("task", ""), "auto") and getattr(ctx, "dh_luu_cho", None) != (v["phien"], v["rev"]):       # chưa có nhãn xuất của đợt này: nhắc collect trước, bấm thêm lần nữa thì lưu chỉ thời gian
+        if not d.tim_nhan(p, v.get("task", ""), "auto") and getattr(ctx, "dh_luu_cho", None) != (v["phien"], v["rev"]):       # chưa có nhãn xuất của đợt này: nhắc gộp job trước, bấm thêm lần nữa thì lưu chỉ thời gian
             ctx.dh_luu_cho = (v["phien"], v["rev"])
-            return (body_fn(box_html("Chưa thấy file nhãn đã xuất của đợt " + (dot or v.get("task", "")) + " của bạn trong raw/ (" + (v.get("task") or "<task>") + "_" + p + "_<DDMM>.xml), nên gói kết quả "
-                                     "sẽ chỉ có thời gian. Chạy python tool/m28.py collect --reviewer " + p + " trước, rồi bấm Save timing; hoặc bấm Save timing thêm lần nữa để lưu chỉ thời gian.")),
-                    gr.update(), gr.update(), "", gr.update())
+            task = v.get("task") or "<task>"
+            dau = ("Chưa thấy file nhãn đã xuất của đợt " + (dot or v.get("task", "")) + " của bạn trong raw/ (" + task + "_" + p + "_<DDMM>.xml), nên gói kết quả "
+                   "sẽ chỉ có thời gian. ")
+            ps = dot_anh.read_push(os.path.join(ctx.runs_root, dot)) if dot and dong_ho.DOT_RE.fullmatch(dot) else None
+            if isinstance(ps, dict) and ps.get("trang_thai") == "xong":          # nút Merge jobs & Finish chỉ có trên thẻ của đợt đã đẩy CVAT xong
+                cach = ("Cách gọn nhất: đóng hộp này, mở tab Các đợt, bấm Merge jobs & Finish ở thẻ đợt " + (dot or task) + " (gộp các job thành một file rồi dừng "
+                        "và lưu đồng hồ trong một lần bấm). Cách khác: chạy python tool\\m28.py collect --task " + task + " --reviewer " + p
+                        + " --overwrite rồi bấm Save timing; hoặc bấm Save timing thêm lần nữa để lưu chỉ thời gian.")
+            else:
+                cach = ("Đợt " + (dot or task) + " chưa đẩy lên CVAT xong nên chưa có nhãn để gộp: đẩy lên CVAT (Push to CVAT), sửa xong rồi bấm Merge jobs & Finish ở "
+                        "thẻ đợt (tab Các đợt); hoặc bấm Save timing thêm lần nữa để lưu chỉ thời gian.")
+            return (body_fn(box_html(dau + cach)), gr.update(), gr.update(), "", gr.update())
         try:
             r = d.xong_luu(p, v["rev"], True, None, "auto", None, dot=dot)
         except DongHoLoi as ex:

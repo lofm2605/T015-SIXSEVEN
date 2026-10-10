@@ -140,9 +140,21 @@ def _mm(v):
     return (int(m.group(1)), int(m.group(2))) if m else None
 
 
+def ban_chap_nhan(want):
+    """(major, minor) của server mà tool nhận với cvat_version `want` của pipeline.json: đúng bản đó, hoặc MỘT bậc minor mới hơn, đúng danh sách bản server
+    mà chính cvat-sdk khai là hỗ trợ (Client.SUPPORTED_SERVER_VERSIONS của cvat-sdk 2.77 là 2.77 và 2.78). Không đọc được `want` thì rỗng."""
+    mm = _mm(want)
+    return {mm, (mm[0], mm[1] + 1)} if mm else set()
+
+
 def check_version(client, want):
-    """Dừng nếu bản server khác bản trong pipeline.json (khoá cvat_version). So (major, minor); trả chuỗi bản server."""
+    """Dừng nếu bản server ngoài ban_chap_nhan(cvat_version của pipeline.json). So (major, minor); trả chuỗi bản server. Server mới hơn một bậc (ví dụ
+    2.78 với cvat-sdk 2.77) vẫn chạy, kèm một dòng nhắc cả đội nên dùng cùng bản."""
     got = server_version(client)
+    if _mm(got) != _mm(want) and _mm(got) in ban_chap_nhan(want):
+        print(f"Lưu ý: server CVAT {got} mới hơn cvat_version {want} của config\\pipeline.json một bậc; cvat-sdk {want} hỗ trợ bản này nên vẫn chạy "
+              "(cả đội nên dùng cùng một bản CVAT).", flush=True)
+        return got
     if _mm(got) != _mm(want):
         raise SystemExit(f"Bản server CVAT là {got} nhưng config\\pipeline.json ghi cvat_version {want}. cvat-sdk phải cùng bản với "
                          f"server: nếu server đúng là {got}, cài python -m pip install cvat-sdk=={got} rồi sửa cvat_version trong "

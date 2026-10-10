@@ -685,6 +685,23 @@ def test_error_and_next_step_texts(world, monkeypatch):
     assert TOKEN not in day_cvat.error_html(leak, None, 'Khoi') and '***' in day_cvat.error_html(leak, None, 'Khoi')
 
 
+def test_failed_or_cancelled_delete_task_does_not_suggest_merge():
+    """push.json vẫn 'xong' sau khi Delete CVAT task lỗi/huỷ (task còn trên CVAT): bước tiếp theo là thử xoá lại, KHÔNG phải Merge jobs & Finish
+    (nút đó dừng và lưu đồng hồ). Sau job đẩy thì vẫn nhắc Merge jobs & Finish."""
+    ps = dict(trang_thai='xong', task='demo-Khoi', task_id=9)
+    assert day_cvat.next_step(ps, 'Khoi') == day_cvat.FINISH_HINT
+    t = day_cvat.next_step(ps, 'Khoi', 'xoa_task')
+    assert 'Merge' not in t and 'demo-Khoi vẫn còn trên CVAT' in t and 'Delete CVAT task' in t
+    snap = dict(state='loi', returncode=1, run='Khoi', kind='xoa_task', lines=['Không kết nối được tới http://localhost:8080 khi kết nối.'], elapsed=1)
+    h = day_cvat.error_html(snap, ps, 'Khoi')
+    assert 'Xoá task trên CVAT không xong' in h and 'Đẩy lên CVAT' not in h and 'Merge' not in h and 'Delete CVAT task' in h and 'Không kết nối được' in h
+    h = day_cvat.cancelled_html(ps, 'Khoi', kind='xoa_task')
+    assert 'Đã huỷ' in h and 'Merge' not in h and 'vẫn còn trên CVAT' in h
+    assert 'Merge jobs' in day_cvat.cancelled_html(ps, 'Khoi') and 'Đẩy lên CVAT không xong' in day_cvat.error_html(dict(snap, kind='push'), ps, 'Khoi')
+    assert 'Tiến trình xoá task kết thúc với lỗi.' in day_cvat.error_html(dict(snap, lines=[]), None, 'Khoi')
+    assert '--resume' in day_cvat.next_step(dict(ps, trang_thai='da_tao'), 'Khoi', 'xoa_task')                    # task dở: như trước
+
+
 # ---------- day_cvat: xoá task ----------
 def test_delete_model_gates(world):
     ps = dict(trang_thai='xong', task='demo-Khoi', task_id=12, cvat_url='http://localhost:8080')

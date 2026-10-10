@@ -242,8 +242,9 @@ def test_save_from_the_dialog_writes_timing_csv_and_the_result_package(app):
     demo, dh, cb = small(ctx)
     dong_ho_ui.auto_start(None, ctx, 'NAP_001', 4)
     g.tick(95)
-    first = call(demo, 'on_luu')                                                   # chưa có nhãn xuất trong raw/: nhắc collect trước, chưa lưu gì
-    assert 'collect --reviewer P5' in first['close-body'] and ctx.dong_ho.xem('P5')['co_phien'] and not os.path.exists(os.path.join(root, 'outputs', 'timing', 'timing_P5.csv'))
+    first = call(demo, 'on_luu')                                                   # đợt chưa đẩy CVAT: chưa có nhãn để gộp, chỉ nhắc đẩy rồi Merge, hoặc lưu chỉ thời gian
+    assert 'chưa đẩy lên CVAT xong' in first['close-body'] and 'Push to CVAT' in first['close-body'] and 'collect --task' not in first['close-body']
+    assert ctx.dong_ho.xem('P5')['co_phien'] and not os.path.exists(os.path.join(root, 'outputs', 'timing', 'timing_P5.csv'))
     out = call(demo, 'on_luu')                                                     # bấm thêm lần nữa: lưu (gói chỉ có thời gian)
     assert 'Đã lưu phiên của P5' in out['close-body'] and 'ket_qua' in out['close-body'] and root not in out['close-body']
     assert out['dh-luu-btn']['visible'] is False and out['dh-bo-btn']['visible'] is False
@@ -483,8 +484,11 @@ def test_close_dialog_lists_every_dot_and_saves_only_the_selected_one(app):
     assert '2 đợt' in note and 'mỗi đợt tính giờ riêng' in note and 'NAP_001' in note and '01:35' in note and 'NAP_002' in note and '00:50' in note and 'tự tạm dừng' in note
     luu, bo, ma, dd = cb.show()
     assert luu['visible'] and bo['visible'] and dd['visible'] is True and dd['value'] == 'NAP_002' and [c[1] for c in dd['choices']] == ['NAP_001', 'NAP_002']
-    first = call(demo, 'on_luu', 'NAP_001')                                            # chưa có nhãn xuất của NAP_001: nhắc collect, chưa lưu gì
-    assert 'collect --reviewer P5' in first['close-body'] and 'NAP_001' in first['close-body'] and ctx.dong_ho.xem('P5', 'NAP_001')['co_phien']
+    os.makedirs(os.path.join(root, 'runs', 'NAP_001'), exist_ok=True)
+    json.dump(dict(task='demo-NAP_001', trang_thai='xong'), open(os.path.join(root, 'runs', 'NAP_001', 'push.json'), 'w'))   # NAP_001 đã đẩy CVAT xong
+    first = call(demo, 'on_luu', 'NAP_001')                                            # chưa có nhãn xuất của NAP_001: nhắc Merge jobs & Finish (hoặc collect), chưa lưu gì
+    assert 'collect --task demo-NAP_001 --reviewer P5 --overwrite' in first['close-body'] and 'Merge jobs &amp; Finish ở thẻ đợt NAP_001' in first['close-body']
+    assert 'NAP_001' in first['close-body'] and ctx.dong_ho.xem('P5', 'NAP_001')['co_phien']
     out = call(demo, 'on_luu', 'NAP_001')
     assert 'Đã lưu phiên của P5 (đợt NAP_001)' in out['close-body'] and root not in out['close-body']
     assert out['dh-luu-btn']['visible'] is True and out['dh-dot-dd']['visible'] is False                 # còn NAP_002 chưa lưu, hết cần ô chọn
@@ -504,7 +508,7 @@ def test_save_uses_the_label_file_of_the_selected_dot_only(app):
     g.tick(95)
     dong_ho_ui.auto_start(None, ctx, 'NAP_002', 4, True)
     g.tick(95)
-    assert 'collect --reviewer P5' in call(demo, 'on_luu', 'NAP_001')['close-body']      # NAP_001 chưa có nhãn của chính nó
+    assert 'chưa có nhãn để gộp' in call(demo, 'on_luu', 'NAP_001')['close-body']      # NAP_001 chưa có nhãn của chính nó (và chưa đẩy CVAT)
     assert 'Đã lưu phiên của P5 (đợt NAP_002)' in call(demo, 'on_luu', 'NAP_002')['close-body']        # NAP_002 có: lưu ngay một lần bấm
 
 

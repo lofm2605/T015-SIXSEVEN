@@ -18,7 +18,7 @@ rà nháp trên trang Gradio chỉ mở ở 127.0.0.1, rồi nhập nhãn nháp 
 | `prepare` | Cắt mặt, chạy MediaPipe, đổi 478 → 50 điểm, gắn cờ `low_conf`, tự kiểm, vẽ ảnh chồng |
 | `review` | Trang rà soát: mỗi mặt bấm **Nhận / Gán tay / Bỏ ảnh** |
 | `push` | Tạo task CVAT mới `demo-…` và nhập nhãn nháp đúng một lần |
-| `collect` | Sau khi gán: xuất nhãn từ CVAT về `raw/` (chỉ đọc); với task `demo-…` còn tách nhãn theo từng job ra `raw/<task>_<người>_<DDMM>_job<id>.xml` (offline; file job chỉ để đọc/đo, không nhập lại vào CVAT). Tách file đã xuất từ trước: `python tool/tach_job.py --xml raw/<file>.xml` |
+| `collect` | Sau khi gán: xuất nhãn từ CVAT về `raw/` (chỉ đọc; file cả task đã gộp mọi job); với task `demo-…` còn tách nhãn theo từng job ra `raw/<task>_<người>_<DDMM>_job<id>.xml` (offline; file job chỉ để đọc/đo, không nhập lại vào CVAT). `--overwrite` xuất lại bản mới nhất (bản cũ vào `raw/_cu/`), `--require-completed` không xuất khi còn job chưa Finish (thoát mã 3). Tách file đã xuất từ trước: `python tool/tach_job.py --xml raw/<file>.xml` |
 | `all` | `prepare` → `review` → `push` |
 
 ### Đồng hồ bấm giờ, Thống kê ba chỉ số và tổng kết cho nhóm trưởng (09/10/2026, QĐ-006)
@@ -26,8 +26,8 @@ Thí nghiệm chia **hai nhóm độc lập**: `manual` (gán tay hoàn toàn) v
 
 | Việc | Ở đâu | Làm gì |
 |---|---|---|
-| Bấm giờ | chip ⏱ **ở đầu trang** (thay `facetimer.py`; không còn tab riêng) | **Tự chạy khi bấm Nạp ảnh** (người rà của trang, nhóm lấy từ file nhóm, không có thì assisted); **một nút Pause/Resume** (Start với đợt đang chờ). **Mỗi đợt một đồng hồ riêng** (giờ đợt này không lẫn vào đợt khác; một người chỉ chạy một đồng hồ tại một lúc). Muốn lưu: *Close page* → chọn đợt → **Save timing** (hoặc **Discard session**, bấm hai lần). Chạy `collect` trước khi Save timing để gói có nhãn. Đo cả **phiên của đợt**. Ghi `outputs/timing/timing_<Pk>.csv` (12 cột đầu đúng facetimer, cột thêm cuối) và gói kết quả `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (+ `.json`, không ảnh) để **gửi nhóm trưởng**. |
-| Thống kê | tab **Thống kê**, `python tool/thong_ke.py` | Chỉ **ba chỉ số**: NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa (nhóm assisted), so sánh thời gian manual với assisted (KTC 90% bằng cluster bootstrap). |
+| Bấm giờ | chip ⏱ **ở đầu trang** (thay `facetimer.py`; không còn tab riêng) | **Tự chạy khi bấm Nạp ảnh** (người rà của trang, nhóm lấy từ file nhóm, không có thì assisted); **một nút Pause/Resume** (Start với đợt đang chờ). **Mỗi đợt một đồng hồ riêng** (giờ đợt này không lẫn vào đợt khác; một người chỉ chạy một đồng hồ tại một lúc). **Xong một đợt: tab Các đợt → Merge jobs & Finish** trên thẻ đợt (QĐ-009): đồng hồ tạm dừng ngay, tool xuất cả task thành MỘT file `raw/<task>_<Pk>_<DDMM>.xml` (gộp mọi job), rồi dừng và lưu đồng hồ của đợt (giây/mặt = giờ ÷ số ảnh có nhãn); còn job chưa Finish trên CVAT thì hỏi **Merge anyway** / Cancel. Cách cũ: *Close page* → chọn đợt → **Save timing** (hoặc **Discard session**, bấm hai lần), chạy `collect --overwrite` trước. Đo cả **phiên của đợt**. Ghi `outputs/timing/timing_<Pk>.csv` (12 cột đầu đúng facetimer, cột thêm cuối) và gói kết quả `outputs/ket_qua/ketqua_<Pk>_<DDMM>_<đợt>.zip` (+ `.json`, không ảnh) để **gửi nhóm trưởng**. |
+| Thống kê | tab **Thống kê**, `python tool/thong_ke.py` | Chỉ **ba chỉ số**: NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa (nhóm assisted), so sánh thời gian manual với assisted (KTC 90% bằng cluster bootstrap). Nhóm manual (không dùng tool): mục **Nhập tay** → người, nhóm, đợt, thời gian gõ tay, file xuất CVAT (`.xml`/`.zip`, không kèm ảnh) → **Add manual entry** thành gói kết quả trong `outputs/goi_nhom/` (**Remove entry** chỉ chuyển vào `_da_bo/`). |
 | Tổng kết | `python tool/tong_ket.py --vao <thư mục chứa các gói> --ra outputs/tong_ket/` | Của nhóm trưởng: gộp gói của thành viên (kiểm sha256, loại gói hỏng/trùng), cùng ba chỉ số, CSV + HTML tĩnh. Không cần ảnh hay CVAT. |
 
 Giới hạn: tốc độ từng người lẫn vào kết quả (thiết kế hai nhóm); giây/mặt là ước lượng chia đều nếu không bấm từng mặt; chưa thử với nhãn xuất thật từ CVAT, giờ thật buổi 14–15/10, Windows/cmd. Chi tiết: [`TAI-LIEU-CHI-TIET.md`](TAI-LIEU-CHI-TIET.md), mục "Đồng hồ, gói kết quả, Thống kê ba chỉ số".
@@ -79,7 +79,8 @@ Ubuntu: dùng `chay.sh` và [`HUONG-DAN-UBUNTU.md`](HUONG-DAN-UBUNTU.md); Window
 - Trang rà soát: Gradio 6.29.1 trên Chromium headless, 616 mặt, mỗi quyết định trung vị 0,11 giây.
 - Bộ test trong `tests/` (CVAT giả).
 - Bộ 200 ảnh chung (9/10/2026, cloud Linux, Python 3.11, MediaPipe 1.0.1): `tool/tao_bo200.py` đo 3169 ứng viên (3149 cũ + 20 khung trích thêm), chọn 200 ảnh (seed 7 -> 14), dựng gói A, gói B và file bí mật; `kiem` 42/42 mục (giải nén sạch, sha256, không rò rỉ, `m28.py prepare` dùng lượt chạy sẵn và `prelabel.xml` trùng từng byte với code HEAD, trang rà soát mở đủ 200 mặt ở 127.0.0.1).
-- **Chưa thử:** `push` và `collect` trên **CVAT thật** v2.77.0 (kể cả nhập XML skeleton), Windows/cmd thật, Python 3.14. Riêng bộ 200 ảnh: tạo task tay và nhập `prelabel.xml` trên CVAT thật, `push`/`collect` cho bộ 200, `tar -xf` mở zip trên Windows, WinRAR, nháp trên máy khác.
+- Nút Merge jobs & Finish và nhập tay ở Thống kê (11/10/2026): pytest trong Docker Linux (Python 3.14) và trình duyệt tích hợp trên dự án giả với CVAT giả (rà → Push to CVAT → Merge jobs & Finish khi còn job chưa xong và khi đã xong → nhập tay một người manual → Thống kê).
+- **Chưa thử:** `push`, `collect` và Merge jobs & Finish trên **CVAT thật** (v2.77.0/2.78.0, kể cả nhập XML skeleton), Windows/cmd thật, Python 3.14. Riêng bộ 200 ảnh: tạo task tay và nhập `prelabel.xml` trên CVAT thật, `push`/`collect` cho bộ 200, `tar -xf` mở zip trên Windows, WinRAR, nháp trên máy khác.
 - **Chưa có:** số đo thời gian trước/sau và số nháp hỏng bắt được; sẽ cập nhật sau thí nghiệm 14–15/10.
 
 ## Giới hạn

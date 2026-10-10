@@ -10,7 +10,7 @@ Quy ước (giống nap_anh.py / review_app.py):
   * Xoá cả đợt: os.replace(runs/<lượt>, runs/_trash/<lượt>__<YYYYmmdd-HHMMSS>); khôi phục được nếu tên chưa bị dùng lại.
   * Mọi đường dẫn nguồn/đích kiểm bằng nap_anh._inside (realpath + commonpath): symlink trỏ ra ngoài bị từ chối. Tên đợt và tên ảnh
     đến từ trình duyệt chỉ được dùng khi là phần tử của danh sách do server tính, không bao giờ ghép đường dẫn từ chuỗi của client.
-  * Xoá ảnh/đợt bị chặn khi lượt đang có việc chạy (file khoá .dang_chay: prepare, push, xoá task).
+  * Xoá ảnh/đợt bị chặn khi lượt đang có việc chạy (file khoá .dang_chay: prepare, push, xoá task, gộp job).
 Ảnh nhỏ cho lưới tạo bằng PIL (≈160 px, JPEG, xoay EXIF) và nhúng data URI: không mở thêm đường phát file của Gradio.
 """
 import base64
@@ -47,6 +47,9 @@ STATUS_VI = {"nhan": "Nhận", "gan_tay": "Gán tay", "bo": "Bỏ", "": "Chưa r
 DECISION_VI = {"nhan": "Nhận", "gan_tay": "Gán tay", "bo": "Bỏ ảnh", "": "chưa rà"}
 S_PREPARING, S_NOT_READY, S_NOT_REVIEWED, S_REVIEWING, S_DONE = "dang_chuan_bi", "chua_prepare", "chua_ra", "dang_ra", "da_xong"
 S_PUSHING, S_PUSHED, S_PARTIAL, S_DELETING = "dang_day", "da_day", "day_do", "dang_xoa_task"
+S_COLLECTING = "dang_gop"                                      # nút Merge jobs & Finish đang chạy collect (khoá .dang_chay loại "collect")
+BUSY_STATES = (S_PREPARING, S_PUSHING, S_DELETING, S_COLLECTING)
+GOP_FILE = "gop_job.json"                                      # runs/<lượt>/gop_job.json: kết quả lần gộp job gần nhất (gop_job.write_gop)
 
 
 # ---------- đọc dữ liệu ----------
@@ -71,6 +74,12 @@ def read_push(run_dir):
         return None
     d = _jload(p)
     return d if isinstance(d, dict) else {"trang_thai": "hong"}
+
+
+def read_gop(run_dir):
+    """gop_job.json (ghi khi Merge jobs & Finish xuất được file gộp) hoặc None; thiếu/hỏng thì None (trang không vỡ)."""
+    d = _jload(os.path.join(run_dir, GOP_FILE))
+    return d if isinstance(d, dict) else None
 
 
 def run_date(run_dir):
@@ -224,7 +233,7 @@ def counts(run_dir, reviewer):
 
 
 def run_busy(run_dir):
-    """(loại việc, pid) nếu lượt đang có prepare/push/xoá task chạy (file khoá .dang_chay còn sống), không thì None."""
+    """(loại việc, pid) nếu lượt đang có prepare/push/xoá task/gộp job chạy (file khoá .dang_chay còn sống), không thì None."""
     return dang_chay.busy(run_dir)
 
 
@@ -237,6 +246,8 @@ def run_state(run_dir, info):
             return S_PUSHING, "Đang đẩy lên CVAT"
         if kind == "xoa_task":
             return S_DELETING, "Đang xoá task trên CVAT"
+        if kind == "collect":
+            return S_COLLECTING, "Đang gộp job (CVAT)"
         return S_PREPARING, "Đang chuẩn bị"
     ps = read_push(run_dir)
     st = (ps or {}).get("trang_thai")
@@ -272,7 +283,7 @@ def run_info(run_dir, reviewer):
                 so_anh=n_img, nhan=c["nhan"], gan_tay=c["gan_tay"], bo=c["bo"], chua_ra=c["chua_ra"], khong_dung_duoc=c["khong_dung_duoc"],
                 total=c["total"], loi_triage=c["loi"], nguoi_khac=other_reviewers(run_dir, reviewer), trash=count_trash(run_dir),
                 state=code, state_text=text, push=ps, ready=os.path.isfile(os.path.join(run_dir, "flags", "flags.json")),
-                task_deleted=(ps or {}).get("trang_thai") == "task_deleted")
+                task_deleted=(ps or {}).get("trang_thai") == "task_deleted", gop=read_gop(run_dir))
 
 
 # ---------- ảnh của đợt ----------
@@ -681,12 +692,36 @@ def _gio_html(i):
 
 
 def _state_cls(code):
-    return {S_DONE: "ok", S_PUSHED: "ok", S_PARTIAL: "warn", S_PREPARING: "info", S_PUSHING: "info", S_DELETING: "info",
+    return {S_DONE: "ok", S_PUSHED: "ok", S_PARTIAL: "warn", S_PREPARING: "info", S_PUSHING: "info", S_DELETING: "info", S_COLLECTING: "info",
             S_NOT_READY: "warn"}.get(code, "")
 
 
+def gop_html(g):
+    """Dòng 'Đã gộp job: raw/<file> · <giờ>' từ gop_job.json (rỗng nếu đợt chưa gộp lần nào)."""
+    if not isinstance(g, dict) or not isinstance(g.get("xml"), str) or not g["xml"]:
+        return ""
+    out = f'Đã gộp job: {_e(g["xml"].replace(chr(92), "/"))} · {_e(fmt_date(str(g.get("luc", ""))))}'
+    chua = g.get("jobs_chua_xong") if isinstance(g.get("jobs_chua_xong"), list) else []
+    if chua:
+        out += f' · gộp khi còn {len(chua)} job chưa Finish'
+    if g.get("goi"):
+        out += f' · gói {_e(g["goi"])}'
+    return f'<div class="dot-gop" role="status">{out}</div>'
+
+
+def finish_button(i):
+    """Nút Merge jobs & Finish (gộp mọi job của task CVAT thành một file, dừng và lưu đồng hồ của đợt): chỉ khi push.json ghi đẩy xong; tắt khi lượt đang có việc chạy.
+    Nhãn nút viết thẳng trong HTML (test quy ước nút tiếng Anh quét '>…</button>')."""
+    if (i.get("push") or {}).get("trang_thai") != "xong":
+        return ""
+    busy = i.get("state") in BUSY_STATES
+    return (f'<button type="button" class="dot-btn dot-btn-finish" data-act="finish" data-run="{_e(i["name"])}"'
+            + (' disabled title="Đang có việc chạy cho đợt này"' if busy else "") + '>Merge jobs & Finish</button>')
+
+
 def card_html(i, *, active=False, push_ready=None):
-    """Thẻ một đợt. push_ready: None (không cho đẩy) hoặc True/False (nút Đẩy có bật không) — chỉ đợt Đã Xong chưa đẩy."""
+    """Thẻ một đợt. push_ready: None (không cho đẩy) hoặc True/False (nút Đẩy có bật không) — chỉ đợt Đã Xong chưa đẩy.
+    Đợt đã đẩy xong có nút Merge jobs & Finish (finish_button) và, sau khi gộp, dòng 'Đã gộp job' (gop_html)."""
     name = i["name"]
     n = _e(name)
     meta = f'{_e(fmt_date(i["ngay"]))} · <b>{i["so_anh"]}</b> ảnh' + (f' · người nạp {_e(i["nguoi_nap"])}' if i["nguoi_nap"] else "")
@@ -701,7 +736,7 @@ def card_html(i, *, active=False, push_ready=None):
     if i["loi_triage"]:
         extra.append(_e(i["loi_triage"]))
     ex = f'<div class="dot-extra">{" · ".join(extra)}</div>' if extra else ""
-    can_ra = i["ready"] and not active and i["state"] not in (S_PREPARING, S_PUSHING, S_DELETING)
+    can_ra = i["ready"] and not active and i["state"] not in BUSY_STATES
     why = "Đợt đang mở ở tab Rà soát" if active else ("Chưa có flags.json (prepare chưa xong)" if not i["ready"] else
                                                          "Đang có việc chạy" if not can_ra else "")
     ra = (f'<button type="button" class="dot-btn dot-btn-ra" data-act="ra" data-run="{n}"' + ("" if can_ra else ' disabled')
@@ -714,8 +749,8 @@ def card_html(i, *, active=False, push_ready=None):
     return (f'<div class="dot-card" data-state="{i["state"]}"><div class="dot-card-head">'
             f'<button type="button" class="dot-name" data-act="open" data-run="{n}" aria-label="View images of batch {n}">{n}</button>{opened}'
             f'<span class="dot-state st-{_state_cls(i["state"])}">{_e(i["state_text"])}</span></div>'
-            f'<div class="dot-meta">{meta}</div>{note}<div class="dot-counts">{_counts_html(i)}{_gio_html(i)}</div>{ex}'
-            f'<div class="dot-actions">{ra}{push}<button type="button" class="dot-btn" data-act="open" data-run="{n}">View images</button></div></div>')
+            f'<div class="dot-meta">{meta}</div>{note}<div class="dot-counts">{_counts_html(i)}{_gio_html(i)}</div>{gop_html(i.get("gop"))}{ex}'
+            f'<div class="dot-actions">{ra}{push}{finish_button(i)}<button type="button" class="dot-btn" data-act="open" data-run="{n}">View images</button></div></div>')
 
 
 def deleted_runs_html(rows):
@@ -810,8 +845,11 @@ def push_section_html(info):
     warn = ('<div class="dot-warn">Xoá ảnh ở đây KHÔNG xoá ảnh trong task trên CVAT. Muốn bỏ ảnh khỏi CVAT phải xoá trong CVAT hoặc xoá task.</div>')
     can_del = st in ("xong", "da_tao", "da_nhap")
     btn = (f'<button type="button" class="dot-btn dot-btn-danger" data-act="deltask" data-run="{n}">Delete CVAT task…</button>' if can_del else "")
+    fin = finish_button(info)
+    fin = (f'<div class="dot-actions">{fin}</div><div class="dot-muted">Sửa xong mọi job trên CVAT (bấm Save trong từng job) thì bấm Merge jobs &amp; Finish: '
+           'gộp cả task thành một file trong raw\\, dừng và lưu đồng hồ của đợt.</div>' if fin else "")
     return (f'<div class="dot-section dot-cvat"><div><b>CVAT:</b> {txt} · task <b>{name}</b> (id {tid}){link}</div>'
-            + (f'<div class="push-open">{open_btn}</div>' if open_btn else "") + f'{warn}{btn}</div>')
+            + (f'<div class="push-open">{open_btn}</div>' if open_btn else "") + f'{gop_html(info.get("gop"))}{fin}{warn}{btn}</div>')
 
 
 def trash_html(run, items):

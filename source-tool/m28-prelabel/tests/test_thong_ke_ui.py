@@ -170,6 +170,159 @@ def test_thong_ke_xuat_ghi_duoi_outputs_thong_ke_va_tu_choi_khi_dong(world):
     assert len(os.listdir(os.path.join(world['root'], 'outputs', 'thong_ke'))) == 1                # không ghi thêm khi trang đang đóng
 
 
+# ---------- tab Thống kê: mục Nhập tay (nhóm manual gán thẳng trong CVAT) ----------
+TAY_IDS = ('tk-tay', 'tk-tay-note', 'tk-tay-nguoi', 'tk-tay-nhom', 'tk-tay-dot', 'tk-tay-gio', 'tk-tay-ngay', 'tk-tay-file', 'tk-tay-ghichu', 'tk-tay-add', 'tk-tay-msg',
+           'tk-tay-list', 'tk-tay-chon', 'tk-tay-remove')
+
+
+def nhan_tay_xml(tmp_path, name='annotations.xml', anh=('F_001', 'F_002', 'F_003', 'F_004')):
+    from dh_fake import mat_mau, viet_xml
+    return viet_xml(os.path.join(str(tmp_path), 'tai_len_tay', name), {f'{a}.png': mat_mau(i + 1, 0.3) for i, a in enumerate(anh)})
+
+
+def tay_fns(world):
+    with gr.Blocks() as demo:
+        thong_ke_ui.stats_tab(gr, demo, None, world['ctx'])
+    return demo, {n: handler(demo, 'thong_ke_ui', n) for n in ('on_tay_add', 'on_tay_remove', 'on_tay_open', 'on_tay_list')}
+
+
+def test_nhap_tay_co_du_thanh_phan_dong_san_dat_sau_o_tai_goi_truoc_nut_refresh(world):
+    demo, _f = tay_fns(world)
+    blocks = list(demo.blocks.values())
+    ids = [getattr(b, 'elem_id', None) for b in blocks]
+    for want in TAY_IDS:
+        assert want in ids, want
+    acc = blocks[ids.index('tk-tay')]
+    assert type(acc).__name__ == 'Accordion' and acc.open is False and acc.label == 'Nhập tay: nhóm gán tay trực tiếp trong CVAT (không dùng tool)'
+    assert ids.index('tk-goi') < ids.index('tk-tay') < ids.index('tk-tay-remove') < ids.index('tk-refresh') < ids.index('tk-export')
+    by = dict(zip(ids, blocks))
+    assert by['tk-tay-add'].value == 'Add manual entry' and by['tk-tay-add'].variant == 'primary' and by['tk-tay-remove'].value == 'Remove entry'
+    assert by['tk-tay-nguoi'].value is None and [c[1] for c in by['tk-tay-nguoi'].choices] == ['P1', 'P2', 'P3', 'P4', 'P5']
+    assert by['tk-tay-nhom'].value == 'manual' and [c[1] for c in by['tk-tay-nhom'].choices] == ['manual', 'assisted']
+    assert by['tk-tay-gio'].placeholder == '1:25:30 · 85:30 · 85 (phút)' and by['tk-tay-ngay'].placeholder == 'trống = hôm nay; dd/mm/yyyy'
+    assert 'cùng tên ảnh' in by['tk-tay-dot'].label and by['tk-tay-file'].file_count == 'multiple' and by['tk-tay-file'].type == 'filepath'
+    assert set(by['tk-tay-file'].file_types) == {'.xml', '.zip'} and by['tk-tay-file'].label == 'File nhãn xuất từ CVAT (CVAT for images 1.1, không kèm ảnh)'
+    tay = [f for f in demo.fns.values() if getattr(f.fn, '__name__', '').startswith('on_tay_')]
+    assert tay and all(f.concurrency_id == 'thongke_tay' and f.concurrency_limit == 1 and f.api_visibility == 'private' for f in tay)
+
+
+def test_nhap_tay_o_dot_lay_bo_anh_cua_config(world):
+    json.dump({'nhom': {}, 'bo_anh': 'NAP_007'}, open(os.path.join(world['root'], 'config', 'nhom_thi_nghiem.json'), 'w'))
+    demo, f = tay_fns(world)
+    assert [b.value for b in demo.blocks.values() if getattr(b, 'elem_id', None) == 'tk-tay-dot'] == ['NAP_007']
+    dot, lst, sel = f['on_tay_open']('')
+    assert dot['value'] == 'NAP_007' and 'Chưa có bản nhập tay' in lst and sel['choices'] == []
+    dot, lst, sel = f['on_tay_open']('KHAC')                                                         # đã gõ thì giữ nguyên
+    assert 'value' not in dot
+
+
+def test_nhap_tay_add_ghi_vao_goi_nhom_va_hien_danh_sach(world, tmp_path):
+    demo, f = tay_fns(world)
+    x = nhan_tay_xml(tmp_path)
+    before = tree_hash(world['root'], ('runs', 'raw', 'final', 'data', 'config'))
+    msg, lst, sel = f['on_tay_add']('P2', 'manual', 'NAP_001', '6:00', '', [x], '', None)
+    assert 'm-ok' in msg and 'Đã thêm ketqua_P2_' in msg and '4 mặt' in msg and '90,0 giây/mặt' in msg and world['root'] not in msg and 'annotations.xml: 4 ảnh có nhãn' in msg
+    d = os.path.join(world['root'], 'outputs', 'goi_nhom')
+    files = sorted(os.listdir(d))
+    assert len(files) == 2 and files[0].startswith('ketqua_P2_') and files[0].endswith('_NAP_001.json') and files[1].endswith('.zip')
+    assert 'P2' in lst and 'NAP_001' in lst and '06:00' in lst and '90,0' in lst and len(sel['choices']) == 1 and sel['choices'][0][1] == files[0][:-5] and sel['value'] is None
+    assert tree_hash(world['root'], ('runs', 'raw', 'final', 'data', 'config')) == before                # chỉ ghi dưới outputs/goi_nhom
+    fn, _demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
+    nhap, m2, view = fn('', 2.0, False, False, False, '', None)
+    assert '(nhập tay)' in view and 'manual (gán tay): P2' in view
+    msg2, _l, _s = f['on_tay_add']('P2', 'manual', 'NAP_001', '6:00', '', [x], '', None)                 # bấm lần hai: không thêm gói
+    assert 'Đã thêm' in msg2 and sorted(os.listdir(d)) == files
+    lst2 = f['on_tay_list']()
+    assert lst2[0] == lst
+
+
+@pytest.mark.parametrize('args,match', [(('P2', 'manual', 'NAP_001', 'abc', ''), 'Không đọc được thời gian'), (('P2', 'manual', 'NAP_001', '', ''), 'Chưa nhập thời gian'),
+                                        ((None, 'manual', 'NAP_001', '85', ''), 'Chưa chọn người'), (('P2', 'manual', '', '85', ''), 'Chưa nhập đợt'),
+                                        (('P2', 'manual', 'NAP_001', '85', '01/01/2099'), 'tương lai')])
+def test_nhap_tay_sai_dau_vao_canh_bao_khong_ghi_gi(world, tmp_path, args, match):
+    demo, f = tay_fns(world)
+    msg, lst, sel = f['on_tay_add'](*args, [nhan_tay_xml(tmp_path)], '', None)
+    assert 'm-warn' in msg and match in msg
+    assert not os.path.exists(os.path.join(world['root'], 'outputs', 'goi_nhom'))
+    msg, lst, sel = f['on_tay_add']('P2', 'manual', 'NAP_001', '85', '', None, '', None)                # chưa chọn file nhãn
+    assert 'Chưa chọn file nhãn' in msg and not os.path.exists(os.path.join(world['root'], 'outputs', 'goi_nhom'))
+    msg, lst, sel = f['on_tay_add']('P2', 'manual', 'NAP_001', '85', '', [nhan_tay_xml(tmp_path)], 'gửi kien@example.com', None)
+    assert 'Ghi chú bị chặn' in msg and not os.path.exists(os.path.join(world['root'], 'outputs', 'goi_nhom'))
+
+
+def test_nhap_tay_remove_chuyen_vao_da_bo_va_tu_choi_khi_dong(world, tmp_path):
+    demo, f = tay_fns(world)
+    x = nhan_tay_xml(tmp_path)
+    f['on_tay_add']('P1', 'manual', 'NAP_001', '85', '', [x], '', None)
+    f['on_tay_add']('P2', 'manual', 'NAP_001', '1:20:00', '', [x], '', None)
+    d = os.path.join(world['root'], 'outputs', 'goi_nhom')
+    _l, sel = f['on_tay_list']()
+    ten = [c[1] for c in sel['choices'] if c[1].startswith('ketqua_P1_')][0]
+    msg, lst, sel = f['on_tay_remove'](ten)
+    assert 'm-ok' in msg and 'Đã gỡ ' + ten in msg and '_da_bo' in msg and 'không xoá' in msg
+    assert sorted(os.listdir(os.path.join(d, '_da_bo'))) == [ten + '.json', ten + '.zip'] and not os.path.exists(os.path.join(d, ten + '.zip'))
+    assert [c[1] for c in sel['choices']] == [n[:-4] for n in sorted(os.listdir(d)) if n.endswith('.zip')] and '<td>P1</td>' not in lst and '<td>P2</td>' in lst
+    msg, _l, _s = f['on_tay_remove']('../config/m28_config')
+    assert 'm-warn' in msg and 'Chọn một bản nhập tay' in msg
+    msg, _l, _s = f['on_tay_remove'](None)
+    assert 'Chọn một bản nhập tay' in msg
+    world['ctx'].closing = True
+    left = sorted(os.listdir(d))
+    msg, _l, _s = f['on_tay_add']('P3', 'manual', 'NAP_001', '85', '', [x], '', None)
+    assert 'đang đóng' in msg and sorted(os.listdir(d)) == left
+    ten2 = [x[:-4] for x in left if x.endswith('.zip')][0]
+    msg, _l, _s = f['on_tay_remove'](ten2)
+    assert 'đang đóng' in msg and sorted(os.listdir(d)) == left
+
+
+def test_nhap_tay_tu_choi_khi_goi_dang_tai_len_cung_nguoi_cung_dot(world, tmp_path):
+    from tk_fake import nd_goi, viet_goi
+    import dh_fake
+    import shutil
+    ngoai = dh_fake.du_an(tmp_path / 'ban_goc')
+    r = viet_goi(ngoai, nd_goi('P1', 'manual', 40.0))
+    up = tmp_path / 'up'
+    up.mkdir()
+    shutil.copy(os.path.join(ngoai, r['zip']), up)
+    demo, f = tay_fns(world)
+    msg, _l, _s = f['on_tay_add']('P1', 'manual', 'NAP_001', '85', '', [nhan_tay_xml(tmp_path)], '', [str(up / 'ketqua_P1_1410_NAP_001.zip')])
+    assert 'm-warn' in msg and 'ketqua_P1_1410_NAP_001.zip' in msg and 'tính hai lần' in msg
+    assert not os.path.exists(os.path.join(world['root'], 'outputs', 'goi_nhom'))
+
+
+def test_nhap_tay_cung_nguoi_trung_ten_anh_khac_dot_bi_tu_choi(world, tmp_path):
+    """C10: cùng người, cùng file nhãn nhưng gõ tên đợt khác (ví dụ tên bộ ảnh rồi tên lượt): trước đây thành hai gói, giờ tính hai lần. Giờ từ chối, nêu gói đã có."""
+    demo, f = tay_fns(world)
+    x = nhan_tay_xml(tmp_path)
+    msg, _l, _s = f['on_tay_add']('P1', 'manual', 'NAP_001', '85', '', [x], '', None)
+    assert 'm-ok' in msg
+    d = os.path.join(world['root'], 'outputs', 'goi_nhom')
+    files = sorted(os.listdir(d))
+    msg, lst, sel = f['on_tay_add']('P1', 'manual', 'NAP_002', '85', '', [x], '', None)
+    ten = [n[:-4] for n in files if n.endswith('.zip')][0]
+    assert 'm-warn' in msg and f'Đã có gói {ten}.zip của P1 (đợt NAP_001, bản nhập tay khác) trùng 4 ảnh' in msg and 'Remove entry' in msg and 'tính hai lần' in msg
+    assert sorted(os.listdir(d)) == files and len(sel['choices']) == 1 and world['root'] not in msg
+    msg, _l, _s = f['on_tay_add']('P2', 'manual', 'NAP_002', '85', '', [x], '', None)                   # người khác cùng ảnh: được
+    assert 'm-ok' in msg
+
+
+def test_nhap_tay_assisted_khong_co_nhap_van_ghi_nhung_canh_bao_ten_luot(world, tmp_path):
+    """C10: nhập cho người assisted với đợt không phải tên lượt (runs\\<lượt>) thì máy không có nháp: vẫn ghi gói, nhưng thông báo là CẢNH BÁO (m-warn), nói NME của nháp và
+    tỉ lệ sửa sẽ thiếu mặt người này và đợt phải là tên lượt. Ghi chú của mục Nhập tay và ô Đợt nói trước điều đó."""
+    json.dump({'nhom': {}, 'bo_anh': 'bo200_v1'}, open(os.path.join(world['root'], 'config', 'nhom_thi_nghiem.json'), 'w'))
+    demo, f = tay_fns(world)
+    by = {getattr(b, 'elem_id', None): b for b in demo.blocks.values()}
+    assert 'tên lượt' in by['tk-tay-dot'].info and 'runs\\bo200 thì gõ bo200' in by['tk-tay-dot'].info
+    note = thong_ke_ui.tay_note_html()
+    assert 'assisted' in note and '<b>tên lượt</b>' in note and 'runs\\&lt;lượt&gt;' in note and 'kể cả khác tên đợt' in note
+    msg, lst, sel = f['on_tay_add']('P4', 'assisted', 'bo200_v1', '85', '', [nhan_tay_xml(tmp_path)], '', None)
+    assert 'm-warn' in msg and 'Đã thêm ketqua_P4_' in msg and 'không có nháp của đợt bo200_v1' in msg and 'TÊN LƯỢT' in msg
+    assert 'không vào NME của nháp và tỉ lệ điểm phải sửa' in msg and 'máy này có nháp ở: R1' in msg and world['root'] not in msg
+    assert len(sel['choices']) == 1 and sel['choices'][0][1].endswith('_bo200_v1')                     # gói vẫn được ghi
+    msg, _l, _s = f['on_tay_add']('P5', 'manual', 'NAP_003', '85', '', [nhan_tay_xml(tmp_path, anh=('F_201',))], '', None)
+    assert 'm-ok' in msg and 'Bộ ảnh ghi trong gói: bo200_v1' in msg and 'đợt giữ đúng như gõ: NAP_003' in msg   # bo_anh lấy từ config: nói rõ
+
+
 # ---------- tab Lọc dữ liệu ----------
 def test_loc_to_cfg_from_cfg_khu_hoi_va_kiem_chat(world):
     v = dict.fromkeys(loc_ui.KEYS)
@@ -302,3 +455,15 @@ def test_loc_ket_qua_html_khong_co_anh_khong_ma_tai_xe(world):
     assert '<img' not in h and 'Còn lại' in h and 'train' in h and 'val' in h and 'test' in h
     subjects = {r['subject'] for r in world['p'].manifest.values()}
     assert not any(s in h for s in subjects)
+
+
+def test_nhap_tay_hien_gio_bang_chu_va_canh_bao_go_nham_hoac_lech_nhom(world, tmp_path):
+    """'1:30' là 1 phút 30 giây: thông báo ghi rõ bằng chữ; giây/mặt vô lý (< 5) và nhóm khác config\nhom_thi_nghiem.json thì cảnh báo (gói vẫn ghi, gỡ được)."""
+    json.dump({'nhom': {'P3': 'assisted'}, 'bo_anh': ''}, open(os.path.join(world['root'], 'config', 'nhom_thi_nghiem.json'), 'w'))
+    _demo, f = tay_fns(world)
+    msg, _l, _s = f['on_tay_add']('P2', 'manual', 'NAP_001', '1:20:00', '', [nhan_tay_xml(tmp_path)], '', None)
+    assert 'm-ok' in msg and '1:20:00 = 1 giờ 20 phút 0 giây' in msg and 'gõ nhầm' not in msg
+    msg, _l, _s = f['on_tay_add']('P1', 'manual', 'NAP_002', '0:12', '', [nhan_tay_xml(tmp_path, 'p1.xml', ('G_001', 'G_002', 'G_003', 'G_004'))], '', None)
+    assert 'm-warn' in msg and '00:12 = 12 giây' in msg and 'gõ nhầm thời gian' in msg and '1:30:00' in msg
+    msg, _l, _s = f['on_tay_add']('P3', 'manual', 'NAP_003', '85', '', [nhan_tay_xml(tmp_path, 'p3.xml', ('H_001', 'H_002'))], '', None)
+    assert 'm-warn' in msg and 'ghi P3 ở nhóm assisted' in msg and len(f['on_tay_list']()[1]['choices']) == 3

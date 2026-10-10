@@ -1,9 +1,10 @@
 """Thử tool/cvat_smoke.py (kiểm tra nhanh CVAT thật) bằng CVAT GIẢ (tests/fake_cvat/cvat_sdk). Giống test_push.py: chạy trong thư mục tạm có
 config/ thật chép vào, gói giả đưa vào bằng monkeypatch. Kết quả CHỨNG MINH logic (đúng bước, dọn dẹp, không rò token, chỉ đụng task của
-mình) nhưng KHÔNG chứng minh CVAT thật nhận label skeleton / job_file_mapping / XML nhập: việc đó chỉ máy có CVAT 2.77 trả lời được."""
+mình) nhưng KHÔNG chứng minh CVAT thật nhận label skeleton / job_file_mapping / XML nhập: việc đó chỉ máy có CVAT 2.77 hoặc 2.78 thật trả lời được."""
 import argparse
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -151,6 +152,88 @@ def test_step9_checks_the_job_files_and_fails_when_the_split_is_wrong(cvat, monk
     assert code == 1 and st[9]['ket_qua'] == 'HỎNG' and 'tách job' in st[9]['ghi_chu']
 
 
+def smoke_run_dir(cvat):
+    d = os.path.join(cvat.root, 'runs', '_smoke')
+    runs = sorted(n for n in os.listdir(d) if os.path.isdir(os.path.join(d, n)))
+    return os.path.join(d, runs[-1])
+
+
+def test_step9_checks_require_completed_and_overwrite_on_server(cvat, capsys):
+    """Bước 9 thử hai cờ của nút Merge jobs & Finish: (a) --require-completed thoát mã 3, không ghi gì; (b) --overwrite dời bản cũ vào raw\\_cu."""
+    n0 = len(cvat.calls())
+    code, rep, st = go(cvat)
+    assert code == 0 and st[9]['ket_qua'] == 'ĐẠT', st[9]
+    con = '\n'.join(st[9]['con'])
+    assert '(a) --require-completed: 3 job chưa completed nên thoát mã 3' in con and 'state new, new, new' in con
+    assert '(b) --overwrite: xuất lại; bản cũ (8 file' in con and 'raw\\_cu' in con and 'annotation/new/annotation' in con
+    raw = os.path.join(smoke_run_dir(cvat), 'raw')
+    cu = sorted(os.listdir(os.path.join(raw, '_cu')))
+    assert len(cu) == 8 and all(re.search(r'\.cu\d{6}\.(xml|txt)$', n) for n in cu)              # .xml, .txt và 3 job x (.xml + .txt)
+    whole = [n for n in os.listdir(raw) if re.fullmatch(r'demo-smoke_SMOKE_\d{4}\.xml', n)]
+    assert len(whole) == 1 and len([n for n in os.listdir(raw) if '_job' in n]) == 6               # bản mới ghi lại đủ
+    assert ncalls(cvat, 'Task.export_dataset', n0) == 3 and ncalls(cvat, 'Task.get_jobs', n0) >= 3
+    out = capsys.readouterr().out                                                                  # chữ của hai lần thử phụ không in ra màn hình
+    assert not [ln for ln in out.splitlines() if ln.startswith('COLLECT_JOBS_PENDING: ')] and 'CHƯA xuất gì' not in out
+    assert len([ln for ln in out.splitlines() if ln.startswith('COLLECT_XML: ')]) == 1                # chỉ lần collect chính
+
+
+def test_step9_fails_when_require_completed_does_not_block(cvat, monkeypatch):
+    from m28core import collect
+    monkeypatch.setattr(collect, 'jobs_chua_xong', lambda jobs: [])                              # giả: coi mọi job là xong
+    code, rep, st = go(cvat)
+    assert code == 1 and st[9]['ket_qua'] == 'HỎNG' and '(a) --require-completed' in st[9]['ghi_chu'] and 'không chặn' in st[9]['ghi_chu']
+    assert 'Merge jobs & Finish' in st[9]['ghi_chu'] and 'nhãn xuất ra khác' not in st[9]['ghi_chu']
+    assert tasks_named(cvat) == [] and st[11]['ket_qua'] == 'ĐẠT'                               # vẫn dọn task
+
+
+def test_step9_fails_when_require_completed_writes_files(cvat, monkeypatch):
+    from m28core import collect
+    real = collect.collect
+
+    def leaky(args):
+        if getattr(args, 'require_completed', False):
+            os.makedirs('raw', exist_ok=True)
+            open(os.path.join('raw', 'lot.txt'), 'w').write('x')
+        return real(args)
+    monkeypatch.setattr(collect, 'collect', leaky)
+    code, rep, st = go(cvat)
+    assert code == 1 and st[9]['ket_qua'] == 'HỎNG' and 'vẫn ghi hoặc đổi file' in st[9]['ghi_chu']
+
+
+def test_step9_fails_when_overwrite_does_not_move_old_files(cvat, monkeypatch):
+    from m28core import collect
+    monkeypatch.setattr(collect, 'cat_ban_cu', lambda *a, **k: [])                              # giả: ghi đè thẳng, không giữ bản cũ
+    code, rep, st = go(cvat)
+    assert code == 1 and st[9]['ket_qua'] == 'HỎNG' and '(b) --overwrite không chuyển' in st[9]['ghi_chu']
+    assert tasks_named(cvat) == []
+
+
+def test_step9_fails_when_job_state_is_not_plain_text(cvat, monkeypatch):
+    from m28core import collect
+    monkeypatch.setattr(collect, '_txt', lambda v: f'JobState(value={v!r})')                     # như str() của enum SDK nếu không lấy .value
+    code, rep, st = go(cvat)
+    assert code == 1 and st[9]['ket_qua'] == 'HỎNG' and 'không phải chữ thường của CVAT' in st[9]['ghi_chu']
+
+
+def test_step9_fails_when_server_export_breaks_on_overwrite(cvat, monkeypatch):
+    from m28core import collect
+    real = collect.collect
+
+    def second_export_fails(args):
+        if getattr(args, 'overwrite', False):
+            cvat.CONTROL['export_fail'] = True
+        try:
+            return real(args)
+        finally:
+            cvat.CONTROL.pop('export_fail', None)
+    monkeypatch.setattr(collect, 'collect', second_export_fails)
+    code, rep, st = go(cvat)
+    assert code == 1 and st[9]['ket_qua'] == 'HỎNG' and '(b) --overwrite: collect dừng' in st[9]['ghi_chu'] and '500' in st[9]['ghi_chu']
+    raw = os.path.join(smoke_run_dir(cvat), 'raw')
+    assert not os.path.exists(os.path.join(raw, '_cu')) and len([n for n in os.listdir(raw) if re.fullmatch(r'demo-smoke_SMOKE_\d{4}\.xml', n)]) == 1
+    assert tasks_named(cvat) == [] and TOKEN not in json.dumps(rep)
+
+
 def test_existing_project_is_left_alone_and_giu_project(cvat):
     code, rep, st = go(cvat, giu_project=True)
     assert code == 0 and st[12]['ket_qua'] == 'BỎ QUA' and 'giữ theo --giu-project' in st[12]['ghi_chu']
@@ -178,7 +261,8 @@ def test_foreign_tasks_untouched(cvat):
         if c['m'] in ('tasks.retrieve', 'tasks.remove_by_ids'):
             ids = c['args'][0] if isinstance(c['args'][0], list) else [c['args'][0]]
             assert not {50, 51} & set(ids)
-    assert ncalls(cvat, 'Task.remove', n0) == 1 and ncalls(cvat, 'Task.import_annotations', n0) == 1 and ncalls(cvat, 'Task.export_dataset', n0) == 2
+    # export: push tự kiểm, collect, collect --overwrite (bước 9b); --require-completed (9a) không xuất
+    assert ncalls(cvat, 'Task.remove', n0) == 1 and ncalls(cvat, 'Task.import_annotations', n0) == 1 and ncalls(cvat, 'Task.export_dataset', n0) == 3
 
 
 # ---------- dry-run ----------
@@ -214,6 +298,74 @@ def test_connection_and_label_failures(cvat, control, step, text):
     assert all(st[i]['ket_qua'] == 'ĐẠT' for i in range(1, step))
     assert all(st[i]['ket_qua'] == 'BỎ QUA' for i in range(step + 1, 13))
     assert tasks_named(cvat) == [] and ncalls(cvat, 'tasks.create_from_data') == 0 and not os.path.exists(marker(cvat))
+
+
+# ---------- bản server: đúng tập cvat_io.ban_chap_nhan mà push/collect nhận (C8) ----------
+def set_pipeline_version(cvat, v):
+    p = os.path.join(cvat.root, 'config', 'pipeline.json')
+    d = json.load(open(p, encoding='utf-8'))
+    d['cvat_version'] = v
+    json.dump(d, open(p, 'w', encoding='utf-8'))
+
+
+def test_server_278_like_the_owner_runs_every_step_including_step9_flags(cvat, capsys):
+    """Máy chủ repo chạy CVAT 2.78.0 với cvat-sdk và config\\pipeline.json 2.77.0 (QĐ-009): bước 4 ĐẠT, ghi rõ bản server và lý do được nhận (cvat-sdk 2.77
+    khai hỗ trợ); bước 9 (hai cờ của nút Merge jobs & Finish trên server thật) chạy được, không bị BỎ QUA."""
+    assert json.load(open(os.path.join(cvat.root, 'config', 'pipeline.json'), encoding='utf-8'))['cvat_version'] == '2.77.0'
+    cvat.CONTROL['version'] = '2.78.0'
+    code, rep, st = go(cvat)
+    assert code == 0 and [st[i]['ket_qua'] for i in range(1, 13)] == ['ĐẠT'] * 12, rep
+    assert 'server CVAT 2.78.0 (mới hơn cvat_version 2.77.0' in st[4]['ghi_chu'] and 'cvat-sdk 2.77 khai hỗ trợ bản này nên được nhận' in st[4]['ghi_chu']
+    con = '\n'.join(st[9]['con'])
+    assert '(a) --require-completed: 3 job chưa completed nên thoát mã 3' in con and '(b) --overwrite: xuất lại' in con
+    assert rep['ban_server'] == '2.78.0' and 'cvat_version 2.77.0' in st[1]['ghi_chu']
+    out = capsys.readouterr().out
+    assert re.search(r'^\[4/12\] Kết nối và phiên bản: ĐẠT\. server CVAT 2\.78\.0 ', out, re.M)
+    assert out.index('Lưu ý: server CVAT 2.78.0') < out.index('[4/12] Kết nối và phiên bản: ĐẠT')        # dòng nhắc của check_version in cùng chỗ
+    txt = [n for n in os.listdir(os.path.join(cvat.root, 'runs', '_smoke')) if n.endswith('.txt')]
+    body = open(os.path.join(cvat.root, 'runs', '_smoke', txt[0]), encoding='utf-8').read()
+    assert 'bản server: 2.78.0' in body and 'khai hỗ trợ bản này' in body
+
+
+@pytest.mark.parametrize('server', ['2.77.4', '2.78.1', '2.79.0', '2.76.9', '3.77.0'])
+def test_step4_accepts_exactly_what_push_and_collect_accept(cvat, server):
+    ok = cvat_io._mm(server) in cvat_io.ban_chap_nhan('2.77.0')
+    cvat.CONTROL['version'] = server
+    code, rep, st = go(cvat)
+    if ok:
+        assert code == 0 and st[4]['ket_qua'] == 'ĐẠT' and st[9]['ket_qua'] == 'ĐẠT', rep
+        assert ('mới hơn cvat_version' in st[4]['ghi_chu']) == server.startswith('2.78.')
+    else:
+        assert code == 1 and st[4]['ket_qua'] == 'HỎNG' and 'khác phiên bản' in st[4]['ghi_chu'] and st[9]['ket_qua'] == 'BỎ QUA'
+        assert tasks_named(cvat) == [] and ncalls(cvat, 'tasks.create_from_data') == 0
+    assert server.startswith(('2.77.', '2.78.')) == ok
+
+
+@pytest.mark.parametrize('pipe_ver, server, step, text', [
+    ('2.78.0', '2.78.0', None, None),                                  # pipeline.json đã sửa theo gợi ý cũ: vẫn trong bản cvat-sdk 2.77 hỗ trợ
+    ('2.78.0', '2.77.0', 4, 'khác phiên bản'),                         # check_version: 2.77 ngoài ban_chap_nhan('2.78.0'), push cũng dừng như vậy
+    ('2.79.0', '2.79.0', 1, 'ngoài các bản cvat-sdk 2.77.0 của nhóm hỗ trợ (2.77.x, 2.78.x)'),
+    ('2.76.0', '2.76.0', 1, 'trả về 2.77.0'),
+])
+def test_step1_pipeline_version_follows_the_sdk_supported_set(cvat, pipe_ver, server, step, text):
+    set_pipeline_version(cvat, pipe_ver)
+    cvat.CONTROL['version'] = server
+    code, rep, st = go(cvat)
+    if step is None:
+        assert code == 0 and [st[i]['ket_qua'] for i in range(1, 13)] == ['ĐẠT'] * 12, rep
+        assert 'mới hơn' not in st[4]['ghi_chu']
+    else:
+        assert code == 1 and st[step]['ket_qua'] == 'HỎNG' and text in st[step]['ghi_chu'], st[step]
+        assert st[9]['ket_qua'] == 'BỎ QUA' and tasks_named(cvat) == []
+
+
+def test_step4_own_check_matches_ban_chap_nhan_even_if_the_connection_check_lets_it_through(cvat, monkeypatch):
+    monkeypatch.setattr(cvat_io, 'check_version', lambda client, want: cvat_io.server_version(client))   # giả: lớp kiểm của cai_dat_thu bị bỏ qua
+    cvat.CONTROL['version'] = '2.80.0'
+    code, rep, st = go(cvat)
+    assert code == 1 and st[4]['ket_qua'] == 'HỎNG' and 'server là bản 2.80.0' in st[4]['ghi_chu']
+    assert 'push/collect chỉ nhận 2.77.x, 2.78.x' in st[4]['ghi_chu'] and st[5]['ket_qua'] == 'BỎ QUA'
+    assert cvat_smoke.ban_text('2.77.0') == '2.77.x, 2.78.x' and cvat_smoke.ban_text('x') == '(không đọc được bản)'
 
 
 def test_existing_project_with_missing_sublabels_is_not_touched(cvat):

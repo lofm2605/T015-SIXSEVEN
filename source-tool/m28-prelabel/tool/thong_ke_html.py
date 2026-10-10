@@ -124,7 +124,10 @@ def phan_dau(st):
     if k["n_manual"] or k["n_assisted"]:
         out.append(f'<div class="tk-note{" tk-warn" if k["lech"] else ""}"><b>Hai nhóm làm cùng bộ ảnh?</b> manual có nhãn {k["n_manual"]} ảnh, assisted {k["n_assisted"]} ảnh, chung {k["chung"]}'
                    + (f", chỉ manual {k['chi_manual']}, chỉ assisted {k['chi_assisted']}: <b>LỆCH</b>" if k["lech"] else (": khớp" if k["chung"] else "")) + ".</div>")
-    out.append('<div class="tk-note"><b>Nguồn:</b> ' + f'{len(ng["goi"])} gói kết quả' + (f" ({e(', '.join(ng['goi']))})" if ng["goi"] else "")
+    tay = set(ng.get("goi_nhap_tay") or ())                                  # bản nhập tay của nhóm trưởng (nhóm manual gán thẳng trong CVAT): tính như gói, đánh dấu cho rõ
+    ten_goi = [t + (" (nhập tay)" if t in tay else "") for t in ng["goi"]]
+    out.append('<div class="tk-note"><b>Nguồn:</b> ' + f'{len(ng["goi"])} gói kết quả' + (f" ({e(', '.join(ten_goi))})" if ng["goi"] else "")
+               + (f", trong đó {len(tay & set(ng['goi']))} bản nhập tay" if tay & set(ng["goi"]) else "")
                + f'; {len(ng["nhan_raw"])} file nhãn trong raw\\' + (f' ({e(", ".join(f["file"] for f in ng["nhan_raw"][:12]))})' if ng["nhan_raw"] else "")
                + f'; {len(ng["timing"])} file bấm giờ' + (f' ({e(", ".join(ng["timing"][:12]))})' if ng["timing"] else "") + ".</div>")
     for ten, why in ng["goi_hong"]:

@@ -11,7 +11,8 @@ Hai nhóm: manual (gán tay hoàn toàn) và assisted (dùng tool, sửa nháp);
   (2) Tỉ lệ điểm phải sửa (chỉ nhóm assisted, ngưỡng mặc định 2% IOD; điểm xoá/ẩn tính là đã sửa).
   (3) Thời gian: giây/mặt mỗi nhóm (trung vị, trung bình nhân), % nhanh hơn của assisted so với manual (mục tiêu >= 20%), KTC 90% bằng cluster bootstrap (bốc người rồi bốc mặt,
       seed 28, 2.000 lần); mỗi nhóm < 2 người thì chỉ có kết quả mô tả.
-Nguồn: gói kết quả (outputs\\ket_qua, outputs\\goi_nhom, --goi) + file nhãn raw\\ + dòng bấm giờ timing_P*.csv (bản của đồng hồ ở đầu trang hay facetimer). Phần tính ở m28core\\so_sanh.py,
+Nguồn: gói kết quả (outputs\\ket_qua, outputs\\goi_nhom, --goi; gồm cả BẢN NHẬP TAY của nhóm trưởng cho người nhóm manual gán thẳng trong CVAT không qua tool, m28core\\nhap_tay.py,
+tính y như gói của đồng hồ) + file nhãn raw\\ + dòng bấm giờ timing_P*.csv (bản của đồng hồ ở đầu trang hay facetimer). Phần tính ở m28core\\so_sanh.py,
 dùng chung với tool\\tong_ket.py (nhóm trưởng chỉ cần gói của các thành viên). Quy tắc: ô số kèm n; n < 5 ghi "n quá nhỏ"; chưa có dữ liệu thì khung trống nói rõ cần file nào, ai làm ra,
 không bao giờ hiện 0 hay số mẫu; Ttest ẩn mặc định; mặt xoá mềm không vào số đo; HTML xuất không ảnh mặt, không mã tài xế, không đường dẫn tuyệt đối.
 """
@@ -40,6 +41,7 @@ NGUONG_SUA = so_sanh.NGUONG_SUA_MAC_DINH
 NGUONG_SUA_MIN, NGUONG_SUA_MAX = 0.5, 10.0
 DIEU_KIEN_VI = {"manual": "Gán tay hoàn toàn (manual)", "assisted": "Dùng tool, sửa nháp (assisted)"}
 THU_MUC_GOI = (os.path.join("outputs", "ket_qua"), os.path.join("outputs", "goi_nhom"))
+NGUON_NHAP_TAY = "nhap_tay"              # gói do nhóm trưởng nhập tay (m28core\\nhap_tay.py) cho người nhóm manual gán thẳng trong CVAT: tính như gói của đồng hồ
 TIMING_UU_TIEN = os.path.join("outputs", "timing")
 HAN_CHE = ("Thiết kế hai nhóm độc lập: tốc độ từng người khác nhau lẫn vào kết quả (nên có một đợt khởi động chung hoặc chia nhóm cân tốc độ); ít người mỗi nhóm thì khoảng tin cậy rất rộng.",
            "Đồng hồ đo cả PHIÊN: giây/mặt là ước lượng chia đều (cả phiên ÷ số mặt) trừ khi người gán bấm từng mặt; bootstrap theo mặt trong người khi đó không thêm thông tin.",
@@ -233,13 +235,33 @@ def mat_tu_goi(nd):
 def _thong_bao_trong_nme(co_manual, co_nhap_assisted, co_assisted):
     if not co_manual:
         return _trong("Chưa có nhãn gán tay của nhóm manual: đây là ĐÁP ÁN để đo nháp (cả hai nhóm làm cùng bộ ảnh).",
-                      "gói kết quả của người nhóm manual (outputs\\ket_qua\\ketqua_<Pk>_*.zip) hoặc raw\\<task>_<Pk>_<DDMM>.xml; điền config\\nhom_thi_nghiem.json", "người nhóm manual (bấm Save timing ở hộp Đóng trang rồi gửi gói cho nhóm trưởng)")
+                      "gói kết quả của người nhóm manual (outputs\\ket_qua\\ketqua_<Pk>_*.zip), bản nhập tay (mục Nhập tay ở tab Thống kê: thời gian + file nhãn xuất từ CVAT) "
+                      "hoặc raw\\<task>_<Pk>_<DDMM>.xml; điền config\\nhom_thi_nghiem.json",
+                      "người nhóm manual (gán thẳng trong CVAT: gửi nhóm trưởng file nhãn xuất 'CVAT for images 1.1' và thời gian làm để nhập tay)")
     if not co_assisted:
         return _trong("Chưa có nháp của nhóm assisted để đo.", "gói kết quả của người nhóm assisted (có nháp và nhãn cuối)", "người nhóm assisted")
     if not co_nhap_assisted:
         return _trong("Có nhãn nhóm assisted nhưng chưa nhãn nào ghép được với nháp (không có nháp liên kết).",
                       "gói kết quả có nháp (assisted, đã có runs\\<đợt>\\xml\\prelabel.xml lúc Xong) hoặc chọn 'Lượt chứa nháp' cho nhãn trong raw\\", "người nhóm assisted")
     return None
+
+
+def _canh_bao_trung_anh(goi_ok):
+    """Cảnh báo khi hai gói của CÙNG người nhưng KHÁC đợt có tên ảnh chung: một người không gán một ảnh hai lần trong thí nghiệm, nên đó là cùng một lần làm ghi dưới hai tên đợt
+    (ví dụ bản nhập tay gõ tên bộ ảnh rồi thêm lại với tên lượt): giờ bị tính hai lần, mặt trùng chỉ lấy ở gói đầu. Cùng đợt thì cảnh báo 'cùng đợt' của tinh đã nói, không lặp.
+    Chỉ nêu số ảnh trùng, không nêu tên ảnh."""
+    by, out = {}, []
+    for t, nd in goi_ok:
+        by.setdefault(nd["nguoi"], []).append((t, str(nd.get("dot") or ""), {r["anh"] for r in nd.get("ket_qua", []) if isinstance(r, dict) and r.get("anh")}))
+    for ng, gs in sorted(by.items()):
+        for i, (ta, da, aa) in enumerate(gs):
+            for tb, db, ab in gs[i + 1:]:
+                n = len(aa & ab)
+                if n and da != db:
+                    out.append(f"{ng} có {n} ảnh trùng tên ở hai gói khác đợt ({ta}: đợt {da or '(không tên)'}; {tb}: đợt {db or '(không tên)'}): một người không gán một ảnh "
+                               "hai lần trong thí nghiệm, nên nhiều khả năng là cùng một lần làm ghi hai lần: thời gian bị tính hai lần và mặt trùng chỉ lấy ở gói đầu (có thể mất nháp); "
+                               "bỏ gói thừa (nhập tay: Remove entry).")
+    return out
 
 
 def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False, gom_ttest=False, timing=None, goi=(), chi_bo_anh=True, chi_goi=False, now=None):
@@ -296,9 +318,17 @@ def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False,
                         tat_ca_task=bool(tat_ca_task), chi_bo_anh=bool(chi_bo_anh), luot_nhap=luot_nhap or "", chi_goi=bool(chi_goi), n_xoa_mem=n_xoa_mem, n_mat_trung=bo_dup,
                         canh_bao=list(warns)),
               nguon=dict(goi=[t for t, _n in goi_ok], goi_hong=quet["hong"], goi_trung=quet["trung"], nhan_raw=files_raw, nhan_bo_qua=notes_raw, timing=files_timing,
-                         timing_loi=loi_timing, timing_trung=trung_timing),
+                         timing_loi=loi_timing, timing_trung=trung_timing, goi_nhap_tay=[t for t, nd in goi_ok if nd.get("nguon_nhap") == NGUON_NHAP_TAY]),
               nhom=dict(cau_hinh=nhom_cfg["nhom"], bo_anh=nhom_cfg["bo_anh"], co_file=nhom_cfg["co_file"], loi=nhom_cfg["loi"],
                         nguoi={c: sorted({r["nguoi"] for r in faces if r["dieu_kien"] == c} | {r["person"] for r in rows_t if r["condition"] == c}) for c in so_sanh.CONDITIONS}))
+    cap = {}
+    for t, nd in goi_ok:                                                   # cùng người + đợt ở nhiều gói (đồng hồ và nhập tay, hoặc gửi trùng): giờ có thể bị tính hai lần
+        cap.setdefault((nd["nguoi"], str(nd.get("dot") or "")), []).append(t)
+    for (ng, dt), ts in sorted(cap.items()):
+        if len(ts) > 1:
+            st["meta"]["canh_bao"].append(f"{ng} có {len(ts)} gói cho cùng đợt {dt or '(không tên)'} ({', '.join(ts)}): nếu là cùng một lần làm thì thời gian bị "
+                                          "tính nhiều lần; bỏ gói thừa (nhập tay: Remove entry).")
+    st["meta"]["canh_bao"] += _canh_bao_trung_anh(goi_ok)
     if st["meta"]["ttest_an"] and not gom_ttest:
         st["meta"]["canh_bao"].append(f"Ttest đang ẩn ({n_ttest} mặt): Ttest là tập đo một lần của đề tài; chỉ bật 'Gồm Ttest' đúng buổi đo.")
     if not man:

@@ -950,8 +950,8 @@ class DongHo:
                 thong_bao.append(f"Không đọc được nhãn ({type(e).__name__}): gói chỉ có thời gian.")
                 ket_qua, info = [], dict(co_nhan=False, co_nhap=False, nhan_file="", canh_bao=["nhan_loi"])
         if cfg is not None and not info["co_nhan"]:
-            thong_bao.append("Chưa có nhãn đã xuất cho phiên này (raw/<task>_" + st["nguoi"] + "_<DDMM>.xml): gói chỉ có thời gian. Lần sau chạy collect --reviewer "
-                             + st["nguoi"] + " TRƯỚC khi bấm Save timing; gói này gửi nhóm trưởng kèm nhãn xuất riêng (raw/).")
+            thong_bao.append("Chưa có nhãn đã xuất cho phiên này (raw/<task>_" + st["nguoi"] + "_<DDMM>.xml): gói chỉ có thời gian. Bấm Merge jobs & Finish ở thẻ đợt "
+                             "(tab Các đợt): tool gộp job và gắn nhãn vào chính gói này; lần sau dùng nút đó thay cho Save timing.")
         elif st["dieu_kien"] == "assisted" and not info["co_nhap"]:
             thong_bao.append("Không tìm thấy nháp của đợt (runs/<đợt>/xml/prelabel.xml): gói có nhãn cuối nhưng không có nháp, điểm đã sửa và NME của nháp.")
         mat_do = []
@@ -1144,7 +1144,8 @@ class DongHo:
         lp = self.tim_nhan(nguoi, nd.get("task", ""), nhan_file)
         ket_qua, info = goi_kq.xay_ket_qua(self.root, cfg, nd["nhom"], nd.get("dot", ""), lp)
         if not info["co_nhan"]:
-            raise DongHoLoi(f"Vẫn chưa có file nhãn raw/{nd.get('task', '')}_{nguoi}_<DDMM>.xml: chạy collect --reviewer {nguoi} trước.")
+            raise DongHoLoi(f"Vẫn chưa có file nhãn raw/{nd.get('task', '')}_{nguoi}_<DDMM>.xml: bấm Merge jobs & Finish ở thẻ đợt (tab Các đợt), hoặc chạy "
+                            f"python tool\\m28.py collect --task {nd.get('task', '') or '<task>'} --reviewer {nguoi} --overwrite.")
         nd2 = dict(nd, ket_qua=ket_qua, co_nhan=True, co_nhap=bool(info["co_nhap"]), nhan_file=info["nhan_file"], tao_luc=ca_kho.iso(self.gio.now()))
         nd2["canh_bao"] = sorted(set(c for c in nd.get("canh_bao", []) if c not in ("thieu_nhap", "nhan_rong")) | set(info.get("canh_bao", [])))
         try:
