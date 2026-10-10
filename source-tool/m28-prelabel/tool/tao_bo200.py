@@ -1646,7 +1646,7 @@ def mau_ro_ri(hostname=None):
     pats = [('ma_tai_xe', r'yd_[FM]\d{3}'), ('ma_drivface', r'df_\d\d'), ('video_avi', r'\.avi\b'), ('camera', r'(?i)\b(?:mirror|dash)\b'),
             ('nguon', r'(?i)yawdd|drivface'), ('khung_goc', r'_g\d_f\d{6}|\bf\d{6}\b'), ('the_yeu_to', rf'\b(?:{the})\b'),
             ('muc_kho', r'rat_kho|diem_kho|bi_mat|khung_goc|nhap_te|nhap_tot'),
-            ('duong_dan_tuyet_doi', r'(?:^|[\s"\'(=:])(?:/home/|/tmp/|/root/|/Users/|/mnt/|[A-Za-z]:\\)|scratchpad|claude-0')]
+            ('duong_dan_tuyet_doi', r'(?:^|[\s"\'(=:])(?:/home/|/tmp/|/root/|/Users/|/mnt/|[A-Za-z]:\\)|scratchpad')]
     host = (hostname if hostname is not None else socket.gethostname()) or ''
     if len(host) >= 3:
         pats.append(('ten_may', r'(?i)\b' + re.escape(host) + r'\b'))

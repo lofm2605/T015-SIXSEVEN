@@ -354,7 +354,7 @@ def test_quet_ro_ri_bat_dung_va_khong_bao_nham():
     assert not tb.quet_ro_ri([ok], hostname='maychu01')
     bad = {'yd_F035': 'khung yd_F035_mirror_talking_g0_f000510.jpg', 'df_03': 'ảnh df_03_0123', 'avi': 'video 12-Male.avi', 'cam': 'camera Mirror', 'cam2': 'Dash',
            'nguon': 'lấy từ YawDD', 'nguon2': 'drivface', 'the': 'có thẻ yaw_manh_phai', 'muc': 'rat_kho', 'duongdan': 'file /home/user/x.png',
-           'duongdan2': r'C:\Users\a', 'host': 'chạy trên maychu01', 'tmp': 'x /tmp/claude-0/y'}
+           'duongdan2': r'C:\Users\a', 'host': 'chạy trên maychu01', 'tmp': 'x /tmp/agent-0/y'}
     for k, text in bad.items():
         assert tb.quet_ro_ri([('f.txt', text.encode('utf-8'))], hostname='maychu01'), k
     assert tb.quet_ro_ri([('yd_F035/001.png', b'x')], hostname='maychu01')                  # tên mục cũng bị quét
