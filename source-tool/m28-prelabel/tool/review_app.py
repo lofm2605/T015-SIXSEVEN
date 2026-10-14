@@ -1156,9 +1156,20 @@ CSS = """
 .m28-page { text-align: center; font-size: 14px; white-space: nowrap; color: var(--body-text-color-subdued); }
 .m28-page b { color: var(--body-text-color); }
 
-#big { height: min(512px, 52vh, calc(100vw - 48px)) !important; padding: 0 !important; }
-#big .image-container, #big .image-frame, #big .upload-container { height: 100% !important; }
+#big { position: relative; overflow: hidden !important; height: min(512px, 52vh, calc(100vw - 48px)) !important; padding: 0 !important; }
+#big .image-container, #big .image-frame, #big .upload-container { height: 100% !important; overflow: hidden !important; }
 #big img { width: 100% !important; height: 100% !important; object-fit: contain !important; }
+/* Phóng to ảnh lớn: CSS transform trên <img> (lăn chuột, kéo, nút +/-/1:1, nhấp đúp); ảnh gốc không đổi. */
+#big img { transform-origin: 0 0 !important; transform: translate(var(--zx, 0px), var(--zy, 0px)) scale(var(--zz, 1)); will-change: transform;
+  cursor: zoom-in; user-select: none; -webkit-user-drag: none; }
+#big.m28-zoomed img { cursor: grab; } #big.m28-panning img { cursor: grabbing; }
+.m28-zoom { position: absolute; top: 8px; right: 8px; z-index: 5; display: flex; gap: 4px; align-items: center; padding: 3px 4px; border-radius: 8px;
+  border: 1px solid var(--border-color-primary); background: color-mix(in srgb, var(--block-background-fill) 82%, transparent); }
+#big:not(.m28-hasimg) .m28-zoom { display: none; }
+.m28-zoom button { min-width: 30px; height: 28px; padding: 0 8px; border-radius: 6px; font-weight: 800; cursor: pointer;
+  border: 1px solid var(--border-color-primary); background: var(--button-secondary-background-fill); color: var(--body-text-color); }
+.m28-zoom button:hover { background: var(--button-secondary-background-fill-hover); }
+.m28-zoom-lbl { min-width: 42px; text-align: center; font-size: 12px; color: var(--body-text-color-subdued); }
 .m28-legend { display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 13px; color: var(--body-text-color-subdued); }
 .m28-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .m28-legend .ring { width: 12px; height: 12px; margin-right: 4px; background: #9ca3af; border: 3px solid #fff; box-shadow: 0 0 0 1px #141414; vertical-align: -3px; }
@@ -1340,7 +1351,111 @@ PAGE_JS = r"""() => {
     .observe(document.body, { childList: true, subtree: true, characterData: true });
   mark();
 }"""
-PAGE_JS = PAGE_JS[:-1] + dot_ui.JS_BODY + dong_ho_ui.JS_BODY + "}"          # JS của hộp xác nhận, tab Các đợt và đồng hồ chạy một lần, cùng hàm với phím tắt
+ZOOM_JS = r"""
+  // Phóng to ảnh lớn (#big): lăn chuột phóng/thu tại con trỏ, kéo để dịch, nhấp đúp hoặc nút 1:1 để về cỡ vừa. Chỉ là CSS transform trên <img>
+  // (không đụng ảnh gốc, không gửi gì về server); đổi sang mặt khác thì tự về cỡ vừa.
+  const Z = { z: 1, x: 0, y: 0, src: '', drag: null };
+  const ZMAX = 6;
+  const bigEl = () => document.getElementById('big');
+  const bigImg = () => { const b = bigEl(); return b ? b.querySelector('img') : null; };
+  const zBlocked = () => !!(document.querySelector('.m28-modal') || document.querySelector('.m28-closed'));
+  const zApply = () => {
+    const b = bigEl();
+    if (!b) { return; }
+    // Gradio có thể vẽ lại class/style của #big khi cập nhật: ghi lại mỗi lần, nhưng chỉ ghi khi khác để không tự gây thêm thay đổi.
+    const setv = (k, v) => { if (b.style.getPropertyValue(k) !== v) { b.style.setProperty(k, v); } };
+    setv('--zz', String(Z.z));
+    setv('--zx', Z.x + 'px');
+    setv('--zy', Z.y + 'px');
+    const on = Z.z > 1.001;
+    if (b.classList.contains('m28-zoomed') !== on) { b.classList.toggle('m28-zoomed', on); }
+    const lbl = b.querySelector('.m28-zoom-lbl');
+    const txt = Math.round(Z.z * 100) + '%';
+    if (lbl && lbl.textContent !== txt) { lbl.textContent = txt; }
+  };
+  const zClamp = () => {
+    const b = bigEl();
+    if (!b) { return; }
+    const r = b.getBoundingClientRect();
+    Z.x = Math.min(0, Math.max(r.width * (1 - Z.z), Z.x));
+    Z.y = Math.min(0, Math.max(r.height * (1 - Z.z), Z.y));
+  };
+  const zAt = (z2, px, py) => {                       // px, py: toạ độ trong khung #big; điểm dưới con trỏ đứng yên
+    z2 = Math.min(ZMAX, Math.max(1, z2));
+    const k = z2 / Z.z;
+    Z.x = px - (px - Z.x) * k;
+    Z.y = py - (py - Z.y) * k;
+    Z.z = z2;
+    if (Z.z <= 1.001) { Z.z = 1; Z.x = 0; Z.y = 0; }
+    zClamp();
+    zApply();
+  };
+  const zReset = () => { Z.z = 1; Z.x = 0; Z.y = 0; zApply(); };
+  const zEnsure = () => {
+    const b = bigEl();
+    if (!b) { return; }
+    const img = bigImg();
+    const src = img ? (img.getAttribute('src') || '') : '';
+    if (src !== Z.src) { Z.src = src; if (Z.z !== 1 || Z.x || Z.y) { zReset(); } }
+    if (!b.querySelector('.m28-zoom')) {
+      const t = document.createElement('div');
+      t.className = 'm28-zoom';
+      t.innerHTML = '<button type="button" data-z="in" title="Phóng to (hoặc lăn chuột lên)">+</button>'
+        + '<button type="button" data-z="out" title="Thu nhỏ (hoặc lăn chuột xuống)">\u2212</button>'
+        + '<button type="button" data-z="reset" title="Về cỡ vừa (hoặc nhấp đúp vào ảnh)">1:1</button><span class="m28-zoom-lbl">100%</span>';
+      b.appendChild(t);
+    }
+    if (b.classList.contains('m28-hasimg') !== !!img) { b.classList.toggle('m28-hasimg', !!img); }
+    zApply();
+  };
+  let zQueued = false;
+  new MutationObserver(() => { if (!zQueued) { zQueued = true; setTimeout(() => { zQueued = false; zEnsure(); }, 30); } })
+    .observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class', 'style'] });
+  zEnsure();
+  document.addEventListener('wheel', (e) => {
+    const b = bigEl();
+    if (!b || !bigImg() || !b.contains(e.target) || zBlocked()) { return; }
+    e.preventDefault();
+    const r = b.getBoundingClientRect();
+    zAt(Z.z * Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  document.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('.m28-zoom button[data-z]') : null;
+    const b = bigEl();
+    if (!btn || !b) { return; }
+    const r = b.getBoundingClientRect();
+    const w = btn.getAttribute('data-z');
+    if (w === 'reset') { zReset(); } else { zAt(Z.z * (w === 'in' ? 1.5 : 1 / 1.5), r.width / 2, r.height / 2); }
+  });
+  document.addEventListener('mousedown', (e) => {
+    const b = bigEl();
+    if (!b || e.button !== 0 || Z.z <= 1 || !b.contains(e.target) || (e.target.closest && e.target.closest('.m28-zoom')) || zBlocked()) { return; }
+    Z.drag = { cx: e.clientX, cy: e.clientY, x: Z.x, y: Z.y };
+    b.classList.add('m28-panning');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!Z.drag) { return; }
+    Z.x = Z.drag.x + e.clientX - Z.drag.cx;
+    Z.y = Z.drag.y + e.clientY - Z.drag.cy;
+    zClamp();
+    zApply();
+  });
+  document.addEventListener('mouseup', () => {
+    if (!Z.drag) { return; }
+    Z.drag = null;
+    const b = bigEl();
+    if (b) { b.classList.remove('m28-panning'); }
+  });
+  document.addEventListener('dblclick', (e) => {
+    const b = bigEl();
+    if (!b || !bigImg() || !b.contains(e.target) || (e.target.closest && e.target.closest('.m28-zoom')) || zBlocked()) { return; }
+    if (Z.z > 1) { zReset(); return; }
+    const r = b.getBoundingClientRect();
+    zAt(3, e.clientX - r.left, e.clientY - r.top);
+  });
+"""
+PAGE_JS = PAGE_JS[:-1] + ZOOM_JS + dot_ui.JS_BODY + dong_ho_ui.JS_BODY + "}"          # JS của hộp xác nhận, tab Các đợt và đồng hồ chạy một lần, cùng hàm với phím tắt
 CSS = CSS + dot_ui.CSS + ca_kho.CSS + cai_dat_ui.CSS + dong_ho_ui.CSS + thong_ke_ui.CSS + loc_ui.CSS
 
 

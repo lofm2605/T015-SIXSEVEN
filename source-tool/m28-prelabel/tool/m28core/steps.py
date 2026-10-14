@@ -313,7 +313,8 @@ def map50(args, out):
             raise SystemExit(f"apply_map thiếu điểm {miss[:3]}… so với config")
         return {n: [float(r[n][0]), float(r[n][1])] for n in names}
 
-    res = {n: dict(orig=conv(p["orig"], False), flip=conv(p["flip"], True) if p["flip"] else None)
+    che_khuat = _need("m28core.che_khuat", "điểm bị che do mặt nghiêng")
+    res = {n: dict(orig=conv(p["orig"], False), flip=conv(p["flip"], True) if p["flip"] else None, occ=che_khuat.diem_bi_che(p["orig"], cfg))
            for n, p in pred.items()}
     _jsave(os.path.join(out, "mp50.json"), _keep_old(args, os.path.join(out, "mp50.json"), res))
     print(f"map50: {len(res)} mặt")
@@ -539,17 +540,18 @@ def review(args, out):
 
 
 # ---------- push / collect ----------
-def image_xml(frame_id, name, point_names, pts, low, width, height):
+def image_xml(frame_id, name, point_names, pts, low, width, height, occ=()):
     """<image> của một mặt: MỘT <skeleton> cho mỗi nhóm (label = tên nhóm, QĐ-004) theo thứ tự nhóm xuất hiện, mỗi skeleton chỉ có điểm của nhóm.
-    Nhóm của điểm suy từ tên `<nhóm>_<k>` (cvat_io.group_of_name)."""
+    Nhóm của điểm suy từ tên `<nhóm>_<k>` (cvat_io.group_of_name). occ: tên các điểm bị che do mặt nghiêng (m28core.che_khuat) thì ghi occluded="1" (vẫn có toạ độ ước lượng)."""
     from m28core import cvat_io
     out = [f'<image id="{frame_id}" name={quoteattr(name)} width="{width}" height="{height}">']
+    occ = set(occ or ())
     rows = list(zip(point_names, pts, low))
     for group in dict.fromkeys(cvat_io.group_of_name(n) for n in point_names):
         out.append(f'  <skeleton label="{group}">')
         for n, (x, y), f in rows:
             if cvat_io.group_of_name(n) == group:
-                out.append(f'    <points label="{n}" occluded="0" outside="0" points="{x:.2f},{y:.2f}">'
+                out.append(f'    <points label="{n}" occluded="{1 if n in occ else 0}" outside="0" points="{x:.2f},{y:.2f}">'
                            f'<attribute name="low_conf">{"true" if f else "false"}</attribute></points>')
         out.append('  </skeleton>')
     out.append('</image>')
@@ -598,7 +600,7 @@ def build_xml(mode, nhan, meta, mp50, fl, cfg, path, tay_nhap=()):
     faces = [(n, fl[n]) for n in nhan] + [(n, [True] * len(names)) for n in tay_nhap]
     for fid, (n, low) in enumerate(faces):
         pts, w, h = _face_pts(mode, n, meta, mp50, names)
-        parts.append(image_xml(fid, _file_name(n, meta[n], mode), names, pts, low, w, h))
+        parts.append(image_xml(fid, _file_name(n, meta[n], mode), names, pts, low, w, h, mp50[n].get("occ", ())))
     parts.append('</annotations>')
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:

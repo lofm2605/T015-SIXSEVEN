@@ -103,6 +103,7 @@ def classify(triage, meta, mp50, no_face, excluded=frozenset(), point_names=None
     return dict(nhan=nhan, tay=tay, tay_nhap=tay_nhap, tay_trong=tay_trong, nhan_khong_nhap=no_draft, lost=lost, rejected=rejected, removed=removed)
 
 
-def n_jobs(n_nhan, n_tay, job_size=8):
-    """Số job dự kiến: nhóm job_size mặt Nhận + một job Gán tay riêng (nếu có)."""
-    return -(-n_nhan // job_size) + (1 if n_tay else 0)
+def n_jobs(n_nhan, n_tay, job_size=0):
+    """Số job dự kiến: một job cho tất cả mặt Nhận (job_size=0) hoặc các nhóm job_size mặt Nhận, + một job Gán tay riêng (nếu có)."""
+    n_nhan_jobs = (-(-n_nhan // job_size) if job_size else (1 if n_nhan else 0))
+    return n_nhan_jobs + (1 if n_tay else 0)

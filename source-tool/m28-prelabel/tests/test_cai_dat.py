@@ -786,8 +786,8 @@ def test_pipeline_info(tmp_path):
     assert cai_dat.pipeline_info(str(tmp_path))['exists']
     (tmp_path / 'config' / 'pipeline.json').write_text('{hong')
     r = cai_dat.pipeline_info(str(tmp_path))
-    assert not r['ok'] and r['error'] and r['pipe']['job_size'] == 8
-    (tmp_path / 'config' / 'pipeline.json').write_text(json.dumps(dict(job_size=0)))
+    assert not r['ok'] and r['error'] and r['pipe']['job_size'] == 0                  # hỏng: dùng mặc định (0 = một job Nhận + một job Gán tay)
+    (tmp_path / 'config' / 'pipeline.json').write_text(json.dumps(dict(job_size=65)))
     assert not cai_dat.pipeline_info(str(tmp_path))['ok']
     assert 'hỏng' in cai_dat_ui.pipeline_html(r)
 

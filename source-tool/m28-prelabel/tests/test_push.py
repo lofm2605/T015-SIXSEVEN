@@ -219,6 +219,25 @@ def test_job_size_from_pipeline(cvat):
     assert [len(g) for g in dp['job_file_mapping']] == [4, 4, 2, 1]
 
 
+def test_default_pipeline_makes_only_two_jobs_nhan_and_gan_tay(cvat):
+    """job_size=0 (mặc định): MỘT job cho tất cả mặt Nhận + MỘT job Gán tay riêng, tức đúng 2 job dù có bao nhiêu mặt."""
+    w = make_run(n_nhan=19, n_tay=3)
+    json.dump(dict(project='m28', prefix='demo-', cvat_version='2.77.0', job_size=0), open('config/pipeline.json', 'w'))
+    do_push(w)
+    dp = calls(cvat, 'tasks.create_from_data')[0]['kwargs']['data_params']
+    assert [len(g) for g in dp['job_file_mapping']] == [19, 3]
+
+
+def test_plan_jobs_and_n_jobs_without_job_size():
+    from m28core import push as push_mod, phan_loai
+    nhan, tay = [f'N_{i}.png' for i in range(30)], ['T_0.png', 'T_1.png']
+    groups, kinds = push_mod.plan_jobs(nhan, tay)
+    assert [len(g) for g in groups] == [30, 2] and kinds == ['nhan', 'gan_tay']
+    assert push_mod.plan_jobs(nhan, [])[1] == ['nhan'] and push_mod.plan_jobs([], tay)[1] == ['gan_tay'] and push_mod.plan_jobs([], []) == ([], [])
+    assert phan_loai.n_jobs(30, 2) == 2 and phan_loai.n_jobs(30, 0) == 1 and phan_loai.n_jobs(0, 2) == 1 and phan_loai.n_jobs(0, 0) == 0
+    assert phan_loai.n_jobs(30, 2, 8) == 5                                       # job_size > 0 vẫn chia như cũ
+
+
 # ---------- thứ tự frame ----------
 def test_xml_ids_rewritten_when_server_orders_frames_differently(cvat, monkeypatch):
     monkeypatch.setenv('M28_FAKE_CVAT_CONTROL', json.dumps({'frames_by_name': True}))

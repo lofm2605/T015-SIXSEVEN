@@ -204,7 +204,7 @@ def pipeline_html(pi):
 
 
 def _pipe_table(p, exists=True):
-    rows = [("cvat_version", p["cvat_version"]), ("job_size", p["job_size"]), ("project", p["project"]), ("prefix", p["prefix"])]
+    rows = [("cvat_version", p["cvat_version"]), ("job_size", p["job_size"] if p["job_size"] else "0 (một job Nhận + một job Gán tay)"), ("project", p["project"]), ("prefix", p["prefix"])]
     return ("<table class=\"cd-kv\">" + "".join(f"<tr><th>{k}</th><td><code>{_e(v)}</code></td></tr>" for k, v in rows) + "</table>"
             + ('<div class="cd-note">Chỉ đọc (config\\pipeline.json). ' if exists else '<div class="cd-note">Chưa có config\\pipeline.json, dùng mặc định. ')
             + "Task tool tạo luôn bắt đầu bằng <code>" + _e(p["prefix"]) + "</code>.</div>")

@@ -2,5 +2,5 @@
  "project": "m28",
  "prefix": "demo-",
  "cvat_version": "2.77.0",
- "job_size": 8
+ "job_size": 0
 }

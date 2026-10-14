@@ -159,12 +159,12 @@ def xml_tay_nhap(xml_path, nhan_imgs, tay_imgs):
     return [n for n in tb if n in set(names)]
 
 
-def plan_jobs(nhan_imgs, tay_imgs, job_size=8):
-    """Chia job: các nhóm job_size mặt Nhận (theo thứ tự đã nhận) + MỘT job Gán tay riêng ở cuối (nếu có).
-    Trả (job_file_mapping theo tên file, danh sách kind)."""
+def plan_jobs(nhan_imgs, tay_imgs, job_size=0):
+    """Chia job: MỘT job cho tất cả mặt Nhận (job_size=0, mặc định) + MỘT job Gán tay riêng ở cuối (nếu có), tức tối đa 2 job. job_size > 0: chia mặt Nhận
+    thành các nhóm job_size mặt (theo thứ tự đã nhận) như bản cũ. Trả (job_file_mapping theo tên file, danh sách kind)."""
     nb = [os.path.basename(p) for p in nhan_imgs]
     tb = [os.path.basename(p) for p in tay_imgs]
-    groups = [nb[i:i + job_size] for i in range(0, len(nb), job_size)]
+    groups = [nb[i:i + job_size] for i in range(0, len(nb), job_size)] if job_size else ([nb] if nb else [])
     kinds = ["nhan"] * len(groups)
     if tb:
         groups.append(tb)
@@ -449,7 +449,8 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
             st["truoc_do"] = truoc
         write_state(run_dir, st)                                  # TRƯỚC khi gọi create_from_data: chết giữa chừng vẫn biết
         doing("tạo task và tải ảnh")
-        _say(4, f"tạo task {task_name}: {len(nhan_imgs) + len(tay_imgs)} ảnh, {len(groups)} job dự kiến (mỗi job Nhận {pipe['job_size']} mặt)")
+        _say(4, f"tạo task {task_name}: {len(nhan_imgs) + len(tay_imgs)} ảnh, {len(groups)} job dự kiến ("
+             + (f"mỗi job Nhận {pipe['job_size']} mặt" if pipe["job_size"] else "một job Nhận, một job Gán tay") + ")")
         task = client.tasks.create_from_data(
             spec={"name": task_name, "project_id": project_id},          # không truyền labels: task dùng label của project
             resources=list(nhan_imgs) + list(tay_imgs), resource_type=ResourceType.LOCAL,

@@ -16,7 +16,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 ENV_URL, ENV_TOKEN, ENV_ORG = "CVAT_URL", "CVAT_ACCESS_TOKEN", "CVAT_ORG"
-DEFAULT_PIPELINE = {"project": "m28", "prefix": "demo-", "cvat_version": "2.77.0", "job_size": 8}
+DEFAULT_PIPELINE = {"project": "m28", "prefix": "demo-", "cvat_version": "2.77.0", "job_size": 0}
 SAFE_PREFIX = "demo-"                      # prefix duy nhất được phép; task m28-… không bao giờ bị tạo/đụng/xoá
 FORMAT_IMPORT = "CVAT 1.1"
 FORMAT_EXPORT = "CVAT for images 1.1"
@@ -95,8 +95,8 @@ def load_pipeline(path=None):
         if not isinstance(d, dict):
             raise SystemExit(f"{path} phải là một đối tượng JSON {{...}}.")
         p.update({k: v for k, v in d.items() if k in p})
-    if not isinstance(p["job_size"], int) or isinstance(p["job_size"], bool) or not 1 <= p["job_size"] <= 64:
-        raise SystemExit(f"job_size trong {path} phải là số nguyên từ 1 đến 64.")
+    if not isinstance(p["job_size"], int) or isinstance(p["job_size"], bool) or not 0 <= p["job_size"] <= 64:
+        raise SystemExit(f"job_size trong {path} phải là số nguyên từ 0 đến 64 (0 = tất cả mặt Nhận vào MỘT job).")
     for k in ("project", "prefix", "cvat_version"):
         if not isinstance(p[k], str) or not p[k].strip():
             raise SystemExit(f"{k} trong {path} phải là chuỗi không rỗng.")
