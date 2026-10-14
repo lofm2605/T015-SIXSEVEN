@@ -1120,7 +1120,7 @@ def run_app(cwd, *args):
 
 def test_cli_errors_exit_2_with_one_line(five, tmp_path):
     for args, word in ((('runs/KHONGCO', 'P2'), 'Không thấy thư mục'), (('runs/R1', '../x'), 'không hợp lệ'),
-                       (('runs/R1',), 'Cách dùng')):
+                       (('runs/R1', 'P2', 'thừa'), 'Cách dùng')):          # tên người rà bỏ trống thì hợp lệ (dùng tên lưu ở Cài đặt), thừa tham số thì báo cách dùng
         r = run_app(tmp_path, *args)
         assert r.returncode == 2 and word in r.stderr and 'Traceback' not in r.stderr, (args, r.stderr)
         assert len(r.stderr.strip().splitlines()) == 1 and r.stdout == ''
@@ -1408,12 +1408,13 @@ def test_nap_modules_static(tmp_path):
 def test_parse_argv():
     assert ra.parse_argv(['--nap', 'P2']) == ('nap', None, 'P2')
     assert ra.parse_argv(['runs/F5', 'P2']) == ('run', 'runs/F5', 'P2')
-    assert ra.parse_argv(['--nap']) is None and ra.parse_argv([]) is None and ra.parse_argv(['a', 'b', 'c']) is None
+    assert ra.parse_argv(['--nap']) == ('nap', None, None) and ra.parse_argv(['runs/F5']) == ('run', 'runs/F5', None)       # bỏ tên người rà: dùng tên đã lưu ở Cài đặt
+    assert ra.parse_argv([]) is None and ra.parse_argv(['a', 'b', 'c']) is None and ra.parse_argv(['--nap', 'P2', 'x']) is None
     assert '--nap' in ra.VI_USAGE
 
 
-def test_cli_nap_without_name_exits_2(tmp_path):
-    r = run_app(tmp_path, '--nap')
+def test_cli_nap_with_extra_args_or_bad_name_exits_2(tmp_path):
+    r = run_app(tmp_path, '--nap', 'P2', 'thừa')
     assert r.returncode == 2 and 'Cách dùng' in r.stderr and 'Traceback' not in r.stderr
     r = run_app(tmp_path, '--nap', '../x')
     assert r.returncode == 2 and 'không hợp lệ' in r.stderr and not os.path.exists(os.path.join(tmp_path, 'runs'))
@@ -1536,3 +1537,26 @@ def test_nap_anh_auto_open_action():
     assert act('A', dict(run='B', state='xong')) == 'drop' and act('A', dict(run='B', state='dang_chay')) == 'drop'    # job đã sang lượt khác
     assert act('A', dict(state='chua')) == 'drop'
 
+
+
+def test_main_without_a_name_uses_the_saved_default_and_follows_save_name(tmp_path, monkeypatch):
+    """Menu chay.sh/chay.bat không hỏi tên: main không có tên thì lấy tên đã lưu ở Cài đặt (chưa lưu thì P1), và ở chế độ --nap Save name có hiệu lực ngay."""
+    import cai_dat
+    import cai_dat_ui
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+
+    def fake_build(store, ctx=None):
+        seen['ctx'] = ctx
+        raise SystemExit(0)
+    monkeypatch.setattr(ra, 'build_ui', fake_build)
+    for saved, want in ((None, 'P1'), ('Cuong', 'Cuong')):
+        if saved:
+            assert cai_dat.get().set_reviewer(saved)['ok']
+        with pytest.raises(SystemExit):
+            ra.main(['--nap'])
+        assert seen['ctx'].reviewer == want and seen['ctx'].reviewer_auto is True and seen['ctx'].nap_only is True
+    with pytest.raises(SystemExit):
+        ra.main(['--nap', 'P4'])                                                        # có ghi tên ở dòng lệnh: giữ nguyên tên đó, không tự đổi theo Cài đặt
+    assert seen['ctx'].reviewer == 'P4' and seen['ctx'].reviewer_auto is False
+    assert 'ctx.reviewer = r["name"]' in open(os.path.join(TOOL, 'cai_dat_ui.py'), encoding='utf-8').read()

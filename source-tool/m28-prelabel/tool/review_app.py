@@ -94,9 +94,11 @@ BORDER = 6           # bề dày viền trạng thái vẽ thẳng vào ảnh nh
 STATUS_COLOR = {"": "#9ca3af", "nhan": "#16a34a", "gan_tay": "#d97706", "bo": "#dc2626"}
 STATUS_LETTER = {"": "", "nhan": "N", "gan_tay": "G", "bo": "B"}
 # màu và kiểu chấm của ảnh chồng nằm ở m28core/mau_nhom.py (cùng nguồn với steps.overlays và label CVAT)
+DEFAULT_REVIEWER = "P1"          # tên người rà khi dòng lệnh không ghi và tab Cài đặt chưa lưu tên
 NOTEBOOK_VARS = ("COLAB_RELEASE_TAG", "COLAB_GPU", "KAGGLE_KERNEL_RUN_TYPE", "SPACE_ID")
-VI_USAGE = ("Cách dùng: python tool\\review_app.py <thư mục lượt chạy> <người rà>, ví dụ python tool\\review_app.py runs\\R1610 P5; "
-            "chưa có lượt nào thì python tool\\review_app.py --nap <người rà> (chỉ tab Nạp ảnh), ví dụ python tool\\review_app.py --nap P5")
+VI_USAGE = ("Cách dùng: python tool\\review_app.py <thư mục lượt chạy> [người rà], ví dụ python tool\\review_app.py runs\\R1610 P5; "
+            "chưa có lượt nào thì python tool\\review_app.py --nap [người rà] (chỉ tab Nạp ảnh), ví dụ python tool\\review_app.py --nap P5. "
+            "Không ghi người rà thì dùng tên đã lưu ở tab Cài đặt (Save name), chưa lưu thì P1")
 
 
 # ---------- kiểm tra đầu vào ----------
@@ -130,6 +132,7 @@ class Face:
     overlay: object = None           # đường dẫn overlays/<tên>.png nếu có
     crop: object = None              # đường dẫn crop/images/<tên>.png nếu có
     flags: object = None             # list[bool] 50 phần tử, None = không có nháp
+    occ: object = None               # list[bool] 50 phần tử: điểm bị che (occluded, map50/mp50.json khoá occ); None = lượt chưa có thông tin này
     n_flags: int = 0
     suggestion: str = ""             # on | can_xem | nen_gan_tay | "" (chưa có autoqc)
     problems: list = dataclasses.field(default_factory=list)
@@ -138,6 +141,10 @@ class Face:
     @property
     def has_draft(self):
         return self.flags is not None
+
+    @property
+    def n_occ(self):
+        return sum(self.occ) if self.occ else 0
 
     @property
     def rank(self):
@@ -197,6 +204,21 @@ def _read_no_face(run_dir):
     return out
 
 
+def _read_occ(run_dir):
+    """{tên mặt: list[bool] theo thứ tự điểm của config} từ map50/mp50.json (khoá occ = tên các điểm bị che; thứ tự điểm = thứ tự khoá của orig). Thiếu file, hỏng, hay lượt
+    chạy trước khi có tính năng này (không có khoá occ) thì {} và trang không hiện gì về occluded."""
+    try:
+        mp = _jload(os.path.join(run_dir, "map50", "mp50.json"))
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for name, p in (mp.items() if isinstance(mp, dict) else ()):
+        if isinstance(p, dict) and isinstance(p.get("orig"), dict) and isinstance(p.get("occ"), list):
+            occ = set(p["occ"])
+            out[name] = [n in occ for n in p["orig"]]
+    return out
+
+
 def _load(run_dir):
     """(hàng đợi, ghi chú). Xem load_queue."""
     run = run_name(run_dir)
@@ -217,6 +239,7 @@ def _load(run_dir):
     gone = loai_tru.read_excluded(run_dir)                  # mặt xoá mềm: bộ lọc lúc đọc, file kết quả không bị sửa
     fl = {k: v for k, v in fl.items() if k not in gone}
     qc, nf = _read_autoqc(run_dir), _read_no_face(run_dir)
+    occ_all = _read_occ(run_dir)
 
     def path_of(sub, name):
         p = os.path.join(run_dir, sub, name + ".png")
@@ -226,8 +249,9 @@ def _load(run_dir):
     for name, v in fl.items():
         fl_b = [bool(x) for x in v]
         sug, probs = qc.get(name, ("", []))
+        oc = occ_all.get(name)
         faces.append(Face(name, name + ".png", path_of("overlays", name), path_of(os.path.join("crop", "images"), name),
-                          fl_b, sum(fl_b), sug, probs, None))
+                          fl_b, oc if oc is not None and len(oc) == len(fl_b) else None, sum(fl_b), sug, probs, None))
     unusable = 0
     for name, (why, _step) in nf.items():
         if name in fl or name in gone:
@@ -236,7 +260,7 @@ def _load(run_dir):
         if crop is None:
             unusable += 1                      # không có ảnh cắt: không rà được, push tự xếp vào Bỏ
             continue
-        faces.append(Face(name, name + ".png", None, crop, None, 0, "", [], why or "khong_thay_mat"))
+        faces.append(Face(name, name + ".png", None, crop, None, None, 0, "", [], why or "khong_thay_mat"))
     faces.sort(key=lambda f: (f.rank, -f.n_flags, f.name))
     if not faces:
         raise RunError(f"Hàng đợi rỗng: {_shown(fpath)} không có mặt nào"
@@ -1004,6 +1028,10 @@ def info_html(store, face, status, warn):
         pts = fmt_points(face.flags)
         rows.append(("Điểm nghi sai", f"<b>{face.n_flags}/{len(face.flags)}</b>"
                      + (f' · điểm <span class="m28-pts">{html.escape(pts)}</span>' if pts else " · không có điểm nào")))
+        if face.occ is not None:
+            pts_occ = fmt_points(face.occ)
+            rows.append(("Điểm bị che (occluded)", f"<b>{face.n_occ}/{len(face.occ)}</b>"
+                         + (f' · điểm <span class="m28-pts">{html.escape(pts_occ)}</span> (vẽ vòng rỗng)' if pts_occ else " · không có điểm nào")))
         rows.append(("Gợi ý của máy", html.escape(SUG_VI[face.suggestion])))
         probs = ", ".join(PROBLEMS_VI.get(p, p) for p in face.problems)
         rows.append(("Vấn đề", html.escape(probs) if probs else "không"))
@@ -1072,6 +1100,7 @@ def _legend_html():
     """Chú giải ảnh chồng: màu chấm = nhóm (đúng màu label trên CVAT, lấy từ mau_nhom.GROUP_COLOR); chấm to có vòng trắng = low_conf."""
     chips = "".join('<span><i class="dot" style="background:%s"></i>%s</span>' % (mau_nhom.GROUP_COLOR[g], mau_nhom.GROUP_VI[g]) for g in mau_nhom.GROUP_COLOR)
     return ('<div class="m28-legend">' + chips + '<span><i class="dot ring"></i><b>chấm to có vòng trắng = low_conf (nhìn kỹ)</b></span>'
+            '<span><i class="dot hollow"></i><b>vòng rỗng = occluded (bị che)</b></span>'
             '<span class="m28-sub">trái/phải theo ảnh</span></div>')
 
 
@@ -1172,10 +1201,11 @@ CSS = """
 .m28-zoom-lbl { min-width: 42px; text-align: center; font-size: 12px; color: var(--body-text-color-subdued); }
 .m28-legend { display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 13px; color: var(--body-text-color-subdued); }
 .m28-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.m28-legend .hollow { background: transparent; border: 2px solid #9ca3af; box-shadow: 0 0 0 1px #141414; width: 12px; height: 12px; margin-right: 4px; vertical-align: -3px; }
 .m28-legend .ring { width: 12px; height: 12px; margin-right: 4px; background: #9ca3af; border: 3px solid #fff; box-shadow: 0 0 0 1px #141414; vertical-align: -3px; }
 
 #decide { gap: 10px; flex-wrap: nowrap; }
-#decide button { min-height: 56px; font-size: 18px; font-weight: 800; min-width: 0 !important; color: #fff; }
+#decide button { min-height: 56px; font-size: 16px; font-weight: 800; min-width: 0 !important; color: #fff; white-space: nowrap; padding: 0 6px !important; }
 #btn-nhan { background: #16a34a !important; border-color: #15803d !important; }
 #btn-gantay { background: #d97706 !important; border-color: #b45309 !important; }
 #btn-bo { background: #dc2626 !important; border-color: #b91c1c !important; }
@@ -1196,6 +1226,7 @@ CSS = """
 #reason input[type=radio]:checked { accent-color: #2563eb; background-color: #2563eb !important; }
 @media (max-width: 600px) {
   #decide, #nav { gap: 6px; }
+  #decide { flex-wrap: wrap; } #decide > * { flex: 1 1 calc(50% - 6px) !important; }                       /* hẹp: bốn nút xếp 2 x 2 */
   #decide button { font-size: 15px; white-space: nowrap; padding: 0 4px !important; }
   #nav button { font-size: 14px; white-space: nowrap; padding: 0 6px !important; }
   #reason .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1455,7 +1486,7 @@ ZOOM_JS = r"""
     zAt(3, e.clientX - r.left, e.clientY - r.top);
   });
 """
-PAGE_JS = PAGE_JS[:-1] + ZOOM_JS + dot_ui.JS_BODY + dong_ho_ui.JS_BODY + "}"          # JS của hộp xác nhận, tab Các đợt và đồng hồ chạy một lần, cùng hàm với phím tắt
+PAGE_JS = PAGE_JS[:-1] + ZOOM_JS + thong_ke_ui.JS_BODY + dot_ui.JS_BODY + dong_ho_ui.JS_BODY + "}"          # JS của hộp xác nhận, tab Các đợt và đồng hồ chạy một lần, cùng hàm với phím tắt
 CSS = CSS + dot_ui.CSS + ca_kho.CSS + cai_dat_ui.CSS + dong_ho_ui.CSS + thong_ke_ui.CSS + loc_ui.CSS
 
 
@@ -1520,13 +1551,14 @@ def _review_tab(gr, demo, store, ctx, header):
                 b_nhan = gr.Button("Nhận (N)", variant="primary", elem_id="btn-nhan")
                 b_tay = gr.Button("Gán tay (G)", elem_id="btn-gantay")
                 b_bo = gr.Button("Bỏ ảnh (B)", variant="stop", elem_id="btn-bo")
+                b_cakho = gr.Button("Ca khó (K)", elem_id="btn-cakho")                       # nút thứ tư cùng hàng; panel đánh dấu dựng ở ca_kho.mark_panel
             reason = gr.Radio(choices=[(f"{i} · {t}" if c else t, c) for i, (c, t) in enumerate(REASONS)],
                               value="", label="Lý do: chọn TRƯỚC khi bấm Gán tay / Bỏ ảnh (phím 0–8)", elem_id="reason")
             with gr.Row(elem_id="nav"):
                 b_prev = gr.Button("← Prev", elem_id="btn-prev")
                 b_undo = gr.Button("Undo (Z)", elem_id="btn-undo")
                 b_next = gr.Button("Next →", elem_id="btn-next")
-            ca_kho.mark_panel(gr, demo, store, ctx, shown)           # nút "Ca khó (K)" và panel đánh dấu (ghi runs/<lượt>/ca_kho.csv)
+            ca_kho.mark_panel(gr, demo, store, ctx, shown, b_cakho)           # nút "Ca khó (K)" và panel đánh dấu (ghi runs/<lượt>/ca_kho.csv)
         with gr.Column(scale=3, min_width=340, elem_id="side"):
             info = gr.HTML(elem_id="info", apply_default_css=False)
             gr.HTML(LEGEND_HTML, elem_id="legend", apply_default_css=False)
@@ -1657,6 +1689,7 @@ class AppCtx:
     reviewer: str
     run_dir: str
     nap_only: bool = False
+    reviewer_auto: bool = False        # người rà không ghi ở dòng lệnh: chế độ --nap đổi `reviewer` theo tên vừa lưu ở tab Cài đặt (Save name), không phải mở lại trang
     job: object = None
     push_job: object = None            # nap_anh.PushJob: đẩy lên CVAT bằng tiến trình con
     del_job: object = None             # nap_anh.DeleteTaskJob: xoá task trên CVAT bằng tiến trình con
@@ -2060,10 +2093,11 @@ def build_ui(store, ctx=None):
 
 
 def parse_argv(argv):
-    """("run", thư mục lượt, người rà) | ("nap", None, người rà) | None nếu sai cú pháp."""
-    if len(argv) != 2:
+    """("run", thư mục lượt, người rà) | ("nap", None, người rà) | None nếu sai cú pháp. Người rà có thể bỏ trống (None): main dùng tên đã lưu ở tab Cài đặt, chưa lưu thì P1."""
+    if len(argv) not in (1, 2) or (argv[0] == "--nap" and len(argv) > 2):
         return None
-    return ("nap", None, argv[1]) if argv[0] == "--nap" else ("run", argv[0], argv[1])
+    who = argv[1] if len(argv) == 2 else None
+    return ("nap", None, who) if argv[0] == "--nap" else ("run", argv[0], who)
 
 
 def _launch(demo, theme, ctx, port, allowed, inbrowser, retry_s=0):
@@ -2101,6 +2135,9 @@ def main(argv=None):
         print(VI_USAGE, file=sys.stderr)
         return 2
     mode, run_dir, reviewer = parsed
+    tu_dong = reviewer is None                         # không ghi người rà ở dòng lệnh (menu chay.sh/chay.bat): lấy tên đã lưu ở tab Cài đặt
+    if tu_dong:
+        reviewer = cai_dat.get().default_reviewer() or DEFAULT_REVIEWER
     try:
         check_reviewer(reviewer)
         bad = notebook_env()
@@ -2124,7 +2161,7 @@ def main(argv=None):
     except ValueError:
         print(f"Lỗi: GRADIO_SERVER_PORT={os.environ.get('GRADIO_SERVER_PORT')!r} không phải số.", file=sys.stderr)
         return 2
-    ctx = AppCtx(reviewer=reviewer, run_dir=run_dir, nap_only=store is None)
+    ctx = AppCtx(reviewer=reviewer, run_dir=run_dir, nap_only=store is None, reviewer_auto=tu_dong)
     demo, first = None, True
     try:
         while True:

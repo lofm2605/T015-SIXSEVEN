@@ -29,8 +29,8 @@ import nap_anh
 from m28core import dang_chay
 from nap_anh import RunError
 
-ACT_KEYS = ("act", "run", "name", "page", "trash", "entry")
-ACTS = {"open", "back", "page", "ra", "push", "delimg", "restore", "empty", "delrun", "deltask", "restore_run", "purge_run", "finish"}
+ACT_KEYS = ("act", "run", "name", "page", "trash", "entry", "folder")
+ACTS = {"open", "back", "page", "ra", "push", "delimg", "restore", "empty", "delrun", "deltask", "restore_run", "purge_run", "finish", "openfolder"}
 
 # ---------- CSS / JS thêm vào CSS và PAGE_JS của review_app ----------
 CSS = """
@@ -98,6 +98,7 @@ CSS = """
 .dot-gop { font-size: 13px; padding: 4px 8px; border-radius: 8px; border: 1px solid #0f766e; overflow-wrap: anywhere;
   background: color-mix(in srgb, #0f766e 10%, transparent); }
 .gop-done .dh-ok { margin-top: 8px; }
+.gop-folders { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
 .gop-warn { color: #d97706; }
 .dot-btn-danger { color: #dc2626; border-color: #dc2626; background: color-mix(in srgb, #dc2626 8%, transparent); }
 .dot-btn:focus-visible, .dot-trash:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
@@ -144,12 +145,12 @@ JS_BODY = r"""
       el.dispatchEvent(new Event('input', { bubbles: true }));
     };
     document.addEventListener('click', (e) => {
-      const el = e.target && e.target.closest ? e.target.closest('#dot-root [data-act]') : null;
+      const el = e.target && e.target.closest ? e.target.closest('#dot-root [data-act], .gop-done [data-act]') : null;
       if (!el || el.disabled) { return; }
       e.preventDefault();
       const d = el.dataset;
       const payload = JSON.stringify({ act: d.act || '', run: d.run || '', name: d.name || '', page: d.page || '',
-                                       trash: d.trash || '', entry: d.entry || '' });
+                                       trash: d.trash || '', entry: d.entry || '', folder: d.folder || '' });
       const box = document.querySelector('#dot-act textarea, #dot-act input');
       const go = document.getElementById('dot-act-go');
       if (!box || !go) { return; }
@@ -214,6 +215,26 @@ def parse_action(raw):
     if not isinstance(d, dict) or d.get("act") not in ACTS:
         return None
     return {k: (d.get(k) if isinstance(d.get(k), str) else "") for k in ACT_KEYS}
+
+
+# ---------- nút "Mở thư mục" ở thẻ kết quả gộp job ----------
+FOLDERS = {"ket_qua": os.path.join("outputs", "ket_qua"), "raw": "raw", "timing": os.path.join("outputs", "timing")}      # chỉ ba thư mục cố định của dự án; trình duyệt chỉ gửi khoá
+
+
+def open_folder(path, platform=None, popen=None, startfile=None):
+    """Mở thư mục `path` bằng trình quản lý file của máy (trang chỉ chạy ở 127.0.0.1 nên là máy của chính người dùng). Trả (ok, câu nói). Không bao giờ ném lỗi."""
+    import subprocess
+    import sys as _sys
+    plat = platform or _sys.platform
+    try:
+        if plat.startswith("win"):
+            (startfile or os.startfile)(path)                                      # noqa: S606 (đường dẫn do server tính, không do trình duyệt gửi)
+        else:
+            cmd = ["open", path] if plat == "darwin" else ["xdg-open", path]
+            (popen or subprocess.Popen)(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return True, f"Đã mở thư mục {path}."
+    except (OSError, AttributeError) as e:
+        return False, f"Không mở được thư mục tự động ({type(e).__name__}). Mở tay: {path}"
 
 
 # ---------- khung "Đẩy lên CVAT" trong tab Rà soát ----------
@@ -520,7 +541,7 @@ def dot_tab(gr, demo, store, ctx, deps):
         a = parse_action(raw)
         if a is None:
             return render(s, "Hành động không hợp lệ (bỏ qua).", "warn")
-        if ctx.closing and a["act"] not in ("back", "open", "page"):      # trang đang đóng: chỉ xem được, không ghi/đẩy/chuyển gì
+        if ctx.closing and a["act"] not in ("back", "open", "page", "openfolder"):      # trang đang đóng: chỉ xem được, không ghi/đẩy/chuyển gì
             return render(s, nap_anh.CLOSING_MSG, "warn")
         try:
             return _dispatch(a, s)
@@ -544,6 +565,17 @@ def dot_tab(gr, demo, store, ctx, deps):
             except ValueError:
                 s["page"] = 0
             return render(s)
+        if act == "openfolder":
+            rel = FOLDERS.get(a["folder"])
+            if rel is None:
+                raise RunError("Thư mục không hợp lệ (bỏ qua).")
+            path = os.path.join(ctx.project_root, rel)
+            if not os.path.isdir(path):
+                raise RunError(f"Chưa có thư mục {rel.replace(os.sep, '/')} (chưa lưu gì vào đó).")
+            ok, text = open_folder(os.path.abspath(path))
+            if not ok:
+                gr.Warning(text, title="Mở thư mục")
+            return render(s, text, "ok" if ok else "warn")
         if act == "ra":
             return _switch(a, s)
         if act == "push":

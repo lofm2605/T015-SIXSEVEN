@@ -62,24 +62,17 @@ if [ ! -f face_landmarker.task ] && [ ! -f tool/face_landmarker.task ]; then
   fi
 fi
 
-hoi_nguoi() {
-  read -r -p "Tên người rà (Enter = P1): " NGUOI
-  NGUOI="${NGUOI:-P1}"
-}
-
 mo_trang() {
-  hoi_nguoi
   echo
-  echo 'Đang mở trang rà soát (chỉ máy này vào được, địa chỉ http://127.0.0.1:7860). Xong việc bấm "Close page" trên trang.'
-  python tool/review_app.py --nap "$NGUOI"
+  echo 'Đang mở trang rà soát (chỉ máy này vào được, địa chỉ http://127.0.0.1:7860). Đặt tên người rà ở tab Cài đặt (Save name). Xong việc bấm "Close page" trên trang.'
+  python tool/review_app.py --nap
 }
 
 luot() {
-  hoi_nguoi
   read -r -p "Tên lượt (thư mục trong runs/, ví dụ F5 hoặc NAP_001): " LUOT
   [ -n "$LUOT" ] || return 0
   if [ ! -d "runs/$LUOT" ]; then echo "Không thấy runs/$LUOT"; return 0; fi
-  python tool/review_app.py "runs/$LUOT" "$NGUOI"
+  python tool/review_app.py "runs/$LUOT"
 }
 
 thu5() {

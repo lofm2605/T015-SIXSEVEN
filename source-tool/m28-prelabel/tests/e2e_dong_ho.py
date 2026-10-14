@@ -173,7 +173,7 @@ def main():
             pg.locator('#close-confirm-cancel').click()
             # 6
             open_tab(pg, 'Thống kê')
-            pg.get_by_role('button', name='Refresh').first.click()
+            pg.get_by_role('button', name='Load & Calculate').first.click()
             pg.wait_for_timeout(2500)
             txt = pg.locator('#tk-view').inner_text()
             check('1. NME của nháp' in txt and '2. Tỉ lệ điểm phải sửa' in txt and '3. So sánh thời gian' in txt and 'KTC 90%' in txt, 'tab Thống kê có ba mục và KTC')
@@ -186,7 +186,7 @@ def main():
             check(nar.evaluate('document.documentElement.scrollWidth') <= 421, '420 px không tràn ngang (chip đồng hồ)')
             nar.screenshot(path=os.path.join(shots, 'dongho_420.png'), full_page=True)
             open_tab(nar, 'Thống kê')
-            nar.get_by_role('button', name='Refresh').first.click()
+            nar.get_by_role('button', name='Load & Calculate').first.click()
             nar.wait_for_timeout(2500)
             check(nar.evaluate('document.documentElement.scrollWidth') <= 421, '420 px không tràn ngang (Thống kê)')
             nar.screenshot(path=os.path.join(shots, 'thongke_420.png'), full_page=True)

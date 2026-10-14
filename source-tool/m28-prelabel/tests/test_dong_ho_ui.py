@@ -582,3 +582,13 @@ def test_the_pause_message_names_the_dot(app, capsys):
     g.tick(5)
     got = dong_ho_ui.tu_tam_dung(ctx)
     assert got == [('P5', '18:30:05', 'NAP_007')] and 'lúc 18:30:05 (đợt NAP_007)' in capsys.readouterr().out
+
+
+def test_clock_bar_is_hidden_outside_the_three_batch_tabs():
+    """Thanh đồng hồ (#dh-bar) chỉ hiện ở Rà soát, Nạp ảnh, Các đợt: JS gắn m28-dh-hide theo tab đang chọn, CSS ẩn; đồng hồ vẫn chạy ngầm."""
+    js, css = dong_ho_ui.JS_BODY, dong_ho_ui.CSS
+    assert "['Rà soát', 'Nạp ảnh', 'Các đợt']" in js and "#tabs button[role=\"tab\"][aria-selected=\"true\"]" in js and 'm28-dh-hide' in js
+    assert '#dh-bar.m28-dh-hide { display: none !important; }' in css
+    for tab in ('Ca khó', 'Họp team', 'Thống kê', 'Lọc dữ liệu', 'Cài đặt'):
+        assert f"'{tab}'" not in js.split('const SHOW')[1].split(';')[0]
+    assert 'setInterval' in js and 'dh-mini-time' in js                      # bộ đếm mm:ss không gắn với việc ẩn/hiện thanh

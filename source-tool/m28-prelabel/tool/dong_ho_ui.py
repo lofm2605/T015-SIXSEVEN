@@ -33,6 +33,7 @@ KHAC_TOI_DA = 3                           # chip ghi mờ tối đa ngần này 
 
 CSS = """
 /* ---------- chip đồng hồ ở đầu trang (màu lấy từ biến theme) ---------- */
+#dh-bar.m28-dh-hide { display: none !important; }
 #dh-bar { gap: 6px; flex-wrap: nowrap !important; align-items: center; margin: 2px 0 4px; }
 #dh-mini-wrap { padding: 0 !important; min-height: 0 !important; flex: 0 1 auto !important; min-width: 0 !important; width: auto !important; }
 .dh-mini { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; font-size: 14px; color: var(--body-text-color);
@@ -70,6 +71,25 @@ JS_BODY = r"""
       const a = fmt(st.g + (performance.now() - st.t0) / 1000);
       if (el.textContent !== a) { el.textContent = a; }
     }, 250);
+  }
+  // ---- Thanh đồng hồ (#dh-bar: chip + nút Pause/Resume) chỉ hiện ở ba tab Rà soát, Nạp ảnh, Các đợt; tab khác ẩn thanh (đồng hồ vẫn chạy ngầm, không dừng). ----
+  if (!window.__m28DhTab) {
+    window.__m28DhTab = true;
+    const SHOW = ['Rà soát', 'Nạp ảnh', 'Các đợt'];
+    let queued = false;
+    const sync = () => {
+      queued = false;
+      const bar = document.getElementById('dh-bar');
+      if (!bar) { return; }
+      const sel = document.querySelector('#tabs button[role="tab"][aria-selected="true"]');
+      const name = sel ? sel.textContent.trim() : '';
+      const hide = !!name && SHOW.indexOf(name) < 0;                       // không tìm được tab đang chọn (tab nằm trong menu thu gọn...): cứ hiện
+      if (bar.classList.contains('m28-dh-hide') !== hide) { bar.classList.toggle('m28-dh-hide', hide); }
+    };
+    new MutationObserver(() => { if (!queued) { queued = true; setTimeout(sync, 30); } })
+      .observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-selected', 'class'] });
+    document.addEventListener('click', () => setTimeout(sync, 80));
+    sync();
   }
 """
 

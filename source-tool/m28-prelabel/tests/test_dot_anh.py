@@ -17,6 +17,7 @@ sys.path.insert(0, TOOL)
 import day_cvat  # noqa: E402
 import dot_anh  # noqa: E402
 import dot_ui  # noqa: E402
+import gop_job  # noqa: E402
 import nap_anh as na  # noqa: E402
 import review_app as ra  # noqa: E402
 from m28core import dang_chay, loai_tru, phan_loai  # noqa: E402
@@ -872,7 +873,7 @@ def test_pid_alive_never_kills_on_windows_path():
 # ---------- dot_ui: hành động từ trình duyệt ----------
 def test_parse_action_validates():
     ok = dot_ui.parse_action(json.dumps(dict(act='delimg', run='Khoi', name='a1')))
-    assert ok == dict(act='delimg', run='Khoi', name='a1', page='', trash='', entry='')
+    assert ok == dict(act='delimg', run='Khoi', name='a1', page='', trash='', entry='', folder='')
     assert set(ok) == set(dot_ui.ACT_KEYS)
     for bad in ('', 'x', 'null', '[]', json.dumps(dict(act='rm -rf')), json.dumps(dict(act='delimg', run=5)), json.dumps({})):
         r = dot_ui.parse_action(bad)
@@ -1016,3 +1017,48 @@ def test_batch_list_gives_every_dot_its_own_time(world):
     c = cards()
     assert '⏱ P2 ✓ đã lưu 01:15' in c['Khoi'] and '▶' not in c['Khoi'] and '⏸ chờ bắt đầu' in c['Nam']
     assert 'dong_ho_ui.gio_cac_dot(ctx)' in open(os.path.join(TOOL, 'dot_ui.py'), encoding='utf-8').read()
+
+
+# ---------- nút "Mở thư mục" ở thẻ kết quả gộp job ----------
+def test_open_folder_uses_the_file_manager_of_each_platform():
+    calls = []
+    ok, msg = dot_ui.open_folder('/tmp/x', platform='linux', popen=lambda cmd, **kw: calls.append((cmd, kw)))
+    assert ok and calls[0][0] == ['xdg-open', '/tmp/x'] and calls[0][1]['start_new_session'] is True and '/tmp/x' in msg
+    assert dot_ui.open_folder('/tmp/x', platform='darwin', popen=lambda cmd, **kw: calls.append((cmd, kw)))[0] and calls[1][0] == ['open', '/tmp/x']
+    opened = []
+    assert dot_ui.open_folder('C:\\m28\\outputs', platform='win32', startfile=opened.append)[0] and opened == ['C:\\m28\\outputs']
+
+    def boom(*a, **k):
+        raise FileNotFoundError('xdg-open')
+    ok, msg = dot_ui.open_folder('/tmp/x', platform='linux', popen=boom)                       # máy không có xdg-open: không vỡ, nói đường dẫn để mở tay
+    assert not ok and '/tmp/x' in msg and 'FileNotFoundError' in msg
+
+
+def test_parse_action_keeps_the_folder_key_and_result_card_has_the_buttons():
+    a = dot_ui.parse_action(json.dumps(dict(act='openfolder', folder='ket_qua', evil='x')))
+    assert a['act'] == 'openfolder' and a['folder'] == 'ket_qua' and 'evil' not in a
+    fx = dict(run='Khoi', person='P1', n=3, xml_name='demo-Khoi_P1_1510.xml', jobs=[1, 2], chua=[], luu=None, xuat_lai=None, loi_luu='', loi_ghi='')
+    card = gop_job.result_html(fx)
+    assert 'gop-done' in card and card.count('data-act="openfolder"') == 3
+    assert all(f'data-folder="{k}"' in card for k in ('ket_qua', 'raw', 'timing')) and 'Mở thư mục gói kết quả' in card
+
+
+def test_open_folder_action_only_opens_the_three_project_folders(world, monkeypatch):
+    pytest.importorskip('gradio')
+    rd = make_dot_run(world, 'Khoi', decisions=ALL_DECIDED)
+    ra.prepare_env(rd)
+    demo, _theme = ra.build_ui(ra.Store(rd, 'P2'))
+    do_act = next(f.fn for f in demo.fns.values() if getattr(f.fn, '__name__', '') == 'do_act')
+    seen = []
+    monkeypatch.setattr(dot_ui, 'open_folder', lambda p, **kw: (seen.append(p) or (True, 'Đã mở thư mục.')))
+
+    def go(**kw):
+        return do_act(json.dumps(dict(act='openfolder', **kw)), None)
+    go(folder='ket_qua')                                                                       # chưa có thư mục: không mở
+    assert seen == []
+    os.makedirs(os.path.join('outputs', 'ket_qua'))
+    go(folder='ket_qua')
+    assert [os.path.realpath(p) for p in seen] == [os.path.realpath(os.path.join('outputs', 'ket_qua'))]
+    for bad in ('..', '../x', '/etc', 'runs', '', 'KET_QUA'):                                 # khoá lạ (kể cả đường dẫn): từ chối, không mở gì
+        go(folder=bad)
+    assert len(seen) == 1

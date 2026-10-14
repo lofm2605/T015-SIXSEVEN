@@ -1386,3 +1386,21 @@ def test_full_scenario_leaves_token_only_in_cvat_json(tmp_path, world, monkeypat
                 continue
             assert TOKEN.encode() not in data and TOKEN2.encode() not in data, f
     assert not os.path.exists(S.path_cvat())                                   # Quên xong: không còn file nào chứa token
+
+
+def test_save_name_in_nap_mode_without_cli_name_applies_to_this_page(world):
+    """Menu chay.sh/chay.bat không hỏi tên (review_app.py --nap): Save name ở Cài đặt có hiệu lực NGAY cho trang này (đồng hồ, người nạp). Có ghi tên ở dòng lệnh, hoặc đang rà một
+    lượt (store đã dựng với tên cũ) thì ctx.reviewer không đổi giữa chừng."""
+    pytest.importorskip('gradio')
+    import dong_ho_ui
+    ra.prepare_env(os.path.join('runs', '_nap'))
+    results = {}
+    for auto, nap in ((True, True), (False, True), (True, False)):
+        ctx = ra.AppCtx(reviewer='P1', run_dir=os.path.join('runs', '_nap'), nap_only=nap, reviewer_auto=auto)
+        demo, _theme = ra.build_ui(None, ctx) if nap else ra.build_ui(ra.Store(make_dot_run(world, 'Khoi', decisions=ALL_DECIDED), 'P1'), ctx)
+        rev = handlers(demo)['on_reviewer'][0]
+        m = as_map(rev, rev.fn('Cuong', None))
+        assert 'Đã lưu tên người rà mặc định: Cuong' in m['cd-reviewer-msg']
+        results[(auto, nap)] = (ctx.reviewer, dong_ho_ui.default_person(ctx))
+    assert results[(True, True)] == ('Cuong', 'Cuong')                                   # nạp ảnh bằng menu không tên: đồng hồ chạy với tên vừa lưu
+    assert results[(False, True)][0] == 'P1' and results[(True, False)][0] == 'P1'          # tên ghi ở dòng lệnh hoặc đã có lượt: không đổi giữa chừng

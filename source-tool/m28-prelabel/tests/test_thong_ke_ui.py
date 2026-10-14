@@ -105,7 +105,7 @@ def test_hai_module_ui_khong_nap_gradio_o_dau_module():
 def test_thong_ke_lam_moi_tinh_khi_goi_va_loc_lua_chon_do_server_tinh(world):
     fn, demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
     out = fn('', 2.0, False, False, False, '', None)
-    nhap, msg, view = out
+    nhap, msg, view, log = out
     assert nhap['choices'][1] == ('R1', 'R1') and msg == ''
     assert 'tk-root' in view and 'So sánh thời gian' in view and 'NME của nháp' in view and 'Tỉ lệ điểm phải sửa' in view
     for gone in ('low_conf', 'AUROC', 'Số lượng dữ liệu', 'Tiến độ', 'giờ tiết kiệm', 'Giây rà'):
@@ -147,13 +147,14 @@ def test_thong_ke_nap_goi_ket_qua_tu_nguoi_khac_qua_o_tai_len(world, tmp_path):
             shutil.copy(ngoai / 'outputs' / 'goi_nhom' / f, d)
     files = [str(d / f) for f in sorted(os.listdir(d))]
     fn, demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
-    nhap, msg, view = fn('', 2.0, False, False, False, '', files)
-    assert 'assisted nhanh hơn manual' in view and '4 gói kết quả' in view and 'Chưa có số' not in view
+    nhap, msg, view, log = fn('', 2.0, False, False, False, '', files)
+    assert 'assisted nhanh hơn manual' in view and 'Chưa có số' not in view
+    assert '4 gói kết quả' in log and '4 gói kết quả' not in view and 'Hạn chế của thiết kế' in log and 'Hạn chế của thiết kế' not in view      # nguồn, cảnh báo, hạn chế nằm trong nút Log
     assert not os.path.exists(os.path.join(world['root'], 'outputs', 'ket_qua')) and not os.path.exists(os.path.join(world['root'], 'outputs', 'goi_nhom'))
     bad = d / 'hong.zip'
     bad.write_bytes(b'PK\x03\x04 hong')
-    nhap, msg, view = fn('', 2.0, False, False, False, '', files + [str(bad)])
-    assert 'Gói bị loại' in view and 'hong.zip' in view
+    nhap, msg, view, log = fn('', 2.0, False, False, False, '', files + [str(bad)])
+    assert 'Gói bị loại' in log and 'hong.zip' in log and 'Gói bị loại' not in view
 
 
 def test_thong_ke_xuat_ghi_duoi_outputs_thong_ke_va_tu_choi_khi_dong(world):
@@ -228,8 +229,8 @@ def test_nhap_tay_add_ghi_vao_goi_nhom_va_hien_danh_sach(world, tmp_path):
     assert 'P2' in lst and 'NAP_001' in lst and '06:00' in lst and '90,0' in lst and len(sel['choices']) == 1 and sel['choices'][0][1] == files[0][:-5] and sel['value'] is None
     assert tree_hash(world['root'], ('runs', 'raw', 'final', 'data', 'config')) == before                # chỉ ghi dưới outputs/goi_nhom
     fn, _demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
-    nhap, m2, view = fn('', 2.0, False, False, False, '', None)
-    assert '(nhập tay)' in view and 'manual (gán tay): P2' in view
+    nhap, m2, view, log = fn('', 2.0, False, False, False, '', None)
+    assert '(nhập tay)' in log and 'manual (gán tay): P2' in log
     msg2, _l, _s = f['on_tay_add']('P2', 'manual', 'NAP_001', '6:00', '', [x], '', None)                 # bấm lần hai: không thêm gói
     assert 'Đã thêm' in msg2 and sorted(os.listdir(d)) == files
     lst2 = f['on_tay_list']()
@@ -465,3 +466,72 @@ def test_nhap_tay_hien_gio_bang_chu_va_canh_bao_go_nham_hoac_lech_nhom(world, tm
     assert 'm-warn' in msg and '00:12 = 12 giây' in msg and 'gõ nhầm thời gian' in msg and '1:30:00' in msg
     msg, _l, _s = f['on_tay_add']('P3', 'manual', 'NAP_003', '85', '', [nhan_tay_xml(tmp_path, 'p3.xml', ('H_001', 'H_002'))], '', None)
     assert 'm-warn' in msg and 'ghi P3 ở nhóm assisted' in msg and len(f['on_tay_list']()[1]['choices']) == 3
+
+
+# ---------- câu báo sau khi nạp gói ở ô "Nạp các gói kết quả của nhóm" ----------
+def test_goi_note_says_what_happened_to_each_uploaded_file(tmp_path):
+    a, b, c = (tmp_path / n for n in ('ketqua_P1_1510_A.zip', 'ketqua_P1_1510_A.json', 'ketqua_P2_1510_B.zip'))
+    for p in (a, b, c):
+        p.write_text('x')
+    st = dict(nguon=dict(goi=['ketqua_P1_1510_A.zip'], goi_trung=[('ketqua_P1_1510_A.json', 'trùng nội dung')], goi_hong=[('ketqua_P2_1510_B.zip', 'sai sha256')]))
+    text, level = thong_ke_ui.goi_note([str(a), str(b), str(c)], st)
+    assert level == 'warn' and 'Đã đọc 3 file' in text and '1 gói được tính (ketqua_P1_1510_A.zip)' in text
+    assert '1 bản trùng bị bỏ' in text and 'ketqua_P1_1510_A.json' in text and '1 file lỗi: ketqua_P2_1510_B.zip: sai sha256' in text
+    text, level = thong_ke_ui.goi_note([str(a)], dict(nguon=dict(goi=['ketqua_P1_1510_A.zip'], goi_trung=[], goi_hong=[])))
+    assert level == 'ok' and text.startswith('Đã đọc 1 file') and 'tính lại' in text
+    assert thong_ke_ui.goi_note(None, st) == ('', 'info') and thong_ke_ui.goi_note([], st) == ('', 'info')
+
+
+# ---------- mục "Đặt tên người cho gói" ----------
+def ten_fns(world):
+    with gr.Blocks() as demo:
+        thong_ke_ui.stats_tab(gr, demo, None, world['ctx'])
+    return demo, {n: next(x.fn for x in demo.fns.values() if getattr(x.fn, '__name__', '') == n) for n in ('on_ten_open', 'on_ten_set', 'on_ten_clear')}      # on_ten_open gắn hai sự kiện
+
+
+def test_dat_ten_nguoi_cho_goi_tu_giao_dien(world):
+    from tk_fake import nd_goi, viet_goi
+    root = world['root']
+    r = viet_goi(root, nd_goi('P7', 'assisted', 30.0, n_nguoi_seed=4), 'outputs/goi_nhom')
+    demo, f = ten_fns(world)
+    blocks = {getattr(b, 'elem_id', None): b for b in demo.blocks.values()}
+    assert blocks['tk-ten'].open is False and blocks['tk-ten-set'].value == 'Set name' and blocks['tk-ten-clear'].value == 'Clear name'
+    up, table = f['on_ten_open'](None)
+    ph = next(v for _l, v in up['choices'])
+    assert any('ketqua_P7_1410' in l for l, _v in up['choices']) and 'ketqua_P7_1410' in table and '—' in table
+    msg, up, table = f['on_ten_set'](ph, 'Cuong', None)
+    assert 'm-ok' in msg and 'Đã đặt tên Cuong' in msg and 'Cuong' in table
+    assert thong_ke_ui.thong_ke.tinh(root)['nhom']['nguoi']['assisted'] == ['Cuong']
+    msg, _up, table = f['on_ten_set'](ph, 'a b', None)                                    # tên sai: báo, không đổi
+    assert 'm-warn' in msg and 'Cuong' in table
+    msg, _up, _t = f['on_ten_set'](None, 'Lan', None)                                     # chưa chọn gói
+    assert 'm-warn' in msg and 'Chưa chọn gói' in msg
+    msg, _up, table = f['on_ten_clear'](ph, None)
+    assert 'Đã bỏ tên' in msg and thong_ke_ui.thong_ke.tinh(root)['nhom']['nguoi']['assisted'] == ['P7']
+    assert 'Gói này chưa được đặt tên' in f['on_ten_clear'](ph, None)[0]
+
+
+# ---------- nút Log ----------
+def test_nut_log_mo_hop_tat_duoc_va_giu_ghi_chu_ra_khoi_trang_chinh(world):
+    demo, _f = ten_fns(world)
+    blocks = {getattr(b, 'elem_id', None): b for b in demo.blocks.values()}
+    assert blocks['tk-log-open'].value == 'Log' and blocks['tk-log-close'].value == 'Close'
+    panel = blocks['tk-log-panel']
+    assert panel.visible is False                                                       # mặc định ẩn; bấm Log mới hiện
+    assert 'Chưa tính' in blocks['tk-log-view'].value
+    fns = [f.fn for f in demo.fns.values()]
+    mo = next(f for f in fns if getattr(f, '__name__', '') == '<lambda>' and f().get('visible') is True)
+    tat = next(f for f in fns if getattr(f, '__name__', '') == '<lambda>' and f().get('visible') is False)
+    assert mo()['visible'] is True and tat()['visible'] is False
+    assert 'tk-log-panel' in ra.PAGE_JS and "e.key !== 'Escape'" in ra.PAGE_JS                  # Esc tắt hộp Log
+
+
+def test_noi_dung_gon_tach_log_va_ban_xuat_van_du(world):
+    import thong_ke
+    import thong_ke_html
+    st = thong_ke.tinh(world['root'])
+    chinh, log = thong_ke_html.noi_dung_gon(st)
+    full = thong_ke_html.noi_dung(st)
+    assert 'Lập lúc' in chinh and '1. NME của nháp' in chinh and 'Nguồn:' not in chinh and 'Hạn chế của thiết kế' not in chinh
+    assert 'Nguồn:' in log and 'Hạn chế của thiết kế' in log and 'Lập lúc' not in log
+    assert 'Nguồn:' in full and 'Hạn chế của thiết kế' in full and '1. NME của nháp' in full             # bản xuất HTML vẫn có đủ

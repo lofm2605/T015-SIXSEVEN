@@ -32,7 +32,7 @@ if TOOL_DIR not in sys.path:
     sys.path.insert(0, TOOL_DIR)
 import ca_kho  # noqa: E402
 import nap_anh  # noqa: E402
-from m28core import bang_mat, collect, goi_kq, loai_tru, nhom as nhom_mod, so_sanh, tach_job, toc_do  # noqa: E402
+from m28core import bang_mat, collect, goi_kq, loai_tru, nhom as nhom_mod, so_sanh, tach_job, ten_nguoi, toc_do  # noqa: E402
 
 N_NHO = so_sanh.N_NHO
 MUC_TIEU_NHANH_HON = so_sanh.MUC_TIEU_NHANH_HON
@@ -279,7 +279,7 @@ def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False,
     nhom_cfg = nhom_mod.doc(project_root)
     now = now or datetime.datetime.now().astimezone()
     quet = doc_nguon_goi(project_root, goi, set(names), mac_dinh=not (chi_goi and goi))
-    goi_ok = quet["tot"]
+    goi_ok, doi_ten = ten_nguoi.ap_dung(quet["tot"], ten_nguoi.doc(project_root))             # nhóm trưởng đặt lại tên người cho từng gói (tab Thống kê)
     phien_goi = {nd["phien"] for _t, nd in goi_ok}
     mat_goi = {(nd["nguoi"], r["anh"]) for _t, nd in goi_ok for r in nd.get("ket_qua", [])}
     faces = [m for _t, nd in goi_ok for m in mat_tu_goi(nd)]
@@ -317,7 +317,7 @@ def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False,
                         config_version=cfg.get("version", cfg.get("config_version", "?")), nguong_sua=nguong, gom_ttest=bool(gom_ttest), ttest_an=n_ttest, co_manifest=bool(man),
                         tat_ca_task=bool(tat_ca_task), chi_bo_anh=bool(chi_bo_anh), luot_nhap=luot_nhap or "", chi_goi=bool(chi_goi), n_xoa_mem=n_xoa_mem, n_mat_trung=bo_dup,
                         canh_bao=list(warns)),
-              nguon=dict(goi=[t for t, _n in goi_ok], goi_hong=quet["hong"], goi_trung=quet["trung"], nhan_raw=files_raw, nhan_bo_qua=notes_raw, timing=files_timing,
+              nguon=dict(goi=[t for t, _n in goi_ok], goi_hong=quet["hong"], goi_trung=quet["trung"], doi_ten=doi_ten, nhan_raw=files_raw, nhan_bo_qua=notes_raw, timing=files_timing,
                          timing_loi=loi_timing, timing_trung=trung_timing, goi_nhap_tay=[t for t, nd in goi_ok if nd.get("nguon_nhap") == NGUON_NHAP_TAY]),
               nhom=dict(cau_hinh=nhom_cfg["nhom"], bo_anh=nhom_cfg["bo_anh"], co_file=nhom_cfg["co_file"], loi=nhom_cfg["loi"],
                         nguoi={c: sorted({r["nguoi"] for r in faces if r["dieu_kien"] == c} | {r["person"] for r in rows_t if r["condition"] == c}) for c in so_sanh.CONDITIONS}))

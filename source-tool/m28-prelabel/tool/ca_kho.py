@@ -1402,11 +1402,13 @@ CSS = """
 /* ---------- Ca khó và Họp team (màu lấy từ biến theme; màu trạng thái dùng nền trong suốt) ---------- */
 #ck-row { gap: 10px; align-items: center; flex-wrap: nowrap; }
 #ck-row > * { min-width: 0; }
-#btn-cakho { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; white-space: nowrap; padding: 0 16px !important;
+#ck-row #btn-cakho { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; white-space: nowrap; padding: 0 16px !important;
   background: var(--background-fill-secondary) !important; color: var(--body-text-color) !important;
   border: 1px solid var(--border-color-primary) !important; }
 #ck-badge, #ck-msg, #ck-m-msg, #ck-ngoai, #ck-sum, #ck-list, #hop-msg, #hop-report, #hop-counts, #hop-hint { padding: 0 !important; }
-#btn-cakho { min-height: 40px; font-weight: 700; }
+#ck-row #btn-cakho { min-height: 40px; font-weight: 700; }
+#decide #btn-cakho { background: #7c3aed !important; border-color: #6d28d9 !important; }            /* nút thứ tư cùng hàng với Nhận, Gán tay, Bỏ ảnh (kiểu dáng chung ở #decide button) */
+#ck-row:not(:has(.html-container > div > *)) { display: none; }                                      /* hàng chỉ còn nhãn "Đã đánh dấu" thì trống: không chiếm chỗ */
 #ck-panel { background: var(--block-background-fill) !important; padding: 10px 12px !important; gap: 8px; border: 1px solid var(--border-color-primary); border-radius: 10px; }
 #ck-panel-face { font-size: 15px; padding: 0 !important; }
 #ck-loai .wrap { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
@@ -1561,13 +1563,15 @@ def _decision_of(store, name):
     return d if d in DECISIONS_OK else ""
 
 
-def mark_panel(gr, demo, store, ctx, shown):
-    """Nút "Ca khó (K)" và panel đánh dấu ở tab Rà soát. Không đụng triage, done.txt, hàng đợi hay hoàn tác."""
+def mark_panel(gr, demo, store, ctx, shown, b_open=None):
+    """Nút "Ca khó (K)" và panel đánh dấu ở tab Rà soát. Không đụng triage, done.txt, hàng đợi hay hoàn tác.
+    b_open: nút đã dựng sẵn (tab Rà soát đặt nó cùng hàng với Nhận, Gán tay, Bỏ ảnh); None thì tự dựng một nút riêng trong hàng #ck-row."""
     points = load_point_names(ctx.project_root)
     opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="cakho")
     opened = gr.State("")
     with gr.Row(elem_id="ck-row"):
-        b_open = gr.Button("Ca khó (K)", elem_id="btn-cakho")
+        if b_open is None:
+            b_open = gr.Button("Ca khó (K)", elem_id="btn-cakho")
         badge = gr.HTML(elem_id="ck-badge", apply_default_css=False)
     with gr.Group(visible=False, elem_id="ck-panel") as panel:
         face_html = gr.HTML(elem_id="ck-panel-face", apply_default_css=False)

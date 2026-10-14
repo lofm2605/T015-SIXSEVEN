@@ -495,6 +495,8 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
         r = S.set_reviewer(name, rev)
         if r["stale"]:
             return reload_all(r, rev_msg)
+        if r["ok"] and getattr(ctx, "reviewer_auto", False) and getattr(ctx, "nap_only", False):
+            ctx.reviewer = r["name"]                       # mở bằng menu không ghi tên và chưa có lượt nào: tên vừa lưu dùng ngay (đồng hồ, người nạp), không đợi lượt sau
         return ret(view(full=r["ok"], over=note(rev_msg, r["msg"], r["level"])))
 
     # ---------- đường dẫn ----------

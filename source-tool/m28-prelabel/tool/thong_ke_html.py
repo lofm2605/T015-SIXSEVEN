@@ -108,7 +108,8 @@ def muc(tieu_de, noi_dung, ghi_chu="", mid=""):
 
 
 # ---------- đầu trang ----------
-def phan_dau(st):
+def phan_dau(st, tach=False):
+    """Dòng meta + các khung ghi chú/cảnh báo ở đầu báo cáo. tach=True: trả (dòng meta, các khung) để trang hiện khung trong nút Log."""
     m, ng, nh = st["meta"], st["nguon"], st["nhom"]
     dong = [f"Lập lúc {e(m['ngay'])}", f"commit {e(m['commit'])}", f"config 50 điểm version {e(m['config_version'])}", f"ngưỡng sửa {num(m['nguong_sua'], 1)}% IOD"]
     out = [f'<div class="tk-meta">{" · ".join(dong)}</div>']
@@ -130,6 +131,9 @@ def phan_dau(st):
                + (f", trong đó {len(tay & set(ng['goi']))} bản nhập tay" if tay & set(ng["goi"]) else "")
                + f'; {len(ng["nhan_raw"])} file nhãn trong raw\\' + (f' ({e(", ".join(f["file"] for f in ng["nhan_raw"][:12]))})' if ng["nhan_raw"] else "")
                + f'; {len(ng["timing"])} file bấm giờ' + (f' ({e(", ".join(ng["timing"][:12]))})' if ng["timing"] else "") + ".</div>")
+    if ng.get("doi_ten"):
+        out.append('<div class="tk-note"><b>Tên người do nhóm trưởng đặt</b> (file gói không bị sửa): ' + e("; ".join(f"{t}: {a} → {b}" for t, a, b in ng["doi_ten"]))
+                   + ". Hai gói cùng tên mới thì tính là một người.</div>")
     for ten, why in ng["goi_hong"]:
         out.append(f'<div class="tk-note tk-warn">Gói bị loại: {e(why)}</div>')
     if ng["goi_trung"]:
@@ -145,7 +149,7 @@ def phan_dau(st):
         out.append(f'<div class="tk-note tk-warn">{e(w)}</div>')
     if m["n_xoa_mem"]:
         out.append(f'<div class="tk-note">Đã bỏ {m["n_xoa_mem"]} mặt xoá mềm khỏi số đo (chỉ đếm ở đây).</div>')
-    return "".join(out)
+    return (out[0], "".join(out[1:])) if tach else "".join(out)
 
 
 def _bars_nhom(r):
@@ -210,7 +214,8 @@ def _bang_nhom_tg(tg):
     return bang(cols, rows)
 
 
-def muc_thoi_gian(st):
+def muc_thoi_gian(st, an_danh_dau=False):
+    """Mục 3. an_danh_dau=True: bỏ bảng 'Dòng bị đánh dấu' (trang đưa bản gộp vào nút Log; bản xuất HTML vẫn có bảng đủ)."""
     tg = st["thoi_gian"]
     f = st["tg_loc"]
     if tg.get("trong"):
@@ -246,7 +251,7 @@ def muc_thoi_gian(st):
     out.append("<h5>Từng người</h5>" + bang([("Nhóm", lambda r: COND_VI[r["c"]], "l"), ("Người", "p", "l"), ("Mặt", "n", "r"),
                                              ("Trung vị (giây)", lambda r: "n quá nhỏ" if r["n"] < N_NHO else num(r["tv"], 1), "r"), ("TB nhân (giây)", lambda r: "n quá nhỏ" if r["n"] < N_NHO else num(r["tbn"], 1), "r")],
                                             [dict(c=c, p=p, n=v["n_mat"], tv=v["trung_vi"], tbn=v["tb_nhan"]) for c in ("manual", "assisted") for p, v in tg["nhom"][c]["nguoi"].items()]))
-    if tg["danh_dau"] or tg["ngoai_lai"]:
+    if (tg["danh_dau"] or tg["ngoai_lai"]) and not an_danh_dau:
         rows = [dict(person=o["person"], condition=o["condition"], face_id=o["face_id"], seconds=o["seconds"], ly=f'vượt Q3 + 3·IQR (ngưỡng {num(o["nguong"], 1)})') for o in tg["ngoai_lai"]]
         rows += [dict(person=o["person"], condition=o["condition"], face_id=o["face_id"], seconds=o["seconds"], ly=o["ly_do"]) for o in tg["danh_dau"]]
         out.append("<h5>Dòng bị đánh dấu — vẫn nằm trong chỉ số chính</h5>" + bang([("Người", "person", "l"), ("Nhóm", "condition", "l"), ("Mặt", "face_id", "l"), ("Giây", lambda r: num(r["seconds"], 1), "r"),
@@ -267,6 +272,30 @@ def han_che(st):
 
 def noi_dung(st):
     return phan_dau(st) + han_che(st) + muc_nme(st) + muc_sua(st) + muc_thoi_gian(st)
+
+
+def danh_dau_gon(st):
+    """Các dòng thời gian bị đánh dấu (mục 3) gộp theo (người, nhóm, lý do): MỘT dòng cho mỗi nhóm thay vì mỗi mặt một dòng; vẫn tính trong chỉ số chính. '' nếu không có."""
+    tg = st["thoi_gian"]
+    if tg.get("trong") or not (tg.get("danh_dau") or tg.get("ngoai_lai")):
+        return ""
+    gop = {}
+    for o in tg["ngoai_lai"]:
+        gop.setdefault((o["person"], o["condition"], f'vượt Q3 + 3·IQR (ngưỡng {num(o["nguong"], 1)})'), []).append(o["seconds"])
+    for o in tg["danh_dau"]:
+        gop.setdefault((o["person"], o["condition"], o["ly_do"]), []).append(o["seconds"])
+    rows = [dict(person=p, condition=c, ly=ly, n=len(v), lo=min(v), hi=max(v)) for (p, c, ly), v in gop.items()]
+    cols = [("Người", "person", "l"), ("Nhóm", "condition", "l"), ("Số mặt", "n", "r"), ("Giây (nhỏ nhất–lớn nhất)", lambda r: num(r["lo"], 1) + ("" if r["lo"] == r["hi"] else "–" + num(r["hi"], 1)), "r"),
+            ("Lý do", "ly", "l")]
+    return ('<div class="tk-note"><b>Dòng thời gian bị đánh dấu — vẫn nằm trong chỉ số chính</b> (gộp theo người, nhóm và lý do; bảng từng mặt có trong bản xuất HTML và thoi_gian.csv):'
+            + bang(cols, rows) + "</div>")
+
+
+def noi_dung_gon(st):
+    """(nội dung chính, log) cho trang: nội dung chính = dòng meta + ba chỉ số; log = nguồn dữ liệu, cảnh báo, bản trùng, hạn chế (hiện trong hộp của nút Log).
+    Bản xuất HTML vẫn dùng noi_dung (đủ cả hai)."""
+    meta, ghi = phan_dau(st, tach=True)
+    return meta + muc_nme(st) + muc_sua(st) + muc_thoi_gian(st, an_danh_dau=True), ghi + danh_dau_gon(st) + han_che(st)
 
 
 # ---------- CSS ----------

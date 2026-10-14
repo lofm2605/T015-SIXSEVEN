@@ -14,6 +14,7 @@ DARK, WHITE = (20, 20, 20), (255, 255, 255)
 R_OK = 3                                                    # bán kính chấm ổn (px trên ảnh cắt 512)
 R_LOW = 5                                                   # bán kính chấm màu của điểm low_conf
 RING_LOW = 2                                                # bề dày vòng trắng quanh chấm low_conf
+R_OCC = 5                                                   # bán kính vòng RỖNG của điểm bị che (occluded): vòng màu nhóm, không tô đặc, viền tối ngoài
 
 
 def group_of(point_name):

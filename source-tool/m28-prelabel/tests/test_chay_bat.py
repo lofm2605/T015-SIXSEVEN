@@ -22,7 +22,7 @@ def test_all_goto_and_call_targets_exist():
 def test_menu_covers_choice_range_and_safe_launch():
     t = _text()
     assert 'choice /C 1234567' in t and t.count('if errorlevel') >= 7
-    levels = [int(x) for x in re.findall(r'^if errorlevel (\d+) goto :(?!menu)', t.split(':menu', 1)[1].split(':hoi_nguoi')[0], re.M)]
+    levels = [int(x) for x in re.findall(r'^if errorlevel (\d+) goto :(?!menu)', t.split(':menu', 1)[1].split(':mo_trang')[0], re.M)]
     assert levels == sorted(levels, reverse=True) and levels[0] == 7                         # errorlevel kiểm từ lớn xuống nhỏ
     assert 'tool\\cvat_smoke.py' in t and 'choice /C CK' in t and 'goto :smoke' in t
     assert 'review_app.py --nap' in t and '127.0.0.1' in t
@@ -38,5 +38,5 @@ def test_thu5_uses_incabin_package_only():
     assert 'D:\\' not in block
     assert "w.writerow(['image','face_idx','seed'])" in block and "x['image'],x['face_idx']" in block
     assert '--images data\\crops' in block and '--box crop' in block and '--dry-run' in block
-    menu = t.split(':menu', 1)[1].split(':hoi_nguoi', 1)[0]
+    menu = t.split(':menu', 1)[1].split(':mo_trang', 1)[0]
     assert 'in-cabin' in menu

@@ -39,21 +39,13 @@ if errorlevel 2 goto :luot
 if errorlevel 1 goto :mo_trang
 goto :menu
 
-:hoi_nguoi
-set "NGUOI="
-set /p NGUOI=Ten nguoi ra (Enter = P1): 
-if "%NGUOI%"=="" set "NGUOI=P1"
-exit /b 0
-
 :mo_trang
-call :hoi_nguoi
 echo.
-echo Dang mo trang ra soat (chi may nay vao duoc, dia chi http://127.0.0.1:7860). Xong viec bam "Close page" tren trang.
-python tool\review_app.py --nap %NGUOI%
+echo Dang mo trang ra soat (chi may nay vao duoc, dia chi http://127.0.0.1:7860). Dat ten nguoi ra o tab Cai dat (Save name). Xong viec bam "Close page" tren trang.
+python tool\review_app.py --nap
 goto :menu
 
 :luot
-call :hoi_nguoi
 set "LUOT="
 set /p LUOT=Ten luot (thu muc trong runs\, vi du F5 hoac NAP_001): 
 if "%LUOT%"=="" goto :menu
@@ -61,7 +53,7 @@ if not exist "runs\%LUOT%" (
   echo Khong thay runs\%LUOT%
   goto :menu
 )
-python tool\review_app.py runs\%LUOT% %NGUOI%
+python tool\review_app.py runs\%LUOT%
 goto :menu
 
 :thu5

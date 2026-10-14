@@ -313,8 +313,20 @@ def map50(args, out):
             raise SystemExit(f"apply_map thiếu điểm {miss[:3]}… so với config")
         return {n: [float(r[n][0]), float(r[n][1])] for n in names}
 
-    che_khuat = _need("m28core.che_khuat", "điểm bị che do mặt nghiêng")
-    res = {n: dict(orig=conv(p["orig"], False), flip=conv(p["flip"], True) if p["flip"] else None, occ=che_khuat.diem_bi_che(p["orig"], cfg))
+    che_khuat = _need("m28core.che_khuat", "điểm bị che")
+    rd = _run_dir(args)
+
+    def occ_of(n, pts):
+        gray = None
+        try:
+            import cv2
+            img = cv2.imread(os.path.join(rd, "crop", "images", n + ".png"), cv2.IMREAD_GRAYSCALE)
+            gray = img if img is not None and img.ndim == 2 else None            # không đọc được ảnh cắt thì chỉ xét mặt nghiêng
+        except Exception:
+            gray = None
+        return che_khuat.diem_bi_che(pts, cfg, gray)
+
+    res = {n: dict(orig=conv(p["orig"], False), flip=conv(p["flip"], True) if p["flip"] else None, occ=occ_of(n, p["orig"]))
            for n, p in pred.items()}
     _jsave(os.path.join(out, "mp50.json"), _keep_old(args, os.path.join(out, "mp50.json"), res))
     print(f"map50: {len(res)} mặt")
@@ -418,10 +430,18 @@ def autoqc(args, out):
     return True
 
 
-def _draw_dot(cv2, img, x, y, rgb, low_conf):
-    """Chấm màu nhóm (mau_nhom: cùng kiểu với trang rà soát). Ổn: chấm bán kính R_OK, viền tối mảnh. low_conf: chấm to hơn, vòng trắng dày và viền tối."""
+def _draw_dot(cv2, img, x, y, rgb, low_conf, occluded=False):
+    """Chấm màu nhóm (mau_nhom: cùng kiểu với trang rà soát). Ổn: chấm bán kính R_OK, viền tối mảnh. low_conf: chấm to hơn, vòng trắng dày và viền tối.
+    occluded (điểm bị che, xem che_khuat.py): VÒNG RỖNG màu nhóm (không tô đặc) viền tối hai phía; nếu còn low_conf thì thêm một vòng trắng mảnh bên ngoài."""
     c = (int(round(x)), int(round(y)))
     bgr = (rgb[2], rgb[1], rgb[0])
+    if occluded:
+        r = mau_nhom.R_OCC
+        if low_conf:
+            cv2.circle(img, c, r + 4, mau_nhom.WHITE[::-1], 1, cv2.LINE_AA)
+        cv2.circle(img, c, r + 1, mau_nhom.DARK[::-1], 3, cv2.LINE_AA)
+        cv2.circle(img, c, r, bgr, 1, cv2.LINE_AA)
+        return bgr
     if low_conf:
         r = mau_nhom.R_LOW
         cv2.circle(img, c, r + mau_nhom.RING_LOW + 1, mau_nhom.DARK[::-1], -1, cv2.LINE_AA)
@@ -434,7 +454,7 @@ def _draw_dot(cv2, img, x, y, rgb, low_conf):
 
 
 def overlays(args, out):
-    """Ảnh chồng: chấm màu NHÓM của điểm (đúng màu label trên CVAT, QĐ-004) kèm số thứ tự; điểm low_conf vẽ to hơn, có vòng trắng (xem mau_nhom.py)."""
+    """Ảnh chồng: chấm màu NHÓM của điểm (đúng màu label trên CVAT, QĐ-004) kèm số thứ tự; điểm low_conf vẽ to hơn, có vòng trắng; điểm occluded vẽ vòng rỗng (xem mau_nhom.py)."""
     import cv2
     cfg = _jload(args.config)
     names = [p["name"] for p in cfg["points"]]
@@ -443,10 +463,11 @@ def overlays(args, out):
     fl = _alive(_jload(os.path.join(rd, "flags", "flags.json")), args)
     for name, p in mp50.items():
         img = cv2.imread(os.path.join(rd, "crop", "images", name + ".png"))
+        occ = set(p.get("occ") or ())                          # điểm bị che do mặt nghiêng hoặc vật thể che mắt (m28core.che_khuat): vẽ vòng rỗng
         for i, n in enumerate(names):
             x, y = p["orig"][n]
             low = bool(fl[name][i])
-            col = _draw_dot(cv2, img, x, y, mau_nhom.dot_rgb(mau_nhom.group_of(n), low), low)
+            col = _draw_dot(cv2, img, x, y, mau_nhom.dot_rgb(mau_nhom.group_of(n), low), low, n in occ)
             pos = (int(x) + (8 if low else 4), int(y) - 3)
             cv2.putText(img, str(i + 1), pos, cv2.FONT_HERSHEY_SIMPLEX, 0.35, mau_nhom.DARK[::-1], 2, cv2.LINE_AA)    # viền tối cho số đọc được trên mọi nền
             cv2.putText(img, str(i + 1), pos, cv2.FONT_HERSHEY_SIMPLEX, 0.35, col, 1, cv2.LINE_AA)
