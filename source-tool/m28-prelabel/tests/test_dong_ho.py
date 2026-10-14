@@ -577,11 +577,12 @@ def test_reboot_with_wall_clock_going_backwards_never_writes_negative(dh):
 
 
 # ---------- ô nhập ----------
-def test_people_outside_p1_p5_and_bad_inputs_are_refused(dh):
+def test_bad_person_names_and_bad_inputs_are_refused(dh):
     d, g, root = dh
-    for nguoi in ('P6', 'p5', 'RA', '', 'P5 ', '../P5'):
-        with pytest.raises(DongHoLoi, match='P1 đến P5'):
+    for nguoi in ('', 'P5 ', '../P5', 'a b', 'x' * 33, None):
+        with pytest.raises(DongHoLoi, match='chữ, số'):
             d.bat_dau(nguoi, 'manual', dot='X1')
+    assert d.bat_dau('Lam_Tran-2', 'manual', dot='X9')['co_phien'] and d.cac_nguoi() == ['Lam_Tran-2']     # tên bất kỳ (chữ, số, _, -) chạy được; không còn P1–P5
     for kw, why in ((dict(dieu_kien='lạ'), 'manual'), (dict(dot='a/b'), 'Tên đợt'), (dict(task='a b'), 'task'), (dict(job='12a'), 'Job'), (dict(khoi='a b'), 'Khối'),
                     (dict(n_mat=0), 'Số mặt'), (dict(n_mat=999999), 'Số mặt'), (dict(n_mat='x'), 'số nguyên'), (dict(seq_dau=0), 'từ 1'), (dict(seq_dau='x'), 'số nguyên')):
         a = dict(dieu_kien='manual', dot='X1', n_mat=3)

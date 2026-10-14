@@ -36,7 +36,7 @@ CSS = """
   background: var(--block-background-fill); }
 .cd-sec-title { font-size: 17px; font-weight: 800; }
 #cd-cvat-status, #cd-cvat-msg, #cd-reviewer-info, #cd-reviewer-msg, #cd-paths-info, #cd-images-msg, #cd-model-msg, #cd-tflip-info, #cd-tflip-msg,
-#cd-pipeline, #cd-remember-note, #cd-top, #cd-forget-body, #cd-tflip-body { padding: 0 !important; }
+#cd-pipeline, #cd-remember-note, #cd-forget-body, #cd-tflip-body { padding: 0 !important; }
 #cd-cvat-msg:not(:has(.html-container > div > *)), #cd-reviewer-msg:not(:has(.html-container > div > *)), #cd-images-msg:not(:has(.html-container > div > *)),
 #cd-model-msg:not(:has(.html-container > div > *)), #cd-tflip-msg:not(:has(.html-container > div > *)) { display: none; }
 .cd-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 999px; font-size: 14px; font-weight: 800;
@@ -266,17 +266,15 @@ def smoke_result_html(rep, json_path=""):
 
 
 # ---------- tab ----------
-def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_model=None):
+def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_model=None, after_reviewer=None):
     """Dựng NỘI DUNG tab Cài đặt (gọi trong `with gr.Tab(...)`). after_cvat(ev): gắn thêm .then(...) làm mới khung Đẩy lên CVAT và tab Các đợt
-    sau Save/Forget token. after_model(ev): gắn thêm .then(...) kiểm lại model/cấu hình ở tab Nạp ảnh sau khi Save đường dẫn model. Trả (hàm làm mới,
+    sau Save/Forget token. after_model(ev): gắn thêm .then(...) kiểm lại model/cấu hình ở tab Nạp ảnh sau khi Save đường dẫn model. after_reviewer(ev): gắn thêm .then(...) chạy bù đồng hồ (lần Nạp ảnh bị bỏ qua vì chưa có tên hợp lệ) sau Save name. Trả (hàm làm mới,
     inputs, outputs, opts) để tab.select gọi."""
     S = cai_dat.get()
     pending = dot_anh.Pending()
     run_label = run_name(store.run_dir) if (store is not None and run_name) else ""
     config_path = os.path.join(ctx.project_root or S.project_root, "config", "m28_config.json")
 
-    gr.HTML('<div class="cd-note">Trang này chỉ chạy ở máy bạn (127.0.0.1). Token chỉ dán vào ô Token bên dưới: không dán vào chat, file hay lệnh. '
-            "Token không bao giờ hiện lại (chỉ còn 4 ký tự cuối), không vào log, runs\\, outputs\\ hay git.</div>", elem_id="cd-top", apply_default_css=False)
     # --- CVAT ---
     with gr.Column(elem_classes=["cd-sec"]):
         gr.HTML('<div class="cd-sec-title">CVAT</div>', apply_default_css=False)
@@ -687,7 +685,9 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
     if after_cvat is not None:
         after_cvat(ev_save)
         after_cvat(ev_forget)
-    b_rev.click(on_reviewer, [rev_tb, rev_state], outs, **wr)
+    ev_rev = b_rev.click(on_reviewer, [rev_tb, rev_state], outs, **wr)
+    if after_reviewer is not None:
+        after_reviewer(ev_rev)
     b_img_check.click(path_check("images_dir", img_msg), [img_tb], outs, **wr)
     b_img_save.click(path_save("images_dir", img_msg), [img_tb, rev_state], outs, **wr)
     b_mod_check.click(path_check("model_path", mod_msg), [mod_tb], outs, **wr)

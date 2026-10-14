@@ -268,7 +268,6 @@ def step3(pw, pg, W, shots):
     pg.tab('Ca khó')
     page.wait_for_function("document.querySelectorAll('#ck-list .ck-mcard').length === 4", timeout=20000)
     check(True, 'tab Ca khó thấy 4 ca (3 ở CKA, 1 ở CKN)')
-    check('Gói họp chứa ảnh mặt người thật' in page.inner_text('#ck-warn'), 'có hộp cảnh báo riêng tư')
     box = page.inner_text('#ck-ngoai')
     check('CKN' in box and 'khách hàng' in box and page.locator('#ck-ngoai .nap-err').count() == 1, f'hộp đỏ nêu lượt CKN: {box[:90]!r}')
     check(not page.locator('#ck-kem-ngoai input').is_checked() and page.locator('#ck-kem-anh input').is_checked(), 'mặc định: kèm ảnh của bộ dữ liệu (YawDD/DrivFace) bật, ảnh không rõ nguồn tắt')
@@ -410,7 +409,6 @@ def step5(pw, W, shots, repo_hash):
     try:
         pg.open('#tabs')
         pg.tab('Họp team')
-        check('Gói họp chứa ảnh mặt người thật' in page.inner_text('#hop-warn'), 'tab Họp team có cảnh báo riêng tư trước ô nhập')
         page.click('#hop-new')
         page.wait_for_function("document.querySelector('#hop-msg').innerText.includes('Đã tạo phiên')", timeout=15000)
         sess_name = re.search(r'hop_\d{4}(?:_\d+)?', page.inner_text('#hop-msg')).group(0)

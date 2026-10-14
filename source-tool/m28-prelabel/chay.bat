@@ -41,7 +41,7 @@ goto :menu
 
 :hoi_nguoi
 set "NGUOI="
-set /p NGUOI=Ten nguoi ra (P1-P5, Enter = P1): 
+set /p NGUOI=Ten nguoi ra (Enter = P1): 
 if "%NGUOI%"=="" set "NGUOI=P1"
 exit /b 0
 

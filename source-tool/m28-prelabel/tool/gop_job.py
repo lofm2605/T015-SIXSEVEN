@@ -5,7 +5,7 @@ Một bấm làm trọn việc cuối của đợt: gộp MỌI job của task C
 collect ghi ra CHÍNH LÀ file gộp.
 
 Luồng:
-  1. Bấm nút -> finish_model (đã đẩy xong? link/token? đúng server đã đẩy? người P1–P5? không việc nào đang chạy?) -> hộp xác nhận (confirm_html).
+  1. Bấm nút -> finish_model (đã đẩy xong? link/token? đúng server đã đẩy? tên người rà hợp lệ? không việc nào đang chạy?) -> hộp xác nhận (confirm_html).
   2. OK -> begin: đồng hồ của đợt đang chạy thì TẠM DỪNG ngay (thời gian xuất và quyết định không tính), ghi ctx.gop, chạy nap_anh.CollectJob
      (`m28.py collect --task T --reviewer Pk --overwrite --no-per-job --require-completed`; tiến trình con là nơi DUY NHẤT gọi CVAT, token đi qua môi trường
      của nó, không qua đối số).
@@ -77,7 +77,7 @@ def finish_model(run_dir, project_root, person, dh, *, environ=None, job_running
     m = dict(enabled=False, reason="", run=run, task=task, task_id=(ps or {}).get("task_id"), person=person, url=cvat_io.norm_url((ps or {}).get("cvat_url")),
              env=env, push=ps, gop=dot_anh.read_gop(run_dir), co_phien=False, trang_thai="", giay_phien=0.0, rev=0, cho=False, hong=False,
              canh_bao_chua_xu_ly=[], goi_da_luu=None, tam_thoi=False)
-    if person in dong_ho.NGUOI_OK and dh is not None:
+    if dong_ho.nguoi_hop_le(person) and dh is not None:
         v = dh.xem(person, run)
         m["hong"] = bool(v.get("hong"))
         if v.get("co_phien"):
@@ -99,8 +99,8 @@ def finish_model(run_dir, project_root, person, dh, *, environ=None, job_running
     elif env["url"] != m["url"]:
         m["reason"] = (f"Task này nằm ở {m['url'] or '(push.json không ghi địa chỉ CVAT)'} nhưng CVAT_URL đang là {env['url']}: "
                        "chỉ gộp được trên đúng server đã đẩy.")
-    elif person not in dong_ho.NGUOI_OK:
-        m["reason"] = (f"Người rà của trang là {person or '(chưa đặt)'}: đồng hồ và gói kết quả chỉ nhận P1 đến P5 (đặt tên người rà ở tab Cài đặt).")
+    elif not dong_ho.nguoi_hop_le(person):
+        m["reason"] = (f"Người rà của trang là {person or '(chưa đặt)'}: tên phải gồm chữ, số, _ và -, tối đa 32 ký tự (đặt tên người rà ở tab Cài đặt).")
     elif job_running or busy:
         m["reason"] = "Đang có việc chạy" + (f" cho đợt này ({busy[0]})" if busy else " (chuẩn bị, đẩy, xoá task hoặc gộp job)") + ": chờ xong rồi gộp job."
         m["tam_thoi"] = True                                            # lý do tạm thời: chờ là hết (Merge anyway giữ yêu cầu đang chờ, không bỏ)

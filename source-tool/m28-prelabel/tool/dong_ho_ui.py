@@ -1,8 +1,8 @@
 """Đồng hồ bấm giờ gán nhãn ở ĐẦU trang rà soát (logic ở dong_ho.py; không import gradio ở đầu module). Không còn tab riêng.
 
 MỖI ĐỢT MỘT ĐỒNG HỒ (QĐ-007): giờ của đợt này không lẫn vào đợt khác. Một chip thấy ở mọi tab: ⏱ mm:ss · trạng thái · người · đợt, kèm MỘT nút Pause/Resume (Start với đợt đang chờ).
-Chip theo ĐỢT CỦA TRANG (đang chạy thì theo phiên đang chạy); đợt khác của người rà có đồng hồ thì ghi mờ cạnh chip. Đồng hồ tự chạy khi bấm Nạp ảnh (auto_start): người là người rà
-của trang (P1–P5), nhóm lấy từ config/nhom_thi_nghiem.json, không có thì assisted. Upload & Open: đồng hồ chuyển sang đợt mới; Upload & Continue lúc đang có đồng hồ ở đợt khác: đợt mới
+Chip theo ĐỢT CỦA TRANG (đang chạy thì theo phiên đang chạy); đợt khác của người rà có đồng hồ thì ghi mờ cạnh chip. Đồng hồ tự chạy khi bấm Nạp ảnh (auto_start) hoặc Review batch sang đợt chưa có đồng hồ (theo_trang): người là người rà
+của trang (tên chữ/số/_/-), nhóm lấy từ config/nhom_thi_nghiem.json, không có thì assisted. Upload & Open: đồng hồ chuyển sang đợt mới; Upload & Continue lúc đang có đồng hồ ở đợt khác: đợt mới
 chờ ở 00:00. Chuyển trang sang đợt khác (Review batch...) thì đồng hồ đang chạy đi theo trang (theo_trang). mm:ss chạy mượt bằng JS ở trình duyệt (không gọi server mỗi giây); nguồn sự
 thật là đồng hồ phía server, `gr.Timer(15)` chỉ đồng bộ lại. Save timing (timing_<Pk>.csv và gói kết quả của MỘT đợt) hoặc Discard session nằm trong hộp "Đóng trang rà soát?" khi
 đang có phiên; có nhiều đợt thì chọn đợt ở ô "Đợt cần lưu / bỏ". Không ảnh mặt, không mạng, không token, không phát file nào (không thêm allowed_paths).
@@ -102,7 +102,7 @@ def mini_html(v, ver=None, ly_do="", dot_trang=None):
     if not v.get("co_phien"):
         if v.get("hong"):
             ly_do = ly_do or "File trạng thái đồng hồ bị hỏng (đổi tên outputs/timing/dang_chay_<người>.json rồi nạp lại trang)"
-        text = ly_do or (f"Đồng hồ chưa chạy cho đợt {dot_trang} · tự chạy khi bấm Nạp ảnh" if dot_trang else "Đồng hồ chưa chạy · tự chạy khi bấm Nạp ảnh")
+        text = ly_do or (f"Đồng hồ chưa chạy cho đợt {dot_trang} · tự chạy khi bấm Nạp ảnh hoặc Review batch" if dot_trang else "Đồng hồ chưa chạy · tự chạy khi bấm Nạp ảnh hoặc Review batch")
         return f'<div id="dh-mini" class="dh-mini s-chua" role="status"><span aria-hidden="true">⏱</span><span>{e(text)}</span>{khac}</div>'
     st = v["trang_thai"]
     nhan = "⏸ Chờ bắt đầu" if v.get("cho") else TRANG_THAI_VI[st]
@@ -150,7 +150,7 @@ def get_dh(ctx):
 
 def default_person(ctx):
     for cand in (ctx.reviewer, cai_dat.get().next_reviewer(ctx.reviewer)):
-        if cand in dong_ho.NGUOI_OK:
+        if dong_ho.nguoi_hop_le(cand):
             return cand
     return None
 
@@ -164,11 +164,11 @@ def dot_cua_trang(ctx):
 
 def phien_cua(ctx):
     """(người, xem) của phiên mà chip theo dõi. Người rà của trang trước: phiên ĐANG CHẠY của người đó; không có thì phiên của ĐỢT TRANG ĐANG MỞ (không mượn phiên của đợt khác, để
-    khỏi tính giờ nhầm đợt; xem['cac_dot'] cho biết đợt khác nào có đồng hồ). Người rà của trang chưa có phiên nào thì xem P1–P5 nào đang có phiên; không ai thì (người rà mặc định, xem rỗng)."""
+    khỏi tính giờ nhầm đợt; xem['cac_dot'] cho biết đợt khác nào có đồng hồ). Người rà của trang chưa có phiên nào thì xem người nào khác đang có phiên; không ai thì (người rà mặc định, xem rỗng)."""
     d = get_dh(ctx)
     mac = default_person(ctx)
     dot_t = dot_cua_trang(ctx)
-    for p in ([mac] if mac else []) + [x for x in dong_ho.NGUOI_OK if x != mac]:
+    for p in ([mac] if mac else []) + [x for x in d.cac_nguoi() if x != mac]:
         try:
             v = d.xem_theo_trang(p, dot_t)
         except Exception:
@@ -197,7 +197,7 @@ def gio_cac_dot(ctx):
         d = get_dh(ctx)
     except Exception:
         return out
-    for p in dong_ho.NGUOI_OK:
+    for p in d.cac_nguoi():
         try:
             for s in d.liet_ke(p):
                 out.setdefault(s["dot"], []).append(dict(nguoi=p, giay=s["giay_phien"], tt="chay" if s["chay"] else ("cho" if s["cho"] else "tam_dung")))
@@ -256,6 +256,9 @@ def so_mat_cua_luot(run_dir):
         return None
 
 
+_CHO_TEN = {}      # {thư mục dự án: (đợt, n_mat, mo_ngay)}: lần bấm Nạp ảnh gần nhất bị bỏ qua vì chưa có tên người rà hợp lệ. Để ở module (không ở ctx) vì Upload & Open dựng lại ctx.
+
+
 def auto_start(gr, ctx, run, n_mat=None, mo_ngay=True):
     """Gọi từ tab Nạp ảnh ngay khi bấm Nạp: tạo đồng hồ của ĐỢT `run` (mỗi đợt một phiên riêng) cho người rà của trang. Nhóm lấy từ config/nhom_thi_nghiem.json, không có thì assisted.
       · Upload & Open (mo_ngay=True), hoặc người này chưa có đồng hồ nào: đồng hồ của đợt mới chạy ngay; đồng hồ đang chạy ở đợt khác tự tạm dừng (giữ nguyên giây của nó).
@@ -273,7 +276,8 @@ def auto_start(gr, ctx, run, n_mat=None, mo_ngay=True):
         d = get_dh(ctx)
         nguoi = default_person(ctx)
         if nguoi is None:
-            return noi("Chưa chạy đồng hồ: tên người rà phải là P1 đến P5 (đặt ở tab Cài đặt).", warn=True)
+            _CHO_TEN[os.path.abspath(ctx.project_root)] = (run, n_mat, mo_ngay)          # đặt tên xong (Save name ở tab Cài đặt) thì chạy bù bằng bu_khi_co_ten
+            return noi(f"Chưa chạy đồng hồ: tên người rà không hợp lệ (chỉ chữ, số, _ và -, tối đa 32 ký tự). Đặt ở tab Cài đặt (Save name): đồng hồ của đợt {run} sẽ tự chạy ngay sau đó.", warn=True)
         ses = d.liet_ke(nguoi)
         co = {s["dot"]: s for s in ses}
         if run in co:
@@ -294,10 +298,27 @@ def auto_start(gr, ctx, run, n_mat=None, mo_ngay=True):
         return noi(f"Chưa chạy được đồng hồ: {vi_hop(str(ex))}", warn=True)
 
 
+def bu_khi_co_ten(gr, ctx):
+    """Gọi sau khi lưu tên người rà ở tab Cài đặt: nếu lần bấm Nạp ảnh trước bị bỏ qua đồng hồ vì chưa có tên người rà hợp lệ, và giờ đã có tên hợp lệ, thì chạy auto_start bù cho đợt đó
+    (một lần). Đợt đã bị xoá thì bỏ qua. Chưa có tên hợp lệ thì giữ nguyên để lần Save name sau thử lại. Trả thông báo hoặc None."""
+    if ctx.closing:
+        return None
+    key = os.path.abspath(ctx.project_root)
+    cho = _CHO_TEN.get(key)
+    if cho is None or default_person(ctx) is None:
+        return None
+    del _CHO_TEN[key]
+    run, n_mat, mo_ngay = cho
+    if not os.path.isdir(os.path.join(ctx.runs_root, run)):
+        return None
+    return auto_start(gr, ctx, run, n_mat, mo_ngay)
+
+
 def theo_trang(ctx):
     """Gọi khi trang vừa chuyển sang một đợt khác trong cùng tiến trình (Review batch, hoặc Upload & Open xong): đồng hồ đang chạy phải đi theo trang, không được chạy tiếp ở đợt cũ.
     Người rà của trang có đồng hồ ĐANG CHẠY ở đợt khác thì tạm dừng đồng hồ đó (giữ giây); đợt của trang đã có phiên (nạp bằng Upload & Continue chẳng hạn) thì phiên đó chạy tiếp.
-    Đợt của trang chưa có phiên thì KHÔNG tự tạo (đồng hồ chỉ tự chạy khi bấm Nạp ảnh). Không có đồng hồ nào đang chạy thì không làm gì. Trả câu nói việc đã làm ('' nếu không làm gì)."""
+    Đợt của trang CHƯA có phiên (mở bằng Review batch) thì tạo phiên mới và chạy ngay, trừ khi người này đã lưu gói kết quả cho đợt đó (đã Merge jobs & Finish: không mở đồng hồ thứ hai
+    cho đợt đã xong). Không có gì đang chạy và đợt đã có phiên thì không làm gì (không tự Resume). Trả câu nói việc đã làm ('' nếu không làm gì)."""
     if ctx.closing:
         return ""
     try:
@@ -307,14 +328,25 @@ def theo_trang(ctx):
             return ""
         ses = {s["dot"]: s for s in d.liet_ke(nguoi)}
         cu = next((s for s in ses.values() if s["chay"] and s["dot"] != dot), None)
+        if dot not in ses and not any(str(nd.get("dot") or "") == dot for _t, nd in d.goi_da_luu(nguoi)):
+            cond = nhom_mod.nhom_cua(nhom_mod.doc(ctx.project_root), nguoi) or DIEU_KIEN_MAC_DINH
+            try:
+                n_mat = len(dot_anh.image_names(ctx.run_dir)) or dong_ho.N_MAT_MAC_DINH
+            except Exception:
+                n_mat = dong_ho.N_MAT_MAC_DINH
+            d.bat_dau(nguoi, cond, dot=dot, bo_anh=dot, n_mat=min(n_mat, dong_ho.N_MAT_MAX), rev=0)        # phiên chạy ở đợt khác tự tạm dừng
+            dung = f" Đồng hồ đợt {cu['dot']} tạm dừng ở {fmt_giay(cu['giay_phien'])}." if cu else ""
+            return f"Đồng hồ của {nguoi} bắt đầu chạy ở đợt {dot} ({cond})." + dung
         if cu is None:
             return ""
         if dot in ses and not ses[dot].get("du_mat"):
             d.tiep_tuc(nguoi, None, dot=dot)                                  # phiên đang chạy ở đợt khác tự tạm dừng
             return f"Đồng hồ của {nguoi} chuyển từ đợt {cu['dot']} (tạm dừng ở {fmt_giay(cu['giay_phien'])}) sang đợt {dot}."
         d.tam_dung(nguoi, None, dot=cu["dot"])
-        return (f"Đồng hồ của {nguoi} ở đợt {cu['dot']} tạm dừng ở {fmt_giay(cu['giay_phien'])}: đợt {dot} chưa có đồng hồ "
-                "(đồng hồ chỉ tự chạy khi bấm Nạp ảnh).")
+        return (f"Đồng hồ của {nguoi} ở đợt {cu['dot']} tạm dừng ở {fmt_giay(cu['giay_phien'])}: đợt {dot} đã lưu gói kết quả, "
+                "không mở đồng hồ mới.")
+    except DongHoLoi as ex:
+        return f"Chưa chạy được đồng hồ của đợt {dot_cua_trang(ctx)}: {vi_hop(str(ex))}"
     except Exception:
         return ""
 
@@ -338,7 +370,7 @@ def chip(gr, demo, ctx):
         p, v = phien_cua(ctx)
         st = v.get("trang_thai")
         co = bool(v.get("co_phien"))
-        return dict(mini=mini_html(v, ly_do="" if p else "Đồng hồ chưa chạy · tên người rà phải là P1 đến P5 (đặt ở tab Cài đặt)", dot_trang=dot_t),
+        return dict(mini=mini_html(v, ly_do="" if p else "Đồng hồ chưa chạy · tên người rà không hợp lệ (đặt ở tab Cài đặt)", dot_trang=dot_t),
                     btn=gr.update(interactive=co and st in ("chay", "tam_dung"), value=NUT_BAT_DAU if v.get("cho") else (NUT_TIEP if st == "tam_dung" else NUT_DUNG),
                                   variant="primary" if st == "tam_dung" else "secondary"),
                     rev=(v.get("dot") if co else None, v.get("rev", 0)))

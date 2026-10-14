@@ -1,5 +1,5 @@
 """Nhập tay của nhóm trưởng (tab Thống kê, mục "Nhập tay"; QĐ-006): người nhóm MANUAL gán tay thẳng trong CVAT, KHÔNG dùng tool, nên không có đồng hồ ở đầu trang và
-không có gói kết quả. Nhóm trưởng nhập cho từng người: người (P1 đến P5), nhóm, đợt/bộ ảnh, thời gian làm (gõ tay), ngày làm và file nhãn xuất từ CVAT ("CVAT for images 1.1",
+không có gói kết quả. Nhóm trưởng nhập cho từng người: người (tên bất kỳ), nhóm, đợt/bộ ảnh, thời gian làm (gõ tay), ngày làm và file nhãn xuất từ CVAT ("CVAT for images 1.1",
 .xml hoặc .zip không kèm ảnh; nhiều file được, ví dụ mỗi job một file, gộp theo tên ảnh). Module dựng một gói kết quả BÌNH THƯỜNG (goi_kq, định dạng m28-ketqua bản 1, thêm
 trường nguon_nhap="nhap_tay") và ghi vào outputs\\goi_nhom, nên thong_ke.tinh (tab Thống kê) và tool\\tong_ket.py tính nó y như gói do đồng hồ ghi: giây/mặt = thời gian gõ ÷ số
 ảnh có nhãn (ước lượng chia đều), nhãn của nhóm manual là đáp án để đo NME của nháp.
@@ -28,7 +28,6 @@ THU_MUC = os.path.join("outputs", "goi_nhom")
 THU_MUC_BO = "_da_bo"                                       # thư mục con của outputs\goi_nhom: bản đã gỡ (thống kê không đọc)
 THU_MUC_DOC = (goi_kq.THU_MUC, THU_MUC)                     # = thong_ke.THU_MUC_GOI: các thư mục gói mà thống kê đọc mặc định
 NGUON = "nhap_tay"
-NGUOI = ("P1", "P2", "P3", "P4", "P5")
 DOT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")    # giống dong_ho.DOT_RE (và tên lượt của goi_kq.nhap_cua_dot)
 TASK_RE = re.compile(r"[A-Za-z0-9_.-]{0,64}")
 GIAY_TOI_DA = 24 * 3600
@@ -275,8 +274,8 @@ def tao_noi_dung(project_root, cfg, nguoi, nhom, dot, giay, label_paths, bo_anh=
     now = now or datetime.datetime.now().astimezone()
     if now.tzinfo is None:
         now = now.astimezone()
-    if nguoi not in NGUOI:
-        raise NhapTayLoi("Chưa chọn người (P1 đến P5).")
+    if not isinstance(nguoi, str) or not goi_kq.NGUOI_RE.fullmatch(nguoi):
+        raise NhapTayLoi("Chưa chọn người hoặc tên không hợp lệ (chỉ chữ, số, _ và -, tối đa 32 ký tự).")
     if nhom not in goi_kq.CONDITIONS:
         raise NhapTayLoi("Nhóm phải là manual hoặc assisted.")
     dot = str(dot or "").strip()

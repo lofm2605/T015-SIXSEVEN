@@ -42,7 +42,7 @@ from m28core import dang_chay, goi_kq, nhom as nhom_mod  # noqa: E402
 
 PHIEN_BAN = 1                          # định dạng MỘT phiên (khoá phien_ban bên trong mỗi phiên)
 PHIEN_BAN_TEP = 2                      # định dạng tệp dang_chay_<người>.json: {"phien_ban_tep": 2, "cac_dot": {đợt: phiên}}; bản 1 = một phiên ở đầu tệp
-NGUOI_OK = ("P1", "P2", "P3", "P4", "P5")
+NGUOI_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")      # tên người rà bất kỳ (giống nap_anh.REVIEWER_RE): chữ, số, _ và -, tối đa 32 ký tự
 DIEU_KIEN = ("manual", "assisted")
 THU_MUC = os.path.join("outputs", "timing")
 FACETIMER_COLS = ["date", "person", "condition", "task", "job", "block", "seq", "face_id", "seconds", "warmup", "interrupted", "note"]
@@ -140,6 +140,10 @@ def _clean(s, maxlen, what):
         raise DongHoLoi(str(e))
 
 
+def nguoi_hop_le(nguoi):
+    return isinstance(nguoi, str) and NGUOI_RE.fullmatch(nguoi) is not None
+
+
 class DongHo:
     """Đồng hồ của một thư mục dự án (project_root). Mọi phương thức thao tác nhận `rev` (số lần thao tác mà tab đã thấy); None = không kiểm (chỉ test)."""
 
@@ -173,9 +177,19 @@ class DongHo:
 
     @staticmethod
     def _nguoi(nguoi):
-        if nguoi not in NGUOI_OK:
-            raise DongHoLoi("Chọn người P1 đến P5 (đồng hồ chỉ ghi cho P1–P5, đúng tên file timing_P<số>.csv của P5).")
+        if not nguoi_hop_le(nguoi):
+            raise DongHoLoi("Tên người rà không hợp lệ: chỉ gồm chữ, số, _ và -, tối đa 32 ký tự (đặt ở tab Cài đặt). Tên này thành tên file timing_<tên>.csv.")
         return nguoi
+
+    def cac_nguoi(self):
+        """Mọi tên người rà có file trong outputs/timing (dang_chay_<tên>.json hoặc timing_<tên>.csv), sắp theo tên. Bỏ file có tên không hợp lệ (kể cả dang_chay_<tên>.hong-….json)."""
+        out = set()
+        for mau, dau, duoi in (("dang_chay_*.json", "dang_chay_", ".json"), ("timing_*.csv", "timing_", ".csv")):
+            for f in glob.glob(os.path.join(glob.escape(self.dir), mau)):
+                ten = os.path.basename(f)[len(dau):-len(duoi)]
+                if nguoi_hop_le(ten):
+                    out.add(ten)
+        return sorted(out)
 
     def _thread_lock(self, nguoi):
         with self._glock:
@@ -1065,7 +1079,7 @@ class DongHo:
     def tu_tam_dung_tat_ca(self, ly_do="tat_trang"):
         """Tự tạm dừng mọi phiên ĐANG CHẠY trong outputs/timing (đóng trang rà soát, Ctrl+C). Trả [(người, giờ, đợt)] để in ra terminal. Bỏ qua phiên hỏng."""
         out = []
-        for nguoi in NGUOI_OK:
+        for nguoi in self.cac_nguoi():
             if not os.path.exists(self.p_state(nguoi)):
                 continue
             try:
@@ -1084,7 +1098,7 @@ class DongHo:
     def dang_chay_ai(self):
         """Người có phiên ĐANG CHẠY (trang_thai chay) trong outputs/timing; chỉ đọc, bỏ qua file hỏng."""
         out = []
-        for nguoi in NGUOI_OK:
+        for nguoi in self.cac_nguoi():
             try:
                 tep = self._doc_tep(nguoi)
             except DongHoLoi:
@@ -1122,6 +1136,8 @@ class DongHo:
             try:
                 nd, _w = goi_kq.doc_goi(p)
             except goi_kq.GoiLoi:
+                continue
+            if nd.get("nguoi") != nguoi:                                      # tên có "_" làm ketqua_<tên>_* khớp cả gói của người khác (P1 và P1_b)
                 continue
             out.append((os.path.basename(p)[:-5], nd))
         out.sort(key=lambda x: str(x[1].get("tao_luc")), reverse=True)

@@ -94,7 +94,7 @@ def test_zip_with_path_traversal_or_missing_json_or_too_big_is_refused(tmp_path,
 
 
 @pytest.mark.parametrize('field, value, match', [
-    ('nguoi', 'P9', 'P1 đến P5'), ('nhom', 'tay', 'manual hoặc assisted'), ('phien', 'a b', 'mã phiên'), ('so_mat', -1, 'so_mat'), ('giay_phien', -3, 'giay_phien'),
+    ('nguoi', 'a b', 'tên người'), ('nhom', 'tay', 'manual hoặc assisted'), ('phien', 'a b', 'mã phiên'), ('so_mat', -1, 'so_mat'), ('giay_phien', -3, 'giay_phien'),
     ('uoc_luong_chia_deu', 'co', 'uoc_luong_chia_deu'), ('mat_do', [dict(giay=0)], 'mat_do'), ('ket_qua', [dict(anh='a/b', nhan_cuoi={})], 'đường dẫn'),
     ('ket_qua', [dict(anh='a', nhan_cuoi={'diem_la': [1, 2]})], 'sai định dạng'), ('ket_qua', [dict(anh='a', nhan_cuoi={'songmui_1': [1, 'x']})], 'sai định dạng'),
     ('ket_qua', [dict(anh='a', nhan_cuoi={}), dict(anh='a', nhan_cuoi={})], 'lặp lại'),
@@ -252,7 +252,7 @@ def test_nhom_config_sample_is_empty_and_errors_do_not_crash(tmp_path):
     assert nhom.doc(root) == dict(nhom={}, bo_anh='', co_file=False, loi=[], duong_dan=nhom.FILE_REL)
     os.makedirs(os.path.join(root, 'config'))
     p = os.path.join(root, 'config', 'nhom_thi_nghiem.json')
-    open(p, 'w', encoding='utf-8').write(json.dumps({'nhom': {'P1': 'manual', 'P2': 'assisted', 'P7': 'manual', 'P3': 'lạ', 'RA': 'manual'}, 'bo_anh': 'NAP_001'}))
+    open(p, 'w', encoding='utf-8').write(json.dumps({'nhom': {'P1': 'manual', 'P2': 'assisted', 'a b': 'manual', 'P3': 'lạ', '../x': 'manual'}, 'bo_anh': 'NAP_001'}))
     c = nhom.doc(root)
     assert c['nhom'] == {'P1': 'manual', 'P2': 'assisted'} and c['bo_anh'] == 'NAP_001' and len(c['loi']) == 3
     assert nhom.nhom_cua(c, 'P1') == 'manual' and nhom.nhom_cua(c, 'P5') is None and nhom.dem_nguoi(c) == dict(manual=1, assisted=1)

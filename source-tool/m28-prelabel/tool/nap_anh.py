@@ -615,7 +615,7 @@ class DeleteTaskJob(ChildJob):
                          f"xoa task --run {run} --confirm-name {task}")
 
 
-NGUOI_DO_RE = re.compile(r"P[1-5]")     # người của đồng hồ / gói kết quả (dong_ho.NGUOI_OK)
+NGUOI_DO_RE = REVIEWER_RE               # người của đồng hồ / gói kết quả (= dong_ho.NGUOI_RE)
 EXIT_CHUA_XONG = 3                      # = m28core.collect.EXIT_CHUA_XONG: --require-completed chặn vì còn job chưa completed
 DONG_XML, DONG_CHUA_XONG = "COLLECT_XML: ", "COLLECT_JOBS_PENDING: "
 
@@ -647,7 +647,7 @@ class CollectJob(ChildJob):
                 raise RunError(f"Đang gộp job của đợt {self.run}: chờ xong hoặc bấm Cancel ở khung gộp job của tab Các đợt.")
             run_dir = _check_cvat_start(self, run, runs_root, task)
             if not isinstance(person, str) or not NGUOI_DO_RE.fullmatch(person):
-                raise RunError(f"Người {person!r} không hợp lệ: đồng hồ và gói kết quả chỉ nhận P1 đến P5 (đặt người rà ở tab Cài đặt).")
+                raise RunError(f"Người {person!r} không hợp lệ: tên phải gồm chữ, số, _ và -, tối đa 32 ký tự (đặt người rà ở tab Cài đặt).")
             self.person, self.task, self.force = person, task, bool(force)
             self._launch(run, run_dir, collect_cmd(task, person, tool_dir, python, force), project_root,
                          f"collect --task {task} --reviewer {person} --overwrite --no-per-job" + ("" if force else " --require-completed"))

@@ -144,16 +144,46 @@ def test_auto_start_keeps_the_session_of_the_same_dot_running_or_paused(app):
     assert 'tạm dừng' in paused and 'Resume' in paused and ctx.dong_ho.xem('P5')['trang_thai'] == 'tam_dung'                  # không tự Resume
 
 
-def test_auto_start_with_a_reviewer_that_is_not_p1_to_p5_says_why_and_does_not_run(app):
+def test_auto_start_with_an_invalid_reviewer_name_says_why_and_does_not_run(app):
     root, ctx, g = app
-    ctx2 = ra.AppCtx(reviewer='Lam', run_dir=os.path.join('runs', '_nap'), nap_only=True)
+    ctx2 = ra.AppCtx(reviewer='Lam Tran', run_dir=os.path.join('runs', '_nap'), nap_only=True)
     ctx2.dong_ho = ctx.dong_ho
     txt = dong_ho_ui.auto_start(None, ctx2, 'NAP_001', 5)
-    assert 'P1 đến P5' in txt and 'Cài đặt' in txt
-    assert not any(ctx.dong_ho.xem(p).get('co_phien') for p in dong_ho.NGUOI_OK)
+    assert 'không hợp lệ' in txt and 'Cài đặt' in txt
+    assert ctx.dong_ho.cac_nguoi() == []
     demo, dh, _cb = small(ctx2)
     out = call(demo, 'refresh')
-    assert 'P1 đến P5' in out['dh-mini-wrap'] and out['dh-mini-btn']['interactive'] is False
+    assert 'không hợp lệ' in out['dh-mini-wrap'] and out['dh-mini-btn']['interactive'] is False
+
+
+def test_auto_start_without_a_name_runs_later_when_the_name_is_saved_in_settings(app):
+    """Lỗi: bấm Nạp ảnh lúc chưa có tên hợp lệ thì đồng hồ báo cần tên và không tạo phiên; đặt tên ở Cài đặt xong đồng hồ vẫn không chạy (nút Start khoá vì chưa có phiên)."""
+    import cai_dat
+    root, ctx, g = app
+    os.makedirs(os.path.join('runs', 'NAP_001'), exist_ok=True)
+    ctx2 = ra.AppCtx(reviewer='Lam Tran', run_dir=os.path.join('runs', '_nap'), nap_only=True)
+    ctx2.dong_ho = ctx.dong_ho
+    assert 'không hợp lệ' in dong_ho_ui.auto_start(None, ctx2, 'NAP_001', 5)
+    assert dong_ho_ui.bu_khi_co_ten(None, ctx2) is None                              # tên vẫn chưa hợp lệ: không chạy, vẫn nhớ lần Nạp ảnh đó
+    assert ctx.dong_ho.cac_nguoi() == []
+    assert cai_dat.get().set_reviewer('P3')['ok']                                    # Save name ở tab Cài đặt
+    txt = dong_ho_ui.bu_khi_co_ten(None, ctx2)
+    assert 'P3' in txt and 'NAP_001' in txt
+    v = ctx.dong_ho.xem('P3')
+    assert v['co_phien'] and v['dot'] == 'NAP_001' and v['trang_thai'] == 'chay'
+    assert dong_ho_ui.bu_khi_co_ten(None, ctx2) is None                              # chỉ chạy bù một lần
+    assert len([s for s in ctx.dong_ho.liet_ke('P3')]) == 1
+
+
+def test_late_start_is_skipped_when_the_run_was_deleted_meanwhile(app):
+    import cai_dat
+    root, ctx, g = app
+    ctx2 = ra.AppCtx(reviewer='Lam Tran', run_dir=os.path.join('runs', '_nap'), nap_only=True)
+    ctx2.dong_ho = ctx.dong_ho
+    dong_ho_ui.auto_start(None, ctx2, 'NAP_404', 5)                                  # thư mục runs/NAP_404 không tồn tại
+    assert cai_dat.get().set_reviewer('P2')['ok']
+    assert dong_ho_ui.bu_khi_co_ten(None, ctx2) is None
+    assert ctx.dong_ho.cac_nguoi() == []
 
 
 def test_auto_start_does_nothing_while_closing(app):
@@ -456,10 +486,19 @@ def test_page_switch_moves_the_running_clock_to_the_new_page(app):
     assert 'chuyển từ đợt NAP_001' in msg and 'sang đợt NAP_002' in msg and a['trang_thai'] == 'tam_dung' and a['giay_phien'] == pytest.approx(50.0)
     assert b['chay'] and not b['cho'] and b['giay_phien'] == 0
     g.tick(5)
-    c3 = page_ctx(root, ctx, 'NAP_003')                                                # chuyển sang đợt cũ chưa có đồng hồ: dừng đợt đang chạy, KHÔNG tự tạo phiên mới
+    c3 = page_ctx(root, ctx, 'NAP_003')                                                # Review batch sang đợt chưa có đồng hồ: tạo phiên mới, chạy ngay, đợt đang chạy tạm dừng
     msg = dong_ho_ui.theo_trang(c3)
-    assert 'NAP_002 tạm dừng ở 00:05' in msg and 'chưa có đồng hồ' in msg and not ctx.dong_ho.xem('P5', 'NAP_003')['co_phien'] and ctx.dong_ho.dang_chay_ai() == []
+    assert 'bắt đầu chạy ở đợt NAP_003' in msg and 'NAP_002 tạm dừng ở 00:05' in msg
+    v3 = ctx.dong_ho.xem('P5', 'NAP_003')
+    assert v3['co_phien'] and v3['chay'] and ctx.dong_ho.xem('P5', 'NAP_002')['trang_thai'] == 'tam_dung' and ctx.dong_ho.dang_chay_ai() == ['P5']
+    assert dong_ho_ui.theo_trang(c3) == ''                                             # đợt đã có phiên đang chạy: không làm gì, không tạo thêm
+    assert len(ctx.dong_ho.liet_ke('P5')) == 3
+    msg = dong_ho_ui.theo_trang(c2)                                                    # quay lại NAP_002 (phiên tạm dừng): phiên đó chạy tiếp, NAP_003 tạm dừng
+    assert 'chuyển từ đợt NAP_003' in msg and 'sang đợt NAP_002' in msg
+    ctx.dong_ho.tam_dung('P5', None, dot='NAP_002')
     assert dong_ho_ui.theo_trang(c3) == '' and dong_ho_ui.theo_trang(c2) == ''          # không có gì đang chạy: không làm gì (không tự Resume)
+    ctx.dong_ho.goi_da_luu = lambda nguoi: [('ketqua_P5_x', {'dot': 'NAP_004'})]        # đợt đã Merge jobs & Finish (có gói): mở lại không tạo đồng hồ thứ hai
+    assert dong_ho_ui.theo_trang(page_ctx(root, ctx, 'NAP_004')) == '' and not ctx.dong_ho.xem('P5', 'NAP_004')['co_phien']
     ctx.closing = True
     c2.closing = True
     assert dong_ho_ui.theo_trang(c2) == ''

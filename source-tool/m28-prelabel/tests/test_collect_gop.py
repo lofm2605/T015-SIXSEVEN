@@ -465,8 +465,8 @@ def test_collect_job_force_drops_require_completed_and_exit_3_is_loi(page):
 
 def test_collect_job_rejects_bad_person_task_run(page):
     job = na.CollectJob(popen=_fake_popen('pass'))
-    for person in ('P0', 'P6', 'p1', 'P1 ', 'RA', 'P11', '', None, 1):
-        with pytest.raises(na.RunError, match='P1 đến P5'):
+    for person in ('P1 ', 'a b', '../P1', 'x' * 33, '', None, 1):
+        with pytest.raises(na.RunError, match='chữ, số'):
             job.start('Khoi', 'runs', str(page), person, TASK)
     for task in ('m28-manual', 'demo-', 'demo-a/b', 'demo- x', '', None, 'demo-' + 'a' * 200):
         with pytest.raises(na.RunError):

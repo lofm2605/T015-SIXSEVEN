@@ -197,7 +197,7 @@ def test_ngay_lam_khac_hom_nay_va_bo_anh_tu_config(tmp_path):
     assert nd2['bo_anh'] == 'KHAC'
 
 
-@pytest.mark.parametrize('kw,match', [(dict(nguoi=None), 'Chưa chọn người'), (dict(nguoi='P9'), 'Chưa chọn người'), (dict(nhom='ca_hai'), 'manual hoặc assisted'),
+@pytest.mark.parametrize('kw,match', [(dict(nguoi=None), 'Chưa chọn người'), (dict(nguoi='a b'), 'Chưa chọn người'), (dict(nhom='ca_hai'), 'manual hoặc assisted'),
                                       (dict(dot=''), 'Chưa nhập đợt'), (dict(dot='../runs'), 'không hợp lệ'), (dict(dot='đợt 1'), 'không hợp lệ'),
                                       (dict(giay='abc'), 'Không đọc được thời gian'), (dict(giay=0), 'lớn hơn 0'), (dict(giay=float('nan')), 'lớn hơn 0'),
                                       (dict(ngay='20/10/2026'), 'tương lai'), (dict(task='a/b'), 'task'), (dict(ghi_chu='x' * 201), 'tối đa 200')])

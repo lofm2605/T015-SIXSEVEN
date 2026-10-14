@@ -38,12 +38,12 @@ class TocDoLoi(Exception):
 
 
 def tim_file(project_root, extra=None):
-    """Các file timing_P*.csv ở thư mục dự án, outputs\\, raw\\, final\\ và `extra` (thư mục hoặc file, phải nằm trong dự án). Trả [đường dẫn tuyệt đối] sắp theo tên.
+    """Các file timing_*.csv ở thư mục dự án, outputs\\, raw\\, final\\ và `extra` (thư mục hoặc file, phải nằm trong dự án). Trả [đường dẫn tuyệt đối] sắp theo tên.
     extra ngoài dự án -> TocDoLoi."""
     root = os.path.realpath(project_root)
     found = set()
     for d in TIMING_DIRS:
-        for p in glob.glob(os.path.join(glob.escape(os.path.join(root, d)), "timing_P*.csv")):
+        for p in glob.glob(os.path.join(glob.escape(os.path.join(root, d)), "timing_*.csv")):
             found.add(os.path.realpath(p))
     if extra:
         p = extra if os.path.isabs(extra) else os.path.join(root, extra)
@@ -55,7 +55,7 @@ def tim_file(project_root, extra=None):
         if not inside:
             raise TocDoLoi("Đường dẫn file/thư mục bấm giờ nằm ngoài thư mục dự án: từ chối.")
         if os.path.isdir(rp):
-            found |= {os.path.realpath(x) for x in glob.glob(os.path.join(glob.escape(rp), "timing_P*.csv"))}
+            found |= {os.path.realpath(x) for x in glob.glob(os.path.join(glob.escape(rp), "timing_*.csv"))}
         elif os.path.isfile(rp):
             found.add(rp)
         else:
@@ -283,11 +283,11 @@ def phan_tich(rows, manifest=None, n_boot=N_BOOT, seed=SEED):
 
 
 def pandas_tham_chieu(rows_by_file_dir, manifest_path=None):
-    """Chỉ để TEST: chạy nguyên đoạn code của P5 (pandas) trên các file timing_P*.csv trong thư mục; trả (r_i dict, TB nhân, [lo, hi], giờ tiết kiệm trộn).
+    """Chỉ để TEST: chạy nguyên đoạn code của P5 (pandas) trên các file timing_*.csv trong thư mục; trả (r_i dict, TB nhân, [lo, hi], giờ tiết kiệm trộn).
     Gọi khi máy có pandas; không dùng trong tool\\ ở chế độ chạy thật."""
     import numpy as np
     import pandas as pd
-    d = pd.concat(pd.read_csv(f) for f in sorted(glob.glob(os.path.join(rows_by_file_dir, "timing_P*.csv"))))
+    d = pd.concat(pd.read_csv(f) for f in sorted(glob.glob(os.path.join(rows_by_file_dir, "timing_*.csv"))))
     t = d[d.warmup == 0]
     x = t[t.task.isin(["m28-manual", "m28-assisted"])].reset_index(drop=True)
 

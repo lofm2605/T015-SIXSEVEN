@@ -28,7 +28,7 @@ MAX_BYTE = 64 * 1024 * 1024            # gói lớn hơn: không đọc
 MAX_MAT = 20000
 NGUONG_SUA_MAC_DINH = 2.0              # % IOD: điểm nháp lệch nhãn cuối hơn ngần này là "đã sửa"
 CONDITIONS = ("manual", "assisted")
-NGUOI_RE = re.compile(r"P[1-5]")
+NGUOI_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")      # tên người rà bất kỳ (= dong_ho.NGUOI_RE)
 PHIEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,80}")
 TEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 _ABS_PATH = re.compile(r"(?:^|[\s\"'(=:,;])(?:/(?:home|tmp|users|var|mnt|root|etc|opt|media|srv)/|[a-z]:[\\/]|\\\\[a-z0-9_.-]+\\)", re.I)
@@ -186,7 +186,7 @@ def kiem_cau_truc(nd, names=None):
     if not isinstance(nd.get("phien"), str) or not PHIEN_RE.fullmatch(nd["phien"]):
         p.append("thiếu hoặc sai mã phiên")
     if not isinstance(nd.get("nguoi"), str) or not NGUOI_RE.fullmatch(nd["nguoi"]):
-        p.append("người không phải P1 đến P5")
+        p.append("tên người không hợp lệ (chỉ chữ, số, _ và -, tối đa 32 ký tự)")
     if nd.get("nhom") not in CONDITIONS:
         p.append("nhóm không phải manual hoặc assisted")
     for k in ("dot", "task", "bo_anh", "job"):

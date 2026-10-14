@@ -62,7 +62,7 @@ def test_build_ui_co_hai_tab_moi_co_lượt_va_che_do_nap(world, tmp_path):
     demo, _theme = ra.build_ui(store, world['ctx'])
     ids = {getattr(b, 'elem_id', None) for b in demo.blocks.values()}
     for want in ('tab-thongke', 'tab-loc', 'tk-refresh', 'tk-export', 'tk-ttest', 'tk-luotnhap', 'tk-nguong', 'tk-tatca', 'tk-chibo', 'tk-goi', 'tk-view', 'loc-preview', 'loc-create', 'loc-cfg',
-                 'loc-load-cfg', 'loc-save-cfg', 'loc-ten', 'loc-warn', 'loc-overwrite-ok', 'tab-caidat', 'tab-hop'):
+                 'loc-load-cfg', 'loc-save-cfg', 'loc-ten', 'loc-overwrite-ok', 'tab-caidat', 'tab-hop'):
         assert want in ids, want
     titles = [getattr(b, 'label', None) for b in demo.blocks.values() if getattr(b, 'elem_id', None) in ('tab-hop', 'tab-dongho', 'tab-thongke', 'tab-loc', 'tab-caidat')]
     assert titles == ['Họp team', 'Thống kê', 'Lọc dữ liệu', 'Cài đặt']        # không còn tab Đồng hồ (chip ở đầu trang); Thống kê, Lọc dữ liệu đặt trước "Cài đặt"
@@ -171,7 +171,7 @@ def test_thong_ke_xuat_ghi_duoi_outputs_thong_ke_va_tu_choi_khi_dong(world):
 
 
 # ---------- tab Thống kê: mục Nhập tay (nhóm manual gán thẳng trong CVAT) ----------
-TAY_IDS = ('tk-tay', 'tk-tay-note', 'tk-tay-nguoi', 'tk-tay-nhom', 'tk-tay-dot', 'tk-tay-gio', 'tk-tay-ngay', 'tk-tay-file', 'tk-tay-ghichu', 'tk-tay-add', 'tk-tay-msg',
+TAY_IDS = ('tk-tay', 'tk-tay-nguoi', 'tk-tay-nhom', 'tk-tay-dot', 'tk-tay-gio', 'tk-tay-ngay', 'tk-tay-file', 'tk-tay-ghichu', 'tk-tay-add', 'tk-tay-msg',
            'tk-tay-list', 'tk-tay-chon', 'tk-tay-remove')
 
 
@@ -197,7 +197,7 @@ def test_nhap_tay_co_du_thanh_phan_dong_san_dat_sau_o_tai_goi_truoc_nut_refresh(
     assert ids.index('tk-goi') < ids.index('tk-tay') < ids.index('tk-tay-remove') < ids.index('tk-refresh') < ids.index('tk-export')
     by = dict(zip(ids, blocks))
     assert by['tk-tay-add'].value == 'Add manual entry' and by['tk-tay-add'].variant == 'primary' and by['tk-tay-remove'].value == 'Remove entry'
-    assert by['tk-tay-nguoi'].value is None and [c[1] for c in by['tk-tay-nguoi'].choices] == ['P1', 'P2', 'P3', 'P4', 'P5']
+    assert by['tk-tay-nguoi'].value is None and by['tk-tay-nguoi'].allow_custom_value and [c[1] for c in by['tk-tay-nguoi'].choices] == []      # gợi ý lấy từ config/nhom_thi_nghiem.json (mẫu trống), gõ tên bất kỳ được
     assert by['tk-tay-nhom'].value == 'manual' and [c[1] for c in by['tk-tay-nhom'].choices] == ['manual', 'assisted']
     assert by['tk-tay-gio'].placeholder == '1:25:30 · 85:30 · 85 (phút)' and by['tk-tay-ngay'].placeholder == 'trống = hôm nay; dd/mm/yyyy'
     assert 'cùng tên ảnh' in by['tk-tay-dot'].label and by['tk-tay-file'].file_count == 'multiple' and by['tk-tay-file'].type == 'filepath'
@@ -313,8 +313,6 @@ def test_nhap_tay_assisted_khong_co_nhap_van_ghi_nhung_canh_bao_ten_luot(world, 
     demo, f = tay_fns(world)
     by = {getattr(b, 'elem_id', None): b for b in demo.blocks.values()}
     assert 'tên lượt' in by['tk-tay-dot'].info and 'runs\\bo200 thì gõ bo200' in by['tk-tay-dot'].info
-    note = thong_ke_ui.tay_note_html()
-    assert 'assisted' in note and '<b>tên lượt</b>' in note and 'runs\\&lt;lượt&gt;' in note and 'kể cả khác tên đợt' in note
     msg, lst, sel = f['on_tay_add']('P4', 'assisted', 'bo200_v1', '85', '', [nhan_tay_xml(tmp_path)], '', None)
     assert 'm-warn' in msg and 'Đã thêm ketqua_P4_' in msg and 'không có nháp của đợt bo200_v1' in msg and 'TÊN LƯỢT' in msg
     assert 'không vào NME của nháp và tỉ lệ điểm phải sửa' in msg and 'máy này có nháp ở: R1' in msg and world['root'] not in msg

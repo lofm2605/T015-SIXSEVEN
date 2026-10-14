@@ -1241,12 +1241,6 @@ def _fmt_dt(s):
     return dt.strftime("%d/%m %H:%M") if dt else ""
 
 
-def warn_html():
-    return ('<div class="nap-box nap-warn"><b>Gói họp chứa ảnh mặt người thật (tài xế trong xe).</b> Ảnh người lái xe là dữ liệu nhạy cảm, '
-            'YawDD và DrivFace chỉ cho dùng học tập, nghiên cứu: chỉ gửi trong đội (Drive riêng tư của đội hoặc gửi trực tiếp), không đăng '
-            'công khai, không giao bên thứ ba, không đưa vào chat AI nào. Ảnh khách hàng không bao giờ rời máy.</div>')
-
-
 def msg_html(text, level="info"):
     return f'<div class="m28-msg m-{e(level)}" role="status">{e(text)}</div>' if text else ""
 
@@ -1411,7 +1405,7 @@ CSS = """
 #btn-cakho { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; white-space: nowrap; padding: 0 16px !important;
   background: var(--background-fill-secondary) !important; color: var(--body-text-color) !important;
   border: 1px solid var(--border-color-primary) !important; }
-#ck-badge, #ck-msg, #ck-m-msg, #ck-ngoai, #ck-sum, #ck-list, #hop-msg, #hop-report, #hop-counts, #ck-warn, #hop-warn, #hop-hint { padding: 0 !important; }
+#ck-badge, #ck-msg, #ck-m-msg, #ck-ngoai, #ck-sum, #ck-list, #hop-msg, #hop-report, #hop-counts, #hop-hint { padding: 0 !important; }
 #btn-cakho { min-height: 40px; font-weight: 700; }
 #ck-panel { background: var(--block-background-fill) !important; padding: 10px 12px !important; gap: 8px; border: 1px solid var(--border-color-primary); border-radius: 10px; }
 #ck-panel-face { font-size: 15px; padding: 0 !important; }
@@ -1681,7 +1675,6 @@ def member_tab(gr, demo, store, ctx):
     points = load_point_names(ctx.project_root)
     opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="cakho")
     thumb_dir = os.path.join(ctx.tmp_dir, "ca_kho")
-    gr.HTML(warn_html(), elem_id="ck-warn", apply_default_css=False)
     with gr.Row():
         run_dd = gr.Dropdown(choices=[("Tất cả lượt", "")], value="", label="Lọc theo lượt", elem_id="ck-run", scale=3)
         b_refresh = gr.Button("Refresh", elem_id="ck-refresh", scale=1, min_width=120)
@@ -1833,7 +1826,6 @@ def meeting_tab(gr, demo, ctx):
     def session_choices():
         return [("➕ Tạo phiên mới hôm nay", NEW_SESSION)] + [(n, n) for n in Meeting.list_sessions(serve())]
 
-    gr.HTML(warn_html(), elem_id="hop-warn", apply_default_css=False)
     with gr.Row():
         sess = gr.Dropdown(choices=session_choices(), value=None, label="Phiên họp", elem_id="hop-session", scale=3)
         b_new = gr.Button("New session today", elem_id="hop-new", scale=1, min_width=170)

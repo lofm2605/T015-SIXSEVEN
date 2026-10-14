@@ -250,11 +250,6 @@ def test_cung_mot_mat_giua_nhieu_nguoi_ap_cho_moi_bo_du_lieu(proj, tmp_path):
     assert ckb and ck.NGUON_VI['yawdd'] == 'YawDD' and ck.NGUON_VI['drivface'] == 'DrivFace'
 
 
-def test_chu_tren_giao_dien_noi_ve_anh_tai_xe_khong_con_cc_by_nc_nd():
-    html = ck.warn_html()
-    assert 'tài xế' in html and 'YawDD' in html and 'DrivFace' in html and 'nhạy cảm' in html and 'CC BY' not in html
-
-
 # ---------- xuất gói ----------
 def test_build_package_ba_loai_muc_va_manifest(proj):
     big_png(os.path.join(proj['cka'], 'overlays', 'F_001.png'))

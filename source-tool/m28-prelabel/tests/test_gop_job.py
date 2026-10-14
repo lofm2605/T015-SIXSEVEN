@@ -203,8 +203,8 @@ def test_finish_model_reasons(proj):
     assert 'Thiếu CVAT_URL' in m(env={})['reason'] and 'tab Cài đặt' in m(env={})['reason']
     r = m(env={'CVAT_URL': 'http://localhost:9999', 'CVAT_ACCESS_TOKEN': TOKEN})
     assert not r['enabled'] and 'localhost:9999' in r['reason'] and URL in r['reason'] and 'đúng server' in r['reason']
-    for who in ('X9', None, 'p5', ''):
-        assert not m(who)['enabled'] and 'P1 đến P5' in m(who)['reason'], who
+    for who in ('a b', None, 'x' * 33, ''):
+        assert not m(who)['enabled'] and 'chữ, số' in m(who)['reason'], who
     assert not m(job_running=True)['enabled'] and 'Đang có việc chạy' in m(job_running=True)['reason']
     assert dang_chay.acquire(rd, 'collect')
     assert 'Đang có việc chạy cho đợt này (collect)' in m()['reason']
@@ -443,11 +443,11 @@ def test_clock_warning_is_accepted_by_the_single_confirmation(proj):
     assert rows and 'phien_lau' in rows[0]['canh_bao'] and len(calls) == 2 and 'File gộp' in r['msg'] and not app.d.xem('P5', RUN)['co_phien']
 
 
-def test_reviewer_not_p1_to_p5_is_refused(proj):
-    """(g) người rà của trang không phải P1–P5: từ chối, không mở hộp, không chạy gì."""
-    app = make_app(proj, reviewer='X9')
+def test_invalid_reviewer_name_is_refused(proj):
+    """(g) tên người rà của trang không hợp lệ (có dấu cách): từ chối, không mở hộp, không chạy gì."""
+    app = make_app(proj, reviewer='a b')
     r = click(app)
-    assert not shown(r) and 'P1 đến P5' in r['msg'] and not app.seen and app.ctx.gop is None
+    assert not shown(r) and 'chữ, số' in r['msg'] and not app.seen and app.ctx.gop is None
 
 
 def test_cvat_link_mismatch_is_refused(proj):

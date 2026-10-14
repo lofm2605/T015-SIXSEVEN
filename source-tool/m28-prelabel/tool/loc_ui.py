@@ -16,7 +16,7 @@ import threading
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 if TOOL_DIR not in sys.path:
     sys.path.insert(0, TOOL_DIR)
-import ca_kho  # noqa: E402  (warn_html, _atomic_write)
+import ca_kho  # noqa: E402  (_atomic_write)
 import dot_anh  # noqa: E402
 import loc_du_lieu as ld  # noqa: E402
 import nap_anh  # noqa: E402
@@ -34,7 +34,7 @@ CSS = """
 #loc-filters > *, #loc-rows > * { min-width: 150px !important; }
 #loc-btns button { min-width: 0 !important; flex: 1 1 150px !important; }
 #loc-preview, #loc-create, #loc-save-cfg { font-weight: 800; } #loc-overwrite-ok { background: #dc2626 !important; border-color: #b91c1c !important; color: #fff !important; }
-#loc-warn, #loc-msg, #loc-result, #loc-note { padding: 0 !important; } #tab-loc { padding: 8px 0 0 !important; gap: 10px; max-width: 1120px; margin: 0 auto; width: 100%; }
+#loc-msg, #loc-result, #loc-note { padding: 0 !important; } #tab-loc { padding: 8px 0 0 !important; gap: 10px; max-width: 1120px; margin: 0 auto; width: 100%; }
 """
 
 
@@ -54,12 +54,6 @@ def e(x):
 
 def msg_html(text, level="info"):
     return f'<div class="m28-msg m-{e(level)}" role="status">{e(text)}</div>' if text else ""
-
-
-def warn_html():
-    return ('<div class="nap-box nap-warn"><b>Bộ dữ liệu tạo ra chứa ảnh mặt người lái xe thật (YawDD, DrivFace).</b> Ảnh người lái xe là dữ liệu nhạy cảm, chỉ dùng học tập, nghiên cứu: '
-            'chỉ gửi trong đội, không đăng công khai, không giao bên thứ ba, không đưa vào git hay chat AI nào. Ảnh khách hàng (lượt Nạp ảnh, không rõ nguồn) luôn bị loại. '
-            'Tab này chỉ chuẩn bị dữ liệu, <b>không train</b>; Ttest là tập đo một lần, không dùng để chỉnh ngưỡng lọc.</div>')
 
 
 # ---------- giá trị điều khiển <-> cấu hình lọc (thuần, test không cần gradio) ----------
@@ -219,7 +213,6 @@ def loc_tab(gr, demo, store, ctx):
         groups, regions = groups_regions(ctx.project_root)
     except (bang_mat.BangLoi, OSError):
         pass
-    gr.HTML(warn_html(), elem_id="loc-warn", apply_default_css=False)
     with gr.Row(elem_id="loc-filters"):
         d_luot = gr.Dropdown(choices=[], value=[], multiselect=True, label="Lượt lấy nhãn (để trống = tất cả)", elem_id="loc-luot")
         d_nhap = gr.Dropdown(choices=[("(không)", "")], value="", label="Lượt chứa nháp cho nhãn thí nghiệm (luot_nhap)", elem_id="loc-luotnhap")

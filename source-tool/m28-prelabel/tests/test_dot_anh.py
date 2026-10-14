@@ -917,7 +917,7 @@ def test_gradio_ui_builds_with_all_element_ids(world):
     ids = {getattr(b, 'elem_id', None) for b in demo.blocks.values()}
     for want in ('btn-push', 'push-panel', 'push-msg', 'push-prog', 'push-log', 'push-cancel', 'push-confirm', 'push-confirm-ok',
                  'push-confirm-cancel', 'push-result', 'tab-dot', 'dot-root', 'dot-act', 'dot-act-go', 'dot-modal', 'dot-modal-ok', 'dot-modal-cancel',
-                 'dot-modal-typed', 'dot-modal-check', 'nap-ghichu', 'nap-start-open', 'nap-start', 'nap-btn-note', 'btn-nhan', 'btn-xong', 'tab-ra', 'tab-nap', 'shown'):
+                 'dot-modal-typed', 'dot-modal-check', 'nap-ghichu', 'nap-start-open', 'nap-start', 'btn-nhan', 'btn-xong', 'tab-ra', 'tab-nap', 'shown'):
         assert want in ids, want
     assert not {'nap-go', 'nap-oldnote'} & ids                                       # bỏ nút Rà lượt này: mở lượt bằng Upload & Open hoặc tab Các đợt
     labels = {getattr(b, 'elem_id', None): getattr(b, 'value', None) for b in demo.blocks.values()}

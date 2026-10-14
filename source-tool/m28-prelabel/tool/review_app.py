@@ -1216,7 +1216,7 @@ kbd { display: inline-block; min-width: 20px; padding: 0 5px; text-align: center
 #tabs > .tab-wrapper button, #tabs > .tab-container button { font-size: 15px; font-weight: 700; padding: 6px 16px; }
 #tab-ra, #tab-nap { padding: 8px 0 0 !important; }
 #tab-nap { max-width: 1120px; margin: 0 auto; width: 100%; gap: 10px; }
-#nap-warn, #nap-env, #nap-count, #nap-rejected, #nap-msg, #nap-prog, #nap-summary { padding: 0 !important; }
+#nap-env, #nap-count, #nap-rejected, #nap-msg, #nap-prog, #nap-summary { padding: 0 !important; }
 .nap-box { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5; color: var(--body-text-color);
   border: 1px solid var(--bc, #9ca3af); background: color-mix(in srgb, var(--bc, #9ca3af) 14%, transparent); }
 .nap-box ul { margin: 6px 0 0 20px; padding: 0; }
@@ -1505,10 +1505,6 @@ def _review_tab(gr, demo, store, ctx, header):
                                  push_refresh=_push_refresh, push_outs=push_outs, push_opts=push_opts)
 
 
-NAP_WARN_HTML = ('<div class="nap-box nap-warn"><b>Ảnh mặt người thật chỉ xử lý trên máy này (127.0.0.1).</b> Không đưa ảnh khách hàng, '
-                 'ảnh chụp màn hình trang này hay file kết quả vào chat AI hay dịch vụ ngoài nào.<br>'
-                 f'Nhận .jpg, .jpeg, .png; tối đa {nap_anh.MAX_BYTES // 1048576} MB mỗi ảnh và {nap_anh.MAX_FILES} ảnh mỗi lần. '
-                 'Mỗi lần nạp tạo một lượt mới trong <code>runs\\</code>; lượt đang rà dở không bị đụng tới.</div>')
 NO_RUN_HTML = ('<div class="m28-empty">Chưa có lượt nào: nạp ảnh ở tab <b>Nạp ảnh</b> bằng <b>Upload &amp; Open</b> (hoặc mở đợt ở tab <b>Các đợt</b> → <b>Review batch</b>).</div>')
 HEAD_NAP_HTML = ('<div class="m28-head"><div class="m28-top"><div class="m28-title">Rà soát nhãn nháp M28</div>'
                  '<div class="m28-sub">chưa có lượt nào · người rà <b>{rev}</b></div></div></div>')
@@ -1617,7 +1613,6 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
     thumb_dir = os.path.join(ctx.tmp_dir, "nap_thumbs")
     env = {"errs": [] if ctx.layout_error else nap_anh.preflight(ctx.project_root)}
 
-    gr.HTML(NAP_WARN_HTML, elem_id="nap-warn", apply_default_css=False)
     env_html = gr.HTML(nap_anh.preflight_html(env["errs"], ctx.layout_error), elem_id="nap-env", apply_default_css=False)
     drop = gr.File(label="Kéo thả ảnh vào đây hoặc bấm để chọn", file_count="multiple", file_types=[".jpg", ".jpeg", ".png"],
                    type="filepath", elem_id="nap-drop", height=220)
@@ -1634,8 +1629,6 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         b_start = gr.Button("Upload & Continue", variant="primary", elem_id="nap-start", interactive=False)
         b_cancel = gr.Button("Cancel", variant="stop", elem_id="nap-cancel", interactive=False)
         b_retry = gr.Button("Retry", elem_id="nap-retry", interactive=False)
-    gr.HTML('<div class="nap-note"><b>Upload &amp; Open</b>: chuẩn bị xong thì tự mở trang rà soát lượt này. <b>Upload &amp; Continue</b>: chuẩn bị xong vẫn ở lại tab này '
-            '(để nạp thêm đợt khác); mở đợt đó sau ở tab <b>Các đợt</b> → <b>Review batch</b>.</div>', elem_id="nap-btn-note", apply_default_css=False)
     msg = gr.HTML(elem_id="nap-msg", apply_default_css=False)
     prog = gr.HTML(elem_id="nap-prog", apply_default_css=False)
     log_tb = gr.Textbox(label="Log prepare", lines=10, max_lines=14, interactive=False, autoscroll=True, elem_id="nap-log")
@@ -1927,7 +1920,11 @@ def build_ui(store, ctx=None):
                     ev.then(refresh, [dot_ses], dot_outs, **dot_opts)
                 def after_model(ev):                        # Save đường dẫn model xong: tab Nạp ảnh kiểm lại ngay (chế độ --nap không phát sự kiện chọn tab Nạp ảnh)
                     ev.then(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])
-                cd_fn, cd_in, cd_out, cd_opts = cai_dat_ui.settings_tab(gr, demo, store, ctx, after_cvat, run_name, after_model)
+                def after_reviewer(ev):                     # Save name xong: lần Nạp ảnh bị bỏ qua đồng hồ vì chưa có tên người rà hợp lệ thì chạy bù, chip cập nhật ngay
+                    def bu():
+                        dong_ho_ui.bu_khi_co_ten(gr, ctx)
+                    ev.then(bu, None, None, **dh.opts).then(dh.refresh, None, dh.outs, **dh.opts)
+                cd_fn, cd_in, cd_out, cd_opts = cai_dat_ui.settings_tab(gr, demo, store, ctx, after_cvat, run_name, after_model, after_reviewer)
         tab_ck.select(ck_fn, ck_in, ck_out, **ck_opts)                      # tab Ca khó tự làm mới khi chọn (ca vừa đánh dấu ở tab Rà soát)
         tab_dot.select(refresh, [dot_ses], dot_outs, **dot_opts)           # tự làm mới khi chọn tab (không quét lại mỗi giây)
         tab_tk.select(tk_fn, tk_in, tk_out, **tk_opts)                      # Thống kê: tính khi chọn tab, không tính lúc mở trang

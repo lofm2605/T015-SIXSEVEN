@@ -130,7 +130,6 @@ CSS = """
 #dot-gop-cancel { max-width: 160px; min-height: 40px; font-weight: 800; }
 #dot-job:not(:has(.html-container > div > *)), #dot-msg:not(:has(.html-container > div > *)), #push-msg:not(:has(.html-container > div > *)), #push-prog:not(:has(.html-container > div > *)),
 #push-result:not(:has(.html-container > div > *)), #push-panel:not(:has(.html-container > div > *)) { display: none; }
-#dot-intro { align-self: center; }
 @media (max-width: 600px) { .dot-cards { grid-template-columns: 1fr; } .dot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dot-state { margin-left: 0; } }
 """
@@ -335,8 +334,6 @@ def dot_tab(gr, demo, store, ctx, deps):
     reviewer = ctx.reviewer
 
     with gr.Row():
-        gr.HTML('<div class="nap-note">Mỗi <b>đợt</b> là một lượt nạp ảnh (tên do bạn đặt hoặc NAP_xxx). Xoá ở đây là <b>xoá mềm</b> '
-                '(thùng rác, khôi phục được); xoá ảnh/đợt cục bộ <b>không</b> xoá gì trên CVAT.</div>', elem_id="dot-intro", apply_default_css=False)
         b_refresh = gr.Button("Refresh", elem_id="dot-refresh", size="sm")
     job_html = gr.HTML(elem_id="dot-job", apply_default_css=False)
     b_gop_cancel = gr.Button("Cancel", variant="stop", elem_id="dot-gop-cancel", size="sm", visible=False)     # huỷ job gộp đang chạy (Merge jobs & Finish)

@@ -42,11 +42,11 @@ CSS = thong_ke_html.CSS + """
 #tk-filters > * { min-width: 160px !important; }
 #tk-btns { gap: 8px; flex-wrap: wrap; } #tk-btns button { min-width: 0 !important; flex: 1 1 140px !important; }
 #tk-refresh, #tk-export { font-weight: 800; }
-#tk-view, #tk-msg, #tk-note { padding: 0 !important; } #tab-thongke { padding: 8px 0 0 !important; gap: 10px; max-width: 1120px; margin: 0 auto; width: 100%; }
+#tk-view, #tk-msg { padding: 0 !important; } #tab-thongke { padding: 8px 0 0 !important; gap: 10px; max-width: 1120px; margin: 0 auto; width: 100%; }
 #tk-msg:not(:has(.html-container > div > *)) { display: none; }
 #tk-tay-row, #tk-tay-bo { gap: 10px; flex-wrap: wrap; align-items: flex-end; } #tk-tay-row > * { min-width: 150px !important; }
 #tk-tay-bo > * { min-width: 200px !important; } #tk-tay-remove { flex: 0 1 160px !important; min-width: 0 !important; }
-#tk-tay-note, #tk-tay-msg, #tk-tay-list { padding: 0 !important; } #tk-tay-msg:not(:has(.html-container > div > *)) { display: none; }
+#tk-tay-msg, #tk-tay-list { padding: 0 !important; } #tk-tay-msg:not(:has(.html-container > div > *)) { display: none; }
 """
 
 
@@ -62,12 +62,6 @@ def serve_dir(project_root):
 
 def msg_html(text, level="info"):
     return f'<div class="m28-msg m-{html.escape(level)}" role="status">{html.escape(text)}</div>' if text else ""
-
-
-def note_html():
-    return ('<div class="nap-box nap-warn"><b>Trang này chỉ có số liệu, không có ảnh mặt.</b> Số liệu tổng hợp vẫn là dữ liệu của dự án phi thương mại (YawDD, DrivFace): '
-            'chỉ dùng nội bộ nhóm; bản HTML xuất không có ảnh, không mã tài xế, không đường dẫn tuyệt đối. Ba chỉ số: NME của nháp so với nhãn manual, tỉ lệ điểm phải sửa, '
-            'so sánh thời gian manual với assisted (hai nhóm độc lập). <b>Ttest là tập đo một lần</b>: chỉ bật "Gồm Ttest" đúng buổi đo.</div>')
 
 
 def reviewers(runs_root):
@@ -108,16 +102,6 @@ def nhan_paths(files):
     return _paths(files, (".xml", ".zip"))
 
 
-def tay_note_html():
-    return ('<div class="tk-root"><div class="tk-note">Cho người nhóm <b>manual</b> gán tay thẳng trong CVAT, không dùng tool (không có đồng hồ, không có gói kết quả). Mỗi người, mỗi đợt nhập '
-            '<b>một lần</b>: thời gian làm (cả buổi, không tính lúc nghỉ) và file nhãn xuất từ CVAT ("CVAT for images 1.1", không kèm ảnh; mỗi job một file cũng được). Bản nhập tay là '
-            'một gói kết quả bình thường ghi vào outputs\\goi_nhom: tính vào ba chỉ số y như gói của đồng hồ (giây/mặt = thời gian ÷ số ảnh có nhãn); tool\\tong_ket.py cũng tự đọc. '
-            'Một người không gán một ảnh hai lần: bản trùng tên ảnh với gói khác của cùng người (kể cả khác tên đợt) bị từ chối. '
-            'Sửa thời gian, đợt hay file của một bản đã thêm: Remove entry rồi thêm lại. '
-            'Nếu nhập cho người nhóm <b>assisted</b>: đợt phải là <b>tên lượt</b> đã dựng nháp (thư mục runs\\&lt;lượt&gt;, ví dụ bo200), không phải tên bộ ảnh, '
-            'thì gói mới kèm nháp để đo NME của nháp và tỉ lệ điểm phải sửa.</div></div>')
-
-
 def tay_list_html(rows):
     """Bảng các bản nhập tay (nhap_tay.liet_ke). Không ảnh, không đường dẫn."""
     if not rows:
@@ -135,7 +119,6 @@ def tay_choices(rows):
 def stats_tab(gr, demo, store, ctx):
     """Tab "Thống kê". Trả (hàm làm mới, inputs, outputs, opts) để build_ui nối vào tab.select."""
     opts = dict(show_progress="minimal", api_visibility="private", concurrency_limit=1, concurrency_id="thongke")
-    gr.HTML(note_html(), elem_id="tk-note", apply_default_css=False)
     with gr.Row(elem_id="tk-filters"):
         d_nhap = gr.Dropdown(choices=[("(không)", "")], value="", label="Lượt chứa nháp (cho nhãn trong raw\\ không có push.json)", elem_id="tk-luotnhap")
         s_nguong = gr.Slider(minimum=thong_ke.NGUONG_SUA_MIN, maximum=thong_ke.NGUONG_SUA_MAX, step=0.5, value=thong_ke.NGUONG_SUA, label="Ngưỡng điểm 'đã sửa' (% IOD)", elem_id="tk-nguong")
@@ -146,9 +129,8 @@ def stats_tab(gr, demo, store, ctx):
     f_goi = gr.File(label="Nạp các gói kết quả của nhóm (ketqua_*.zip hoặc .json; chỉ đọc, không lưu vào dự án)", file_count="multiple", file_types=[".zip", ".json"], type="filepath",
                     elem_id="tk-goi", height=120)
     with gr.Accordion("Nhập tay: nhóm gán tay trực tiếp trong CVAT (không dùng tool)", open=False, elem_id="tk-tay") as acc_tay:
-        gr.HTML(tay_note_html(), elem_id="tk-tay-note", apply_default_css=False)
         with gr.Row(elem_id="tk-tay-row"):
-            d_nguoi = gr.Dropdown(choices=list(nhap_tay.NGUOI), value=None, label="Người", elem_id="tk-tay-nguoi")
+            d_nguoi = gr.Dropdown(choices=sorted(nhom_mod.doc(ctx.project_root)["nhom"]), value=None, allow_custom_value=True, label="Người", elem_id="tk-tay-nguoi")
             r_nhom = gr.Radio(choices=[("manual (gán tay)", "manual"), ("assisted (dùng tool)", "assisted")], value="manual", label="Nhóm", elem_id="tk-tay-nhom")
             t_dot = gr.Textbox(value=nhom_mod.doc(ctx.project_root)["bo_anh"], label="Đợt / bộ ảnh (hai nhóm phải dùng cùng tên ảnh)", placeholder="ví dụ NAP_001",
                                info="nhóm assisted: gõ tên lượt đã dựng nháp (thư mục runs\\bo200 thì gõ bo200)", elem_id="tk-tay-dot")

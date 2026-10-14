@@ -63,7 +63,7 @@ if [ ! -f face_landmarker.task ] && [ ! -f tool/face_landmarker.task ]; then
 fi
 
 hoi_nguoi() {
-  read -r -p "Tên người rà (P1-P5, Enter = P1): " NGUOI
+  read -r -p "Tên người rà (Enter = P1): " NGUOI
   NGUOI="${NGUOI:-P1}"
 }
 

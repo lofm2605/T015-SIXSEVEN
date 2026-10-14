@@ -12,7 +12,7 @@ import os
 import re
 
 CONDITIONS = ("manual", "assisted")
-NGUOI_RE = re.compile(r"P[1-5]")
+NGUOI_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")      # tên người rà bất kỳ (= dong_ho.NGUOI_RE)
 FILE_REL = os.path.join("config", "nhom_thi_nghiem.json")
 VI = {"manual": "Gán tay hoàn toàn (manual)", "assisted": "Dùng tool, sửa nháp (assisted)"}
 BO_ANH_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
@@ -40,7 +40,7 @@ def doc(project_root="."):
         nhom = {}
     for ng, cd in (nhom or {}).items():
         if not isinstance(ng, str) or not NGUOI_RE.fullmatch(ng):
-            out["loi"].append(f"{FILE_REL}: người {ng!r} không hợp lệ (chỉ P1 đến P5), bỏ dòng này.")
+            out["loi"].append(f"{FILE_REL}: người {ng!r} không hợp lệ (chỉ chữ, số, _ và -, tối đa 32 ký tự), bỏ dòng này.")
         elif cd not in CONDITIONS:
             out["loi"].append(f"{FILE_REL}: nhóm {cd!r} của {ng} không hợp lệ (chỉ manual hoặc assisted), bỏ dòng này.")
         else:
