@@ -200,16 +200,65 @@ def translate_error(exc, env, doing):
     return None
 
 
+# ---------- tên điểm trên CVAT: SỐ 1..50 như trong tool (kiểu "so") hay tên config `<nhóm>_<k>` (kiểu "cu", project dựng trước 15/10/2026) ----------
+KIEU_SO, KIEU_CU = "so", "cu"
+_TEN_MAC_DINH = []
+
+
+def ten_so(point_names):
+    """{tên điểm trong config: nhãn trên CVAT} kiểu số: điểm thứ i (từ 1, theo thứ tự config) mang nhãn "i", đúng số trên ảnh chồng của tool."""
+    return {n: str(i + 1) for i, n in enumerate(point_names)}
+
+
+def ten_tu_so(point_names):
+    """Ngược của ten_so: {nhãn số trên CVAT: tên điểm trong config}."""
+    return {str(i + 1): n for i, n in enumerate(point_names)}
+
+
+def ten_config_mac_dinh():
+    """Tên 50 điểm của config/m28_config.json của bản m28-prelabel đang chạy (để đọc XML từ CVAT khi người gọi không đưa danh sách tên). Rỗng nếu không đọc được."""
+    if not _TEN_MAC_DINH:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "config", "m28_config.json")
+        try:
+            with open(p, encoding="utf-8") as f:
+                _TEN_MAC_DINH.append([q["name"] for q in json.load(f)["points"]])
+        except (OSError, ValueError, KeyError, TypeError):
+            _TEN_MAC_DINH.append([])
+    return _TEN_MAC_DINH[0]
+
+
+def doi_nhan_diem(root, mapping):
+    """Đổi nhãn các <points> trong mọi <skeleton> của cây XML `root` theo `mapping` ({nhãn cũ: nhãn mới}); nhãn không có trong mapping giữ nguyên. Sửa tại chỗ, trả số điểm đã đổi."""
+    n = 0
+    for sk in root.iter("skeleton"):
+        for p in sk.findall("points"):
+            moi = mapping.get(p.get("label") or "")
+            if moi is not None and moi != p.get("label"):
+                p.set("label", moi)
+                n += 1
+    return n
+
+
+def kieu_labels(labels):
+    """Kiểu tên sublabel của nội dung face50_label.json: "so" nếu các sublabel tên 1..50 theo thứ tự, ngược lại "cu"."""
+    subs = [s.get("name") for lb in labels for s in lb.get("sublabels", [])]
+    return KIEU_SO if subs and subs == [str(i + 1) for i in range(len(subs))] else KIEU_CU
+
+
 # ---------- đọc annotations.xml (theo TÊN ảnh và TÊN điểm, không theo id) ----------
-def parse_annotations(xml_bytes):
+def parse_annotations(xml_bytes, names=None):
     """{tên ảnh: dict(width, height, skeletons=[{label, points={tên điểm: dict(x, y, occluded, outside, low_conf)}}], n_shapes)}.
-    low_conf là 'true'/'false' hoặc None nếu điểm không có thuộc tính này."""
+    low_conf là 'true'/'false' hoặc None nếu điểm không có thuộc tính này.
+    Tên điểm trả về LUÔN là tên trong config (`<nhóm>_<k>`): nhãn SỐ của CVAT kiểu mới ("35") được đổi lại theo `names` (danh sách 50 tên điểm theo thứ tự config; không đưa thì
+    đọc từ config/m28_config.json của bản đang chạy); nhãn tên cũ giữ nguyên, nên XML của project dựng trước đây vẫn đọc được."""
     if len(xml_bytes) > MAX_XML:
         raise SystemExit("File annotations.xml quá lớn (hơn 200 MB): không đọc.")
     try:
         root = ET.fromstring(xml_bytes)
     except ET.ParseError as e:
         raise SystemExit(f"annotations.xml không phải XML hợp lệ ({e}).")
+    names = list(names) if names else ten_config_mac_dinh()
+    tu_so = ten_tu_so(names) if names else {}
     out = {}
     for im in root.iter("image"):
         name = im.get("name") or ""
@@ -226,7 +275,8 @@ def parse_annotations(xml_bytes):
                 for a in p.findall("attribute"):
                     if a.get("name") == "low_conf":
                         lc = (a.text or "").strip().lower()
-                pts[p.get("label") or ""] = dict(x=x, y=y, occluded=p.get("occluded"), outside=p.get("outside"), low_conf=lc)
+                nhan = p.get("label") or ""
+                pts[tu_so.get(nhan, nhan)] = dict(x=x, y=y, occluded=p.get("occluded"), outside=p.get("outside"), low_conf=lc)
             d["skeletons"].append(dict(label=sk.get("label"), points=pts))
         d["n_shapes"] = sum(1 for tag in ("box", "polygon", "polyline", "points", "mask", "ellipse", "cuboid", "tag")
                             for _ in im.findall(tag)) + len(d["skeletons"])

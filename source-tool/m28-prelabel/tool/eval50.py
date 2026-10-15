@@ -144,7 +144,7 @@ def read_labels(path, cfg, warn=print):
     else:
         with open(path, "rb") as f:
             data = f.read()
-    ann = cvat_io.parse_annotations(data)
+    ann = cvat_io.parse_annotations(data, [p["name"] for p in cfg["points"]])           # nhãn số 1..50 của CVAT đổi về tên config
     groups = {}
     for p in cfg["points"]:
         groups.setdefault(p.get("group") or cvat_io.group_of_name(p["name"]), set()).add(p["name"])

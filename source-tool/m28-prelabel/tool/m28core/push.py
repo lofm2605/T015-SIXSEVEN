@@ -110,12 +110,15 @@ def load_label_names(label_json):
         names = [s["name"] for lb in labels for s in lb["sublabels"]]
         label_names = [lb["name"] for lb in labels]
         kinds = {lb.get("type") for lb in labels}
+        kieu = io_.kieu_labels(labels)
+        if kieu == io_.KIEU_SO:                           # sublabel tên SỐ 1..50: tên điểm trong config là <nhóm>_<k>, k đếm từ 1 trong nhóm
+            names = [f"{lb['name']}_{k}" for lb in labels for k, _s in enumerate(lb["sublabels"], 1)]
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         raise SystemExit(f"{label_json} sai định dạng ({type(e).__name__}): chạy lại python tool\\make_label.py.")
     if OLD_LABEL in label_names:
         raise SystemExit(f"{label_json} còn label {OLD_LABEL} kiểu một skeleton (bản cũ, trước QĐ-004): chạy lại python tool\\make_label.py.")
     if len(names) != 50 or len(set(names)) != 50 or kinds != {"skeleton"} or len(set(label_names)) != len(label_names) \
-            or any(io_.group_of_name(s["name"]) != lb["name"] for lb in labels for s in lb["sublabels"]):
+            or (kieu == io_.KIEU_CU and any(io_.group_of_name(s["name"]) != lb["name"] for lb in labels for s in lb["sublabels"])):
         raise SystemExit(f"{label_json} phải có các label skeleton theo nhóm (tên label = tên nhóm) với đúng 50 sublabel khác tên: chạy lại python tool\\make_label.py.")
     return labels, names
 
@@ -231,20 +234,8 @@ def find_project(client, name):
     return found[0] if found else None
 
 
-def check_project_labels(project, point_names, labels=None):
-    """Project phải có đúng các label skeleton theo nhóm (tên label = tên nhóm) với đúng sublabel của nhóm. `labels` = nội dung face50_label.json (nếu không có thì suy
-    nhóm từ tên điểm). Sai thì SystemExit nói rõ nhóm nào, kể cả khi project còn label face50 CŨ kiểu một skeleton (v2 hoặc bản đầu của DMS)."""
-    want = {lb["name"]: [s["name"] for s in lb["sublabels"]] for lb in labels} if labels else io_.groups_from_names(point_names)
-    got = project_labels(project)
-    if OLD_LABEL in got:
-        old = got[OLD_LABEL]
-        kind = "50 điểm pNN_vùng_bên của version 2" if any(re.match(r"p\d\d_(jaw|brow|nose|eye|lip)_[RLM]$", n or "") for n in old) else "một skeleton đủ 50 điểm của bản đầu DMS"
-        raise SystemExit(f"Project {project.name} dùng label {OLD_LABEL} CŨ ({len(old)} sublabel, {kind}: sublabel {old[0] if old else '?'}; trước QĐ-003/QĐ-004), không khớp "
-                         f"{len(want)} label skeleton theo nhóm của config version 3 (ví dụ {next(iter(want))}). Nhờ P4 dựng lại project bằng config\\face50_label.json mới "
-                         "(xoá project cũ rỗng hoặc tạo project mới tên khác rồi đặt tên trong config\\pipeline.json); chưa tạo task nào.")
-    if not any(g in got for g in want):
-        raise SystemExit(f"Project {project.name} đã có nhưng chưa có label skeleton nào của {len(want)} nhóm ({', '.join(want)}): xoá project rỗng đó để tool tạo lại "
-                         "từ config\\face50_label.json, hoặc import các label này vào project. Chưa tạo task nào.")
+def _khong_khop(got, want):
+    """Danh sách chỗ lệch giữa label của project (`got`) và label mong muốn (`want`), cùng dạng {nhóm: [tên sublabel]}."""
     bad = []
     for g, names in want.items():
         if g not in got:
@@ -256,19 +247,52 @@ def check_project_labels(project, point_names, labels=None):
     extra = sorted(set(got) - set(want))
     if extra:
         bad.append(f"có label skeleton lạ {extra[:3]}")
-    if bad:
-        raise SystemExit(f"Label trong project {project.name} không khớp config ({len(bad)} chỗ: " + "; ".join(bad[:4]) + "). Sửa label cho đủ "
-                         f"{len(want)} nhóm, 50 điểm đúng tên hoặc tạo project mới; chưa tạo task nào.")
+    return bad
 
 
-def get_project_id(client, name, labels, point_names):
-    """Tìm project theo tên; chưa có thì tạo từ label_json. Có rồi thì kiểm đủ bảy label skeleton theo nhóm, 50 sublabel đúng tên."""
+def check_project_labels(project, point_names, labels=None):
+    """Project phải có đúng các label skeleton theo nhóm (tên label = tên nhóm) với đúng sublabel của nhóm. `labels` = nội dung face50_label.json (nếu không có thì suy
+    nhóm từ tên điểm). Sai thì SystemExit nói rõ nhóm nào, kể cả khi project còn label face50 CŨ kiểu một skeleton (v2 hoặc bản đầu của DMS).
+    Trả KIỂU tên sublabel của project: "so" (1..50, như tool) hay "cu" (`<nhóm>_<k>`, project dựng trước 15/10/2026); file label nói kiểu nào thì ưu tiên kiểu đó, project kiểu
+    kia vẫn dùng được (push đổi nhãn XML cho khớp)."""
+    groups = io_.groups_from_names(point_names)
+    so = io_.ten_so(point_names)
+    want_cu = {g: list(ns) for g, ns in groups.items()}
+    want_so = {g: [so[n] for n in ns] for g, ns in groups.items()}
+    kieu_json = io_.kieu_labels(labels) if labels else io_.KIEU_SO
+    want = want_so if kieu_json == io_.KIEU_SO else want_cu
+    got = project_labels(project)
+    if OLD_LABEL in got:
+        old = got[OLD_LABEL]
+        kind = "50 điểm pNN_vùng_bên của version 2" if any(re.match(r"p\d\d_(jaw|brow|nose|eye|lip)_[RLM]$", n or "") for n in old) else "một skeleton đủ 50 điểm của bản đầu DMS"
+        raise SystemExit(f"Project {project.name} dùng label {OLD_LABEL} CŨ ({len(old)} sublabel, {kind}: sublabel {old[0] if old else '?'}; trước QĐ-003/QĐ-004), không khớp "
+                         f"{len(want)} label skeleton theo nhóm của config version 3 (ví dụ {next(iter(want))}). Nhờ P4 dựng lại project bằng config\\face50_label.json mới "
+                         "(xoá project cũ rỗng hoặc tạo project mới tên khác rồi đặt tên trong config\\pipeline.json); chưa tạo task nào.")
+    if not any(g in got for g in want):
+        raise SystemExit(f"Project {project.name} đã có nhưng chưa có label skeleton nào của {len(want)} nhóm ({', '.join(want)}): xoá project rỗng đó để tool tạo lại "
+                         "từ config\\face50_label.json, hoặc import các label này vào project. Chưa tạo task nào.")
+    bad = _khong_khop(got, want)
+    if not bad:
+        return kieu_json
+    khac = io_.KIEU_CU if kieu_json == io_.KIEU_SO else io_.KIEU_SO
+    if not _khong_khop(got, want_cu if khac == io_.KIEU_CU else want_so):
+        return khac                                       # project dựng theo kiểu tên kia (thường: tên cũ trước 15/10/2026): dùng được
+    raise SystemExit(f"Label trong project {project.name} không khớp config ({len(bad)} chỗ: " + "; ".join(bad[:4]) + "). Sửa label cho đủ "
+                     f"{len(want)} nhóm, 50 điểm đúng tên hoặc tạo project mới; chưa tạo task nào.")
+
+
+def get_project(client, name, labels, point_names):
+    """(project, kiểu tên sublabel). Tìm project theo tên; chưa có thì tạo từ label_json. Có rồi thì kiểm đủ bảy label skeleton theo nhóm, 50 sublabel đúng tên (kiểu số hay kiểu cũ)."""
     proj = find_project(client, name)
     if proj is None:
         proj = client.projects.create({"name": name, "labels": labels})
         print(f"  đã tạo project {name} (id {proj.id}) từ {len(labels)} label skeleton theo nhóm", flush=True)
-    check_project_labels(proj, point_names, labels)
-    return proj.id
+    return proj, check_project_labels(proj, point_names, labels)
+
+
+def get_project_id(client, name, labels, point_names):
+    """Như get_project nhưng chỉ trả id project."""
+    return get_project(client, name, labels, point_names)[0].id
 
 
 def _frame_names(task):
@@ -289,14 +313,17 @@ def _jobs_of(task, kinds):
     return out
 
 
-def _xml_for_frames(xml_path, frames, run_dir, keep=None):
+def _xml_for_frames(xml_path, frames, run_dir, keep=None, ten_cvat=None):
     """Ghép id ảnh trong XML theo THỨ TỰ FRAME THẬT của task (ghép theo tên ảnh). Giống nhau thì dùng nguyên XML;
     khác thì ghi bản tạm runs/<lượt>/xml/prelabel_cvat.xml (không sửa prelabel.xml gốc).
-    keep (tập tên ảnh, hoặc None = giữ hết): ảnh ngoài keep bị bỏ khỏi bản nhập (lượt đẩy bằng bản cũ: chỉ nhập mặt Nhận)."""
+    keep (tập tên ảnh, hoặc None = giữ hết): ảnh ngoài keep bị bỏ khỏi bản nhập (lượt đẩy bằng bản cũ: chỉ nhập mặt Nhận).
+    ten_cvat ({tên điểm config: nhãn trên CVAT}): project dùng sublabel SỐ thì đổi nhãn các điểm sang số (prelabel.xml gốc vẫn giữ tên config)."""
     tree = ET.parse(xml_path)
     idx = {n: i for i, n in enumerate(frames)}
     changed = False
     root = tree.getroot()
+    if ten_cvat and io_.doi_nhan_diem(root, ten_cvat):
+        changed = True
     if keep is not None:
         for im in [im for im in root.findall("image") if im.get("name") not in keep]:
             root.remove(im)
@@ -432,10 +459,15 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
     if mode == "resume":
         doing("lấy lại task theo id")
         task = _verify_identity(client, st, prefix, project)
+        try:
+            kieu = check_project_labels(find_project(client, project), point_names, labels)
+        except SystemExit:
+            kieu = io_.kieu_labels(labels)                         # label project đã đổi sau khi tạo task: làm tiếp theo kiểu của file label, CVAT báo nếu nhập sai
         _say(3, f"project {project} (id {task.project_id}), làm tiếp task id {task.id}")
         _say(4, f"bỏ qua tạo task (đã có id {task.id})")
     else:
-        project_id = get_project_id(client, project, labels, point_names)
+        proj, kieu = get_project(client, project, labels, point_names)
+        project_id = proj.id
         _say(3, f"project {project} (id {project_id}), {len(io_.groups_from_names(point_names))} label skeleton theo nhóm đủ {len(point_names)} điểm")
         same = [t for t in client.tasks.list() if t.name == task_name and t.project_id == project_id]
         if same:
@@ -481,10 +513,10 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
                 _say(5, f"task đã có {n_ann} nhãn: KHÔNG nhập lại (nhập sẽ ghi đè nhãn đã có)")
             else:
                 keep = set(nhan_names) if cu else None                          # bản cũ: XML có ảnh Gán tay thì lọc, chỉ nhập Nhận
-                xml_use = _xml_for_frames(xml_path, frames, run_dir, keep)
+                xml_use = _xml_for_frames(xml_path, frames, run_dir, keep, io_.ten_so(point_names) if kieu == io_.KIEU_SO else None)
                 doing("nhập nhãn nháp")
                 _say(5, f"nhập {len(nhan_imgs)} Nhận + {len(tay_nhap)} Gán tay có nháp bằng {io_.FORMAT_IMPORT}"
-                        + ("" if xml_use == xml_path else " (id ảnh đã ghép theo frame thật)"))
+                        + ("" if xml_use == xml_path else " (id ảnh đã ghép theo frame thật" + (", nhãn điểm đổi sang số 1..50 như project" if kieu == io_.KIEU_SO else "") + ")"))
                 task.import_annotations(io_.FORMAT_IMPORT, xml_use)
         else:
             _say(5, "không có mặt Nhận và không có Gán tay có nháp, không nhập nhãn")
@@ -496,7 +528,7 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
     check_path = os.path.join(run_dir, "check.zip")
     _say(6, f"xuất {io_.FORMAT_EXPORT} (chỉ nhãn) để kiểm")
     task.export_dataset(io_.FORMAT_EXPORT, check_path, include_images=False)
-    res = io_.check_faces(io_.parse_annotations(io_.read_zip_annotations(check_path)), nhan_names, tay_names, point_names, tay_nhap)
+    res = io_.check_faces(io_.parse_annotations(io_.read_zip_annotations(check_path), point_names), nhan_names, tay_names, point_names, tay_nhap)
     st["check"] = res
     if not res["ok"]:
         _fail(run_dir, st, f"Kiểm sau khi nhập KHÔNG đạt: {res['n_day_du']}/{res['n_nhan']} mặt Nhận có đủ {len(point_names)} điểm kèm low_conf"

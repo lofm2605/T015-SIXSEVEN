@@ -1,7 +1,7 @@
 """Đồng hồ bấm giờ gán nhãn ở ĐẦU trang rà soát (logic ở dong_ho.py; không import gradio ở đầu module). Không còn tab riêng.
 
 MỖI ĐỢT MỘT ĐỒNG HỒ (QĐ-007): giờ của đợt này không lẫn vào đợt khác. Một chip thấy ở mọi tab: ⏱ mm:ss · trạng thái · người · đợt, kèm MỘT nút Pause/Resume (Start với đợt đang chờ).
-Chip theo ĐỢT CỦA TRANG (đang chạy thì theo phiên đang chạy); đợt khác của người rà có đồng hồ thì ghi mờ cạnh chip. Đồng hồ tự chạy khi bấm Nạp ảnh (auto_start) hoặc Review batch sang đợt chưa có đồng hồ (theo_trang): người là người rà
+Chip theo ĐỢT CỦA TRANG (đang chạy thì theo phiên đang chạy); chip không liệt kê các đợt khác (xem giờ từng đợt ở tab Các đợt). Đồng hồ tự chạy khi bấm Nạp ảnh (auto_start) hoặc Review batch sang đợt chưa có đồng hồ (theo_trang): người là người rà
 của trang (tên chữ/số/_/-), nhóm lấy từ config/nhom_thi_nghiem.json, không có thì assisted. Upload & Open: đồng hồ chuyển sang đợt mới; Upload & Continue lúc đang có đồng hồ ở đợt khác: đợt mới
 chờ ở 00:00. Chuyển trang sang đợt khác (Review batch...) thì đồng hồ đang chạy đi theo trang (theo_trang). mm:ss chạy mượt bằng JS ở trình duyệt (không gọi server mỗi giây); nguồn sự
 thật là đồng hồ phía server, `gr.Timer(15)` chỉ đồng bộ lại. Save timing (timing_<Pk>.csv và gói kết quả của MỘT đợt) hoặc Discard session nằm trong hộp "Đóng trang rà soát?" khi
@@ -29,7 +29,6 @@ DIEU_KIEN_MAC_DINH = "assisted"
 OPTS = dict(show_progress="hidden", api_visibility="private", concurrency_limit=1, concurrency_id="dongho")
 NUT_DUNG, NUT_TIEP, NUT_BAT_DAU = "Pause", "Resume", "Start"
 NUT_BO, NUT_BO_LAN_2 = "Discard session (not saved)", "Click again to discard (not saved)"
-KHAC_TOI_DA = 3                           # chip ghi mờ tối đa ngần này đợt khác
 
 CSS = """
 /* ---------- chip đồng hồ ở đầu trang (màu lấy từ biến theme) ---------- */
@@ -40,7 +39,6 @@ CSS = """
   border: 1px solid var(--border-color-primary); background: var(--block-background-fill); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .dh-mini b { font-size: 16px; white-space: nowrap; flex: none; }
 .dh-mini > span { min-width: 0; }
-.dh-mini .dh-other { font-size: 12px; opacity: .75; border-left: 1px solid var(--border-color-primary); padding-left: 8px; }
 @media (max-width: 600px) { #dh-bar { flex-wrap: wrap !important; } .dh-mini { border-radius: 16px; flex-wrap: wrap; } }
 .dh-mini.s-chay { border-color: #16a34a; background: color-mix(in srgb, #16a34a 14%, transparent); }
 .dh-mini.s-tam_dung, .dh-mini.s-du_mat { border-color: #d97706; background: color-mix(in srgb, #d97706 16%, transparent); }
@@ -103,32 +101,20 @@ def _bieu_tuong(s):
     return "▶" if s.get("chay") else "⏸"
 
 
-def khac_html(cac_dot):
-    """Các đợt KHÁC của người rà có đồng hồ, ghi mờ cạnh chip ('đợt khác: NAP_002 05:10 ⏸ · ...'). Rỗng nếu không có."""
-    if not cac_dot:
-        return ""
-    ds = sorted(cac_dot, key=lambda s: (not s.get("chay"), str(s.get("bat_dau", "")), s.get("dot", "")))
-    items = [f'{e(s.get("dot") or s.get("task") or "?")} {fmt_giay(s.get("giay_phien", 0))} {_bieu_tuong(s)}' for s in ds[:KHAC_TOI_DA]]
-    if len(ds) > KHAC_TOI_DA:
-        items.append(f"+{len(ds) - KHAC_TOI_DA} đợt")
-    return f'<span class="dh-other" title="Mỗi đợt có đồng hồ riêng; xem đủ ở hộp Close page">đợt khác: {" · ".join(items)}</span>'
-
-
 def mini_html(v, ver=None, ly_do="", dot_trang=None):
-    """Chip: đang có phiên thì mm:ss của ĐỢT đó (chạy mượt bằng JS) + trạng thái + người + đợt (+ đợt khác ghi mờ); chưa có thì nói đồng hồ tự chạy khi bấm Nạp ảnh (hoặc lý do chưa chạy được).
+    """Chip: đang có phiên thì mm:ss của ĐỢT đó (chạy mượt bằng JS) + trạng thái + người + đợt; chưa có thì nói đồng hồ tự chạy khi bấm Nạp ảnh (hoặc lý do chưa chạy được).
     dot_trang: đợt trang đang mở, để nói rõ 'chưa chạy cho đợt X'."""
     ver = ver or uuid.uuid4().hex[:8]
-    khac = khac_html(v.get("cac_dot"))
     if not v.get("co_phien"):
         if v.get("hong"):
             ly_do = ly_do or "File trạng thái đồng hồ bị hỏng (đổi tên outputs/timing/dang_chay_<người>.json rồi nạp lại trang)"
         text = ly_do or (f"Đồng hồ chưa chạy cho đợt {dot_trang} · tự chạy khi bấm Nạp ảnh hoặc Review batch" if dot_trang else "Đồng hồ chưa chạy · tự chạy khi bấm Nạp ảnh hoặc Review batch")
-        return f'<div id="dh-mini" class="dh-mini s-chua" role="status"><span aria-hidden="true">⏱</span><span>{e(text)}</span>{khac}</div>'
+        return f'<div id="dh-mini" class="dh-mini s-chua" role="status"><span aria-hidden="true">⏱</span><span>{e(text)}</span></div>'
     st = v["trang_thai"]
     nhan = "⏸ Chờ bắt đầu" if v.get("cho") else TRANG_THAI_VI[st]
     return (f'<div id="dh-mini" class="dh-mini s-{e(st)}" role="status"><span aria-hidden="true">⏱</span>'
             f'<b id="dh-mini-time" data-ver="{ver}" data-giay="{v["giay_phien"]:.3f}" data-chay="{1 if st == "chay" else 0}">{fmt_giay(v["giay_phien"])}</b>'
-            f'<span>{e(nhan)} · {e(v["nguoi"])} · {e(v.get("dot") or v.get("task") or "")}</span>{khac}</div>')
+            f'<span>{e(nhan)} · {e(v["nguoi"])} · {e(v.get("dot") or v.get("task") or "")}</span></div>')
 
 
 def summary_html(r, nguoi):

@@ -59,7 +59,8 @@ def cvat(tmp_path, monkeypatch):
 
 
 def point_names():
-    return [s['name'] for lb in json.load(open('config/face50_label.json', encoding='utf-8')) for s in lb['sublabels']]
+    """Tên 50 điểm trong CONFIG (<nhóm>_<k>); sublabel trên CVAT là số 1..50 (kiểu so) nên suy từ label, không lấy tên sublabel."""
+    return [f"{lb['name']}_{k}" for lb in json.load(open('config/face50_label.json', encoding='utf-8')) for k, _s in enumerate(lb['sublabels'], 1)]
 
 
 def seed_labels():
@@ -253,11 +254,38 @@ def test_xml_ids_rewritten_when_server_orders_frames_differently(cvat, monkeypat
     assert orig == {'F_003.png': '0', 'F_002.png': '1', 'F_001.png': '2'}              # prelabel.xml gốc không bị sửa
 
 
-def test_original_xml_used_when_order_matches(cvat):
+def test_xml_imported_with_numeric_point_labels_and_original_kept(cvat):
+    """Project kiểu số (1..50): nhãn điểm nhập vào CVAT là số, prelabel.xml gốc vẫn giữ tên config."""
+    w = make_run(n_nhan=3, n_tay=1)
+    do_push(w)
+    used = calls(cvat, 'Task.import_annotations')[0]['args'][1]
+    assert used == os.path.join(w['rd'], 'xml', 'prelabel_cvat.xml')
+    labels = re.findall(r'<points label="([^"]+)"', open(used, encoding='utf-8').read())
+    assert labels[:50] == [str(i) for i in range(1, 51)] and re.findall(r'<points label="([^"]+)"', open(w['xml'], encoding='utf-8').read())[:50] == point_names()
+    assert pj(w)['check']['ok']                                                       # xuất lại từ CVAT: số đổi về tên config khi đọc
+
+
+def test_old_style_project_still_gets_config_names(cvat):
+    """Project dựng trước 15/10/2026 (sublabel tên <nhóm>_<k>): vẫn đẩy được, XML gốc được dùng nguyên (không đổi nhãn)."""
+    cu = [dict(lb, sublabels=[dict(s, name=n) for s, n in zip(lb['sublabels'], [f"{lb['name']}_{k}" for k in range(1, len(lb['sublabels']) + 1)])])
+          for lb in seed_labels()]
+    st = state(cvat)
+    st['projects'].append(dict(id=1, name='m28', labels=cu))
+    st['next_project'] = 2
     w = make_run(n_nhan=3, n_tay=1)
     do_push(w)
     assert calls(cvat, 'Task.import_annotations')[0]['args'][1] == w['xml']
-    assert not os.path.exists(os.path.join(w['rd'], 'xml', 'prelabel_cvat.xml'))
+    assert not os.path.exists(os.path.join(w['rd'], 'xml', 'prelabel_cvat.xml')) and pj(w)['check']['ok']
+
+
+def test_project_with_wrong_sublabels_is_refused_in_both_styles(cvat):
+    bad = [dict(lb, sublabels=[dict(s, name='x' + s['name']) for s in lb['sublabels']]) for lb in seed_labels()]
+    st = state(cvat)
+    st['projects'].append(dict(id=1, name='m28', labels=bad))
+    st['next_project'] = 2
+    with pytest.raises(SystemExit, match='không khớp config'):
+        do_push(make_run(n_nhan=3, n_tay=1))
+    assert not calls(cvat, 'tasks.create_from_data')
 
 
 # ---------- lỗi giữa chừng, --resume, --cleanup ----------

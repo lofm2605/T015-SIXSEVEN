@@ -309,3 +309,32 @@ def test_main_end_to_end_and_exit_codes(tmp_path, monkeypatch, capsys):
     assert [r['face_id'] for r in rows] == ['F_001', 'F_002'] and {r['condition'] for r in rows} == {'manual'}
     (tmp_path / 'empty.xml').write_text('<annotations></annotations>', encoding='utf-8')
     assert eval50.main(['--gt', 'empty.xml', '--run', 'R']) == 1                         # không ghép được mặt nào
+
+
+def test_labels_exported_from_a_numeric_cvat_project_read_back_as_config_names(tmp_path):
+    """Project kiểu số (sublabel 1..50): XML xuất từ CVAT có nhãn "1".."50"; đọc lại phải ra tên config, ngang với XML tên cũ (đo NME y hệt)."""
+    cfg = json.load(open(REAL_CFG, encoding='utf-8'))
+    names = [p['name'] for p in cfg['points']]
+    pts = {n: [100 + 3 * i, 120 + 2 * i] for i, n in enumerate(names)}
+    old = xml_of(cfg, {'F_001.png': pts})
+    num = cvat_io.ten_so(names)
+    new = old.decode('utf-8')
+    for n, k in num.items():
+        new = new.replace(f'<points label="{n}"', f'<points label="{k}"')
+    assert new != old.decode('utf-8') and '<points label="35"' in new and 'moingoai_5' not in new
+    a, b = tmp_path / 'cu.xml', tmp_path / 'so.xml'
+    a.write_bytes(old)
+    b.write_bytes(new.encode('utf-8'))
+    got_old, got_new = eval50.read_labels(str(a), cfg), eval50.read_labels(str(b), cfg)
+    assert got_new == got_old and sorted(got_new['F_001']) == sorted(names)
+    ann = cvat_io.parse_annotations(new.encode('utf-8'), names)
+    assert sorted(p for sk in ann['F_001.png']['skeletons'] for p in sk['points']) == sorted(names)
+    assert cvat_io.parse_annotations(new.encode('utf-8'))['F_001.png']['skeletons'][4]['points'].keys() == ann['F_001.png']['skeletons'][4]['points'].keys()   # không đưa tên: đọc từ config của bản đang chạy
+    assert cvat_io.kieu_labels([dict(sublabels=[dict(name=str(i)) for i in range(1, 51)])]) == 'so' and cvat_io.kieu_labels([dict(sublabels=[dict(name='a_1')])]) == 'cu'
+
+
+def test_doi_nhan_diem_only_touches_points_inside_skeletons():
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring('<annotations><image name="a"><skeleton label="g"><points label="g_1"/><points label="g_2"/></skeleton><points label="g_1"/></image></annotations>')
+    assert cvat_io.doi_nhan_diem(root, {'g_1': '1', 'g_2': '2'}) == 2
+    assert [p.get('label') for p in root.iter('points')] == ['1', '2', 'g_1']

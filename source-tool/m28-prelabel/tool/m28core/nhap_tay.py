@@ -218,7 +218,7 @@ def doc_file_nhan(paths, cfg):
             raise NhapTayLoi(f"{seen[h]} và {ten} là cùng một file nhãn (chọn hai lần): bỏ bớt một file.")
         seen[h] = ten
         try:
-            ann = cvat_io.parse_annotations(data)
+            ann = cvat_io.parse_annotations(data, [p["name"] for p in cfg["points"]])
         except (SystemExit, ValueError, OSError) as e:
             raise NhapTayLoi(f"{ten}: {_sach(e, path, ten)}")
         if not ann:

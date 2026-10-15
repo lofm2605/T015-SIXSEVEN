@@ -436,7 +436,7 @@ def test_upload_and_continue_still_starts_the_clock_when_nothing_else_has_one(ap
     assert 'đang chờ' in txt and 'các đợt khác giữ nguyên' in txt and ctx.dong_ho.xem('P5', 'NAP_002')['cho'] and ctx.dong_ho.xem('P5', 'NAP_001')['trang_thai'] == 'tam_dung'
 
 
-def test_chip_shows_the_running_dot_else_the_page_dot_and_lists_the_others(app):
+def test_chip_shows_the_running_dot_else_the_page_dot_without_listing_the_others(app):
     root, ctx, g = app
     c1, c2, c3 = (page_ctx(root, ctx, n) for n in ('NAP_001', 'NAP_002', 'NAP_003'))
     dong_ho_ui.auto_start(None, ctx, 'NAP_001', 5)
@@ -445,16 +445,16 @@ def test_chip_shows_the_running_dot_else_the_page_dot_and_lists_the_others(app):
     g.tick(15)
     d2, d1, d3 = small(c2)[0], small(c1)[0], small(c3)[0]
     o2 = call(d2, 'refresh')                                                          # trang ở NAP_002 đang chạy: 00:15, đợt khác NAP_001 01:00
-    assert '00:15' in o2['dh-mini-wrap'] and 'NAP_002' in o2['dh-mini-wrap'] and 'đợt khác: NAP_001 01:00 ⏸' in o2['dh-mini-wrap'] and o2['state'][0] == 'NAP_002'
+    assert '00:15' in o2['dh-mini-wrap'] and 'NAP_002' in o2['dh-mini-wrap'] and 'đợt khác' not in o2['dh-mini-wrap'] and o2['state'][0] == 'NAP_002'
     o1 = call(d1, 'refresh')                                                          # trang ở NAP_001 nhưng đồng hồ đang chạy ở NAP_002: chip theo phiên đang chạy
     assert '00:15' in o1['dh-mini-wrap'] and 'NAP_002' in o1['dh-mini-wrap'] and o1['state'][0] == 'NAP_002'
     ctx.dong_ho.tam_dung('P5', dot='NAP_002')
     o1 = call(d1, 'refresh')                                                          # không chạy: chip theo đợt của trang, giờ RIÊNG của đợt đó
-    assert '01:00' in o1['dh-mini-wrap'] and 'data-giay="60.000"' in o1['dh-mini-wrap'] and 'đợt khác: NAP_002 00:15 ⏸' in o1['dh-mini-wrap'] and o1['state'][0] == 'NAP_001'
+    assert '01:00' in o1['dh-mini-wrap'] and 'data-giay="60.000"' in o1['dh-mini-wrap'] and 'đợt khác' not in o1['dh-mini-wrap'] and o1['state'][0] == 'NAP_001'
     assert o1['dh-mini-btn']['value'] == 'Resume'
     o3 = call(d3, 'refresh')                                                          # trang ở đợt chưa có đồng hồ: chip nói rõ, KHÔNG mượn giờ đợt khác, nút khoá
     assert 'chưa chạy cho đợt NAP_003' in o3['dh-mini-wrap'] and 'dh-mini-time' not in o3['dh-mini-wrap'] and o3['dh-mini-btn']['interactive'] is False
-    assert 'NAP_001' in o3['dh-mini-wrap'] and 'NAP_002' in o3['dh-mini-wrap'] and o3['state'] == (None, 0)
+    assert 'NAP_001' not in o3['dh-mini-wrap'] and 'NAP_002' not in o3['dh-mini-wrap'] and o3['state'] == (None, 0)      # không liệt kê đợt khác trên chip
 
 
 def test_waiting_dot_shows_start_and_start_pauses_the_other_dot(app):
@@ -577,13 +577,13 @@ def test_discard_acts_on_the_selected_dot_and_names_it(app):
     assert not os.path.exists(os.path.join(root, 'outputs', 'timing', 'timing_P5.csv'))
 
 
-def test_mini_html_lists_at_most_three_other_dots_and_escapes_names(app):
+def test_mini_html_never_lists_other_dots_and_escapes_names(app):
     root, ctx, g = app
-    v = dict(co_phien=True, trang_thai='chay', giay_phien=5.0, nguoi='P5', dot='X', task='demo-X', cho=False,
-             cac_dot=[dict(dot=f'D{i}', giay_phien=60.0 * i, chay=False, bat_dau=f'2026-10-14T18:3{i}:00+07:00') for i in range(5)] + [dict(dot='<b>', giay_phien=1.0, chay=False, bat_dau='2026-10-14T18:00:00+07:00')])
+    v = dict(co_phien=True, trang_thai='chay', giay_phien=5.0, nguoi='P5', dot='<X>', task='demo-X', cho=False,
+             cac_dot=[dict(dot=f'D{i}', giay_phien=60.0 * i, chay=False, bat_dau=f'2026-10-14T18:3{i}:00+07:00') for i in range(5)])
     h = dong_ho_ui.mini_html(v)
-    assert h.count(' ⏸') == 3 and '+3 đợt' in h and '&lt;b&gt;' in h and '<b>' not in h.replace('<b id="dh-mini-time"', '').replace('</b>', '')
-    assert dong_ho_ui.khac_html([]) == '' and 'đợt khác' not in dong_ho_ui.mini_html(dict(co_phien=True, trang_thai='chay', giay_phien=1.0, nguoi='P5', dot='X', cho=False))
+    assert 'đợt khác' not in h and 'D1' not in h and ' ⏸' not in h and 'dh-other' not in h and '&lt;X&gt;' in h and '<X>' not in h
+    assert not hasattr(dong_ho_ui, 'khac_html') and 'dh-other' not in dong_ho_ui.mini_html(dict(co_phien=False, cac_dot=v['cac_dot']), dot_trang='Y')
 
 
 def test_the_pause_message_names_the_dot(app, capsys):

@@ -202,7 +202,7 @@ def test_committed_label_matches_config(committed):
     assert make_label.build_labels(committed['cfg']) == committed['label']
     assert [lb['name'] for lb in committed['label']] == GROUPS                                   # bảy label skeleton, mỗi nhóm một
     sub = [s for lb in committed['label'] for s in lb['sublabels']]
-    assert [s['name'] for s in sub] == [p['name'] for p in committed['cfg']['points']]
+    assert [s['name'] for s in sub] == [str(i) for i in range(1, 51)]                            # sublabel tên SỐ 1..50 như tool (cvat_io.ten_so)
 
 
 # ---------- hoán vị gương ----------

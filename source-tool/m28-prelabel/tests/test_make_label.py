@@ -50,11 +50,12 @@ def test_seven_skeleton_labels_one_per_group_with_50_sublabels_in_config_order(c
     assert [lb['name'] for lb in labels] == GROUPS                                              # tên label = tên nhóm, thứ tự nhóm của config
     assert all(lb['type'] == 'skeleton' and lb['attributes'] == [] for lb in labels)
     assert [len(lb['sublabels']) for lb in labels] == COUNTS and sum(COUNTS) == 50
-    assert [s['name'] for lb in labels for s in lb['sublabels']] == [p['name'] for p in cfg['points']]   # 50 tên theo thứ tự config, mỗi tên đúng một lần
+    assert [s['name'] for lb in labels for s in lb['sublabels']] == [str(i) for i in range(1, 51)]   # CVAT hiện SỐ 1..50 theo thứ tự config, đúng số trên ảnh chồng của tool
     assert all(s['type'] == 'points' for lb in labels for s in lb['sublabels'])
+    num = {p['name']: str(i + 1) for i, p in enumerate(cfg['points'])}
     for lb in labels:                                                                           # mỗi skeleton chỉ có điểm của nhóm mình
-        assert {make_label.groups_of(cfg['points'])[lb['name']][i]['name'] for i in range(len(lb['sublabels']))} == {s['name'] for s in lb['sublabels']}
-        assert all(s['name'].rsplit('_', 1)[0] == lb['name'] for s in lb['sublabels'])
+        assert [s['name'] for s in lb['sublabels']] == [num[p['name']] for p in make_label.groups_of(cfg['points'])[lb['name']]]
+        assert all(p['group'] == lb['name'] for p in make_label.groups_of(cfg['points'])[lb['name']])
     assert 'face50' not in [lb['name'] for lb in labels]                                        # không còn label một-skeleton cũ
 
 
@@ -197,3 +198,21 @@ def test_bad_configs_are_rejected(cfg):
     quote['points'][0]['name'] = 'a"b'
     with pytest.raises(SystemExit, match='không hợp lệ'):
         make_label.build_labels(quote)
+
+
+def test_old_style_labels_keep_config_names_and_svg_matches_sublabels(cfg):
+    cu = make_label.build_labels(cfg, 'cu')
+    assert [s['name'] for lb in cu for s in lb['sublabels']] == [p['name'] for p in cfg['points']]
+    for kieu in ('so', 'cu'):
+        for lb in make_label.build_labels(cfg, kieu):                                           # nút trong svg nối đúng tên sublabel của kiểu đó
+            assert re.findall(r'data-label-name="([^"]+)"', lb['svg']) == [s['name'] for s in lb['sublabels']]
+    with pytest.raises(SystemExit, match='không hợp lệ'):
+        make_label.build_labels(cfg, 'khac')
+
+
+def test_numeric_style_needs_config_names_group_k_in_order(cfg):
+    bad = copy.deepcopy(cfg)
+    bad['points'][1]['name'], bad['points'][2]['name'] = bad['points'][2]['name'], bad['points'][1]['name']
+    with pytest.raises(SystemExit, match='k = 1..n'):
+        make_label.build_labels(bad)
+    assert make_label.build_labels(bad, 'cu')                                                    # kiểu cũ không đòi thứ tự k

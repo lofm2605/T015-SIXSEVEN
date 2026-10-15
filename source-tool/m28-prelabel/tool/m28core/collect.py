@@ -157,7 +157,7 @@ def push_info(task, runs_dir="runs"):
 def analyze(xml_bytes, point_names, tay_nhap=None):
     """Số liệu của một file xuất: ảnh, mặt có skeleton, mặt đủ điểm, điểm thiếu, điểm low_conf bật.
     tay_nhap (tên file các mặt Gán tay có nháp, từ push.json bản 2): thêm n_low_on_nhan / n_low_on_tay (low_conf bật ở mặt Gán tay có nháp)."""
-    ann = io_.parse_annotations(xml_bytes)
+    ann = io_.parse_annotations(xml_bytes, point_names)           # nhãn số 1..50 của CVAT được đổi về tên config
     need = set(point_names)
     groups = io_.groups_from_names(point_names)
     n_face = n_full = miss = low_on = low_tay = 0

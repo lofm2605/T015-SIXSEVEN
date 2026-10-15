@@ -363,7 +363,7 @@ class Smoke:
         self.pipe_smoke = os.path.join(self.run_dir, "pipeline.json")
         cvat_io.atomic_write_json(self.pipe_smoke, dict(self.pipe, job_size=1))
         with open(self.xml, "rb") as f:
-            ann = cvat_io.parse_annotations(f.read())
+            ann = cvat_io.parse_annotations(f.read(), self.names)
         bad, worst = compare_ann(ann, self.expect, self.names, local=True)
         if bad or sorted(ann) != sorted(n for n, _s, r in IMAGES if r != "tay_trong"):
             return HONG, "XML nháp sinh ra không đọc lại đúng: " + "; ".join(bad or ["sai danh sách ảnh"])
@@ -478,7 +478,9 @@ class Smoke:
                 push._lget(a, "name") == "low_conf" and _text(push._lget(a, "input_type")) == "checkbox" for a in (push._lget(s, "attributes") or []))]
             if no_low:
                 bad.append(f"{g}: {len(no_low)} sublabel không có thuộc tính low_conf kiểu checkbox (ví dụ {no_low[:2]})")
-            gedges = {e for e in self.want_edges if e <= set(want[g])}
+            cfg_g = set(cvat_io.groups_from_names(self.names).get(g, ()))           # tên config của nhóm; sublabel trên server có thể là số 1..50 (kiểu so)
+            sub_of = cvat_io.ten_so(self.names) if cvat_io.kieu_labels(self.labels) == cvat_io.KIEU_SO else {n: n for n in self.names}
+            gedges = {frozenset(sub_of[x] for x in e) for e in self.want_edges if e <= cfg_g}
             bad += [f"{g}: {b}" for b in check_svg(push._lget(lb, "svg"), {push._lget(s, "id"): push._lget(s, "name") for s in subs if push._lget(s, "id") is not None},
                                                  want[g], gedges)]
         if bad:
@@ -603,7 +605,7 @@ class Smoke:
         xml_path = os.path.join(self.run_dir, "raw", raws[0])
         with open(xml_path, "rb") as f:
             data = f.read()
-        ann = cvat_io.parse_annotations(data)
+        ann = cvat_io.parse_annotations(data, self.names)
         probs, worst = compare_ann(ann, self.expect, self.names)
         bad += probs
         st = collect.analyze(data, self.names)
@@ -750,7 +752,7 @@ class Smoke:
             bad.append(f"(b) --overwrite không ghi lại {xml_name} (+ .txt) sau khi dời bản cũ")
         else:
             with open(xml_path, "rb") as f:
-                probs, _w = compare_ann(cvat_io.parse_annotations(f.read()), self.expect, self.names)
+                probs, _w = compare_ann(cvat_io.parse_annotations(f.read(), self.names), self.expect, self.names)
             bad += [f"(b) bản xuất lại: {p}" for p in probs]
             txt_jobs = collect._jobs_from_txt(xml_path[:-4] + ".txt") or []          # .txt chỉ giữ từ đầu của state ("in progress" -> "in")
             if sorted(j["id"] for j in txt_jobs) != ids or any(not re.fullmatch(r"[a-z][a-z ]*", j["state"]) for j in txt_jobs):

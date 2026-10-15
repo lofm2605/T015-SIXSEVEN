@@ -190,7 +190,7 @@ def test_push_19_nhan_2_tay_nhap_1_anh_trong(cvat):
     ann = task_ann(cvat)
     for t in ('T_001.png', 'T_002.png'):
         assert [sk['label'] for sk in ann[t]] == GROUP_LABELS                          # bảy skeleton, mỗi nhóm một, đúng thứ tự nhóm
-        assert [p['label'] for sk in ann[t] for p in sk['points']] == point_names()
+        assert [p['label'] for sk in ann[t] for p in sk['points']] == [str(i) for i in range(1, 51)]    # nhãn điểm trên CVAT là số 1..50 (sublabel của project)
         assert [p['low_conf'] for sk in ann[t] for p in sk['points']] == ['true'] * 50   # CVAT giả: 50 điểm toàn true
     assert 'G_001.png' not in ann                                                     # ảnh trống: không có nhãn
     assert len(ann) == 21

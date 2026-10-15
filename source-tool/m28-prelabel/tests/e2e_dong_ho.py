@@ -164,7 +164,7 @@ def main():
             pg.reload()
             pg.wait_for_selector('#dh-mini-time[data-chay="1"]')
             chip = pg.locator('#dh-mini').inner_text()
-            check('NAP_004' in chip and 'đợt khác: NAP_003' in chip, 'chip theo phiên đang chạy (NAP_004) và ghi mờ giờ riêng của đợt khác (NAP_003)')
+            check('NAP_004' in chip and 'đợt khác' not in chip, 'chip theo phiên đang chạy (NAP_004), không liệt kê đợt khác')
             check(trang_thai(W, 'NAP_003') == 'tam_dung' and trang_thai(W, 'NAP_004') == 'chay', 'mỗi người một phiên chạy: đợt cũ tạm dừng')
             pg.locator('#btn-dong').click()
             pg.wait_for_selector('#dh-dot-dd', state='visible')

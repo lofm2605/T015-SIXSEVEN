@@ -251,7 +251,7 @@ def _doc_nhan(path, cfg):
         else:
             with open(path, "rb") as f:
                 raw = f.read()
-        ann = cvat_io.parse_annotations(raw)
+        ann = cvat_io.parse_annotations(raw, [p["name"] for p in cfg["points"]])
     except (SystemExit, OSError) as e:
         return {}, {}, 0, warns, str(e) or type(e).__name__
     groups = {g: set(v) for g, v in cvat_io.groups_from_names([p["name"] for p in cfg["points"]]).items()}

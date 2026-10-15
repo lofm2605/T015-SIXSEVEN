@@ -6,7 +6,9 @@ Nguồn duy nhất là config/m28_config.json (points[].name/group/side/line/tmp
 
 Phương án CVAT (QĐ-004, thay "một skeleton face50" của QĐ-003): mỗi nhóm là MỘT label skeleton tên đúng tên nhóm (`longmaytrai`, `longmayphai`, `songmui`, `mattrai`, `matphai`,
 `moingoai`, `moitrong`), nên mục "Draw new skeleton" của CVAT liệt kê bảy label riêng, mỗi label một màu (GROUP_COLOR, đúng bảng màu hình minh hoạ DMS của chủ repo).
-Tên sublabel giữ nguyên `<nhóm>_<k>` (50 tên duy nhất, nên collect, eval50, QC vẫn ghép theo tên điểm). Mỗi mặt có bảy skeleton, mỗi nhóm đúng một; mỗi skeleton chỉ có điểm của nhóm
+Tên sublabel trên CVAT là SỐ 1..50 (kiểu "so", từ 15/10/2026, theo yêu cầu chủ repo: CVAT hiện điểm đúng số như trên ảnh chồng của tool); tên điểm trong config vẫn là
+`<nhóm>_<k>` và là tên duy nhất cho nhãn, ánh xạ, đánh giá: push đổi nhãn sang số khi nhập vào CVAT, và cvat_io.parse_annotations đổi số về tên config khi đọc XML từ CVAT
+(project dựng trước ngày này giữ tên cũ kiểu "cu" vẫn dùng được: push nhận ra kiểu của project). `--ten cu` sinh lại file với tên cũ. Mỗi mặt có bảy skeleton, mỗi nhóm đúng một; mỗi skeleton chỉ có điểm của nhóm
 mình, khuôn svg tính riêng cho nhóm (tmpl của nhóm co giãn vào khung 0-100), cạnh nối theo `line` = tên nhóm (mắt và môi nối kín). `low_conf` vẫn là thuộc tính của từng điểm.
 Cái giá: người gán vẽ bảy skeleton mỗi mặt thay vì một (thời gian gán tay thay đổi, P5 cần biết); push, collect, cvat_io, eval50, cvat_smoke đã đổi theo. Màu chỉ có hiệu lực khi label
 được TẠO (CVAT lưu màu trong label), nên project dựng từ label cũ (một skeleton face50, bản v2 hoặc bản đầu của v3) phải dựng lại.
@@ -118,7 +120,9 @@ def _fmt(v):
     return f"{v:.2f}".rstrip("0").rstrip(".")
 
 
-def build_svg(points, lines):
+def build_svg(points, lines, ten=None):
+    """`ten`: {tên điểm trong config: tên sublabel} (kiểu số); không có thì tên config."""
+    ten = ten or {}
     xy = _canvas_coords(points)
     parts = []
     for a, b in edges_of(points, lines):
@@ -127,20 +131,40 @@ def build_svg(points, lines):
                      f'data-node-from="{a}" data-node-to="{b}"></line>')
     for i, (p, (x, y)) in enumerate(zip(points, xy), 1):
         parts.append(f'<circle r="{NODE_R}" cx="{_fmt(x)}" cy="{_fmt(y)}" data-type="element node" data-element-id="{i}" '
-                     f'data-node-id="{i}" data-label-name="{p["name"]}"></circle>')
+                     f'data-node-id="{i}" data-label-name="{ten.get(p["name"], p["name"])}"></circle>')
     return "\n".join(parts)
 
 
-def build_labels(cfg):
-    """Danh sách label dùng làm `labels` khi tạo project: MỘT label skeleton cho mỗi nhóm (tên label = tên nhóm, thứ tự nhóm của config), màu của nhóm."""
+def check_ten_so(points):
+    """Kiểu số cần suy lại tên config từ nhãn CVAT: tên điểm phải là `<nhóm>_<k>` với k = 1..n liên tiếp trong từng nhóm, các nhóm liền nhau theo thứ tự config."""
+    seen, dem = [], {}
+    for p in points:
+        g = p["group"]
+        if not seen or seen[-1] != g:
+            if g in seen:
+                raise SystemExit(f"Nhóm {g} không liền nhau trong config: kiểu tên điểm SỐ trên CVAT cần các nhóm liền nhau theo thứ tự config.")
+            seen.append(g)
+        dem[g] = dem.get(g, 0) + 1
+        if p["name"] != f"{g}_{dem[g]}":
+            raise SystemExit(f"Điểm {p['name']!r} phải tên {g}_{dem[g]} (k = 1..n theo thứ tự trong nhóm) để đổi qua lại với nhãn số của CVAT.")
+
+
+def build_labels(cfg, kieu="so"):
+    """Danh sách label dùng làm `labels` khi tạo project: MỘT label skeleton cho mỗi nhóm (tên label = tên nhóm, thứ tự nhóm của config), màu của nhóm.
+    kieu "so" (mặc định): sublabel tên SỐ 1..50 theo thứ tự config, đúng số trên ảnh chồng của tool; "cu": sublabel tên config `<nhóm>_<k>` (project dựng trước 15/10/2026)."""
     check_config(cfg)
+    if kieu not in ("so", "cu"):
+        raise SystemExit(f"Kiểu tên sublabel {kieu!r} không hợp lệ (chỉ so hoặc cu).")
+    if kieu == "so":
+        check_ten_so(cfg["points"])
+    ten = {p["name"]: str(i + 1) for i, p in enumerate(cfg["points"])} if kieu == "so" else {}
     lines = cfg.get("lines") or {}
     out = []
     for group, pts in groups_of(cfg["points"]).items():
-        sub = [dict(name=p["name"], type="points", color=GROUP_COLOR[group],
+        sub = [dict(name=ten.get(p["name"], p["name"]), type="points", color=GROUP_COLOR[group],
                     attributes=[dict(name=LOW_CONF, mutable=True, input_type="checkbox", default_value="false", values=["false"])])
                for p in pts]
-        out.append(dict(name=group, type="skeleton", color=GROUP_COLOR[group], attributes=[], sublabels=sub, svg=build_svg(pts, lines)))
+        out.append(dict(name=group, type="skeleton", color=GROUP_COLOR[group], attributes=[], sublabels=sub, svg=build_svg(pts, lines, ten)))
     return out
 
 
@@ -148,12 +172,13 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Sinh config/face50_label.json (bảy label skeleton, mỗi nhóm một) từ config/m28_config.json")
     ap.add_argument("--config", default=os.path.join("config", "m28_config.json"))
     ap.add_argument("--out", default=os.path.join("config", "face50_label.json"))
+    ap.add_argument("--ten", choices=("so", "cu"), default="so", help="tên sublabel trên CVAT: so = 1..50 (mặc định), cu = <nhóm>_<k> của bản trước 15/10/2026")
     args = ap.parse_args(argv)
     if not os.path.isfile(args.config):
         raise SystemExit(f"Không thấy {args.config}: chạy từ thư mục source-tool\\m28-prelabel hoặc dùng --config.")
     with open(args.config, encoding="utf-8") as f:
         cfg = json.load(f)
-    labels = build_labels(cfg)
+    labels = build_labels(cfg, args.ten)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(labels, f, ensure_ascii=False, indent=1)
