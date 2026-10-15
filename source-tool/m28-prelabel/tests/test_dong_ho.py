@@ -580,9 +580,9 @@ def test_reboot_with_wall_clock_going_backwards_never_writes_negative(dh):
 def test_bad_person_names_and_bad_inputs_are_refused(dh):
     d, g, root = dh
     for nguoi in ('', 'P5 ', '../P5', 'a b', 'x' * 33, None):
-        with pytest.raises(DongHoLoi, match='chữ, số'):
+        with pytest.raises(DongHoLoi, match='chữ không dấu, số'):
             d.bat_dau(nguoi, 'manual', dot='X1')
-    assert d.bat_dau('Lam_Tran-2', 'manual', dot='X9')['co_phien'] and d.cac_nguoi() == ['Lam_Tran-2']     # tên bất kỳ (chữ, số, _, -) chạy được; không còn P1–P5
+    assert d.bat_dau('Lam-Tran-2', 'manual', dot='X9')['co_phien'] and d.cac_nguoi() == ['Lam-Tran-2']     # tên bất kỳ (chữ, số, _, -) chạy được; không còn P1–P5
     for kw, why in ((dict(dieu_kien='lạ'), 'manual'), (dict(dot='a/b'), 'Tên đợt'), (dict(task='a b'), 'task'), (dict(job='12a'), 'Job'), (dict(khoi='a b'), 'Khối'),
                     (dict(n_mat=0), 'Số mặt'), (dict(n_mat=999999), 'Số mặt'), (dict(n_mat='x'), 'số nguyên'), (dict(seq_dau=0), 'từ 1'), (dict(seq_dau='x'), 'số nguyên')):
         a = dict(dieu_kien='manual', dot='X1', n_mat=3)
@@ -995,3 +995,86 @@ def test_heartbeat_touches_the_running_dot_without_changing_any_rev(dh):
     v = d.nhip('P5', 'B')
     assert v['dot'] == 'B' and {s['dot']: s['rev'] for s in d.liet_ke('P5')} == revs
     assert d.xem('P5', 'B')['lan_cuoi_thay'] > '2026-10-14T18:30:00+07:00' and d.xem('P5', 'B')['giay_phien'] == pytest.approx(70.0)
+
+
+def test_names_differing_only_in_case_are_refused_for_new_sessions(dh):
+    """Windows coi dang_chay_p1.json và dang_chay_P1.json là một file: tên mới chỉ khác chữ hoa/thường với tên đã có thì từ chối; tên đã có file vẫn dùng được."""
+    d, g, root = dh
+    assert d.bat_dau('P1', 'manual', dot='X1')['co_phien']
+    with pytest.raises(DongHoLoi, match='chữ hoa/thường'):
+        d.bat_dau('p1', 'manual', dot='X2')
+    assert d.cac_nguoi() == ['P1']
+    if os.path.normcase('A') == 'A' and not os.path.exists(d.p_state('p1')):     # máy phân biệt hoa/thường (Linux): lỡ có cả hai thì tên đã có vẫn dùng được
+        open(d.p_state('p1'), 'w').write('{}')
+        d.bat_dau('P1', 'manual', dot='X3')
+
+
+def test_state_file_of_a_case_variant_is_reported_as_a_case_problem_not_corruption(dh):
+    """Windows mở dang_chay_P1.json khi hỏi 'p1': báo lệch chữ hoa/thường (không bảo 'Bỏ trạng thái hỏng', vì làm theo sẽ giấu phiên thật của P1)."""
+    d, g, root = dh
+    d.bat_dau('P1', 'manual', dot='X1')
+    raw = open(d.p_state('P1'), encoding='utf-8').read()
+    os.makedirs(d.dir, exist_ok=True)
+    open(os.path.join(d.dir, 'dang_chay_q1.json'), 'w', encoding='utf-8').write(raw.replace('"nguoi": "P1"', '"nguoi": "Q1"'))   # như Windows: tên file và tên trong file khác hoa/thường
+    with pytest.raises(DongHoLoi) as e:
+        d._doc_tep('q1')
+    assert 'chữ hoa/thường' in str(e.value) and 'KHÔNG hỏng' in str(e.value) and not getattr(e.value, 'hong', False)
+
+
+def test_lock_just_created_but_still_empty_is_not_an_orphan(dh):
+    """Trang khác vừa tạo file khoá (O_EXCL) mà chưa kịp ghi pid: không được coi là khoá mồ côi rồi xoá, nếu không hai trang cùng ghi (Xong lưu hai lần)."""
+    from dong_ho import _Khoa
+    d, g, root = dh
+    os.makedirs(d.dir, exist_ok=True)
+    open(d.p_khoa('P5'), 'w').close()
+    assert _Khoa(d, 'P5')._mo_coi(d.p_khoa('P5')) is False
+    old = time.time() - 120
+    os.utime(d.p_khoa('P5'), (old, old))
+    assert _Khoa(d, 'P5')._mo_coi(d.p_khoa('P5')) is True                                # rỗng mà đã cũ: mồ côi
+
+
+def test_orphan_lock_that_cannot_be_removed_times_out_instead_of_spinning(dh, monkeypatch):
+    """Khoá mồ côi mà không xoá được (thư mục, không có quyền, Windows đang chờ xoá): báo bận sau ~3 giây, không quay vòng mãi giữ khoá luồng."""
+    from dong_ho import _Khoa
+    d, g, root = dh
+    os.makedirs(d.dir, exist_ok=True)
+    open(d.p_khoa('P5'), 'w').write(f'{DEAD_PID} {time.time():.0f}')
+    real = os.remove
+
+    def khong_xoa(p, *a, **k):
+        if p == d.p_khoa('P5'):
+            raise PermissionError('không có quyền')
+        return real(p, *a, **k)
+    monkeypatch.setattr(os, 'remove', khong_xoa)
+    t0 = time.time()
+    with pytest.raises(DongHoLoi, match='đang bận'):
+        with _Khoa(d, 'P5'):
+            pass
+    assert time.time() - t0 < 10
+
+
+def test_lock_survives_windows_sharing_errors(dh, monkeypatch):
+    """Windows: tạo khoá gặp "Access denied" (file khoá cũ đang chờ xoá) thì chờ như khoá bận; xoá khoá lúc thả bị antivirus giữ một chút thì thử lại, không để khoá sót."""
+    from dong_ho import _Khoa
+    d, g, root = dh
+    os.makedirs(d.dir, exist_ok=True)
+    real_open, real_remove = os.open, os.remove
+    lan = {'open': 0, 'remove': 0, 'da_khoa': False}
+
+    def mo(p, *a, **k):
+        if p == d.p_khoa('P5') and lan['open'] < 2:
+            lan['open'] += 1
+            raise PermissionError('[WinError 5] Access is denied')
+        return real_open(p, *a, **k)
+
+    def xoa(p, *a, **k):
+        if p == d.p_khoa('P5') and lan['da_khoa'] and lan['remove'] < 2:          # chỉ lúc THẢ khoá
+            lan['remove'] += 1
+            raise PermissionError('[WinError 32] used by another process')
+        return real_remove(p, *a, **k)
+    monkeypatch.setattr(os, 'open', mo)
+    monkeypatch.setattr(os, 'remove', xoa)
+    with _Khoa(d, 'P5'):
+        assert os.path.exists(d.p_khoa('P5'))
+        lan['da_khoa'] = True
+    assert (lan['open'], lan['remove']) == (2, 2) and not os.path.exists(d.p_khoa('P5'))

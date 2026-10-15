@@ -450,7 +450,8 @@ def _steps(client, run_dir, task_name, nhan_imgs, tay_imgs, xml_path, project, p
         write_state(run_dir, st)                                  # TRƯỚC khi gọi create_from_data: chết giữa chừng vẫn biết
         doing("tạo task và tải ảnh")
         _say(4, f"tạo task {task_name}: {len(nhan_imgs) + len(tay_imgs)} ảnh, {len(groups)} job dự kiến ("
-             + (f"mỗi job Nhận {pipe['job_size']} mặt" if pipe["job_size"] else "một job Nhận, một job Gán tay") + ")")
+             + ", ".join(([f"mỗi job Nhận {pipe['job_size']} mặt" if pipe["job_size"] else "một job Nhận"] if nhan_imgs else []) + (["một job Gán tay"] if tay_imgs else []))
+             + ")")
         task = client.tasks.create_from_data(
             spec={"name": task_name, "project_id": project_id},          # không truyền labels: task dùng label của project
             resources=list(nhan_imgs) + list(tay_imgs), resource_type=ResourceType.LOCAL,

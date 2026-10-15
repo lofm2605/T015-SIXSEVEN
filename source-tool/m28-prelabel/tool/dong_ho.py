@@ -42,7 +42,7 @@ from m28core import dang_chay, goi_kq, nhom as nhom_mod  # noqa: E402
 
 PHIEN_BAN = 1                          # định dạng MỘT phiên (khoá phien_ban bên trong mỗi phiên)
 PHIEN_BAN_TEP = 2                      # định dạng tệp dang_chay_<người>.json: {"phien_ban_tep": 2, "cac_dot": {đợt: phiên}}; bản 1 = một phiên ở đầu tệp
-NGUOI_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")      # tên người rà bất kỳ (giống nap_anh.REVIEWER_RE): chữ, số, _ và -, tối đa 32 ký tự
+NGUOI_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,31}")      # tên người rà bất kỳ (= nap_anh.REVIEWER_RE): chỉ chữ không dấu, số và dấu -, bắt đầu bằng chữ hoặc số, tối đa 32 ký tự
 DIEU_KIEN = ("manual", "assisted")
 THU_MUC = os.path.join("outputs", "timing")
 FACETIMER_COLS = ["date", "person", "condition", "task", "job", "block", "seq", "face_id", "seconds", "warmup", "interrupted", "note"]
@@ -140,8 +140,16 @@ def _clean(s, maxlen, what):
         raise DongHoLoi(str(e))
 
 
+NGUOI_CU_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")      # luật tên của bản trước (15/10/2026, có dấu _): chỉ để ĐỌC file đồng hồ đã có, không tạo tên mới
+
+
 def nguoi_hop_le(nguoi):
     return isinstance(nguoi, str) and NGUOI_RE.fullmatch(nguoi) is not None
+
+
+def nguoi_cu(nguoi):
+    """Tên theo luật cũ (có dấu _) mà luật mới không nhận: file đồng hồ của tên này vẫn đọc, tạm dừng, lưu và chuyển sang tên mới được."""
+    return isinstance(nguoi, str) and not nguoi_hop_le(nguoi) and NGUOI_CU_RE.fullmatch(nguoi) is not None
 
 
 class DongHo:
@@ -175,11 +183,24 @@ class DongHo:
         except ValueError:
             return os.path.basename(p)
 
-    @staticmethod
-    def _nguoi(nguoi):
-        if not nguoi_hop_le(nguoi):
-            raise DongHoLoi("Tên người rà không hợp lệ: chỉ gồm chữ, số, _ và -, tối đa 32 ký tự (đặt ở tab Cài đặt). Tên này thành tên file timing_<tên>.csv.")
+    def _co_tep(self, nguoi):
+        return any(os.path.exists(os.path.join(self.dir, f"{dau}{nguoi}{duoi}")) for dau, duoi in (("dang_chay_", ".json"), ("timing_", ".csv")))
+
+    def _nguoi(self, nguoi):
+        if not nguoi_hop_le(nguoi) and not (nguoi_cu(nguoi) and self._co_tep(nguoi)):      # tên cũ có dấu _ chỉ dùng được khi đã có file của nó
+            raise DongHoLoi("Tên người rà không hợp lệ: chỉ chữ không dấu, số và dấu -, bắt đầu bằng chữ hoặc số, tối đa 32 ký tự (đặt ở tab Cài đặt). Tên này thành tên file timing_<tên>.csv.")
         return nguoi
+
+    def _khong_trung_hoa_thuong(self, nguoi):
+        """Tên mới chỉ khác một tên ĐÃ CÓ file ở chữ hoa/thường (p1 và P1): Windows coi là một file (dang_chay_, timing_, gói ketqua_), nên từ chối. Tên đã có file của
+        chính nó thì vẫn cho (máy Linux có thể đã lỡ có cả hai)."""
+        co = self.cac_nguoi()
+        if nguoi in co:
+            return
+        khac = [p for p in co if p.casefold() == nguoi.casefold()]
+        if khac:
+            raise DongHoLoi(f"Đã có người rà tên {khac[0]} (chỉ khác {nguoi} ở chữ hoa/thường): Windows coi hai tên là một file. "
+                            f"Dùng đúng tên {khac[0]} (đặt ở tab Cài đặt, Save name).")
 
     def cac_nguoi(self):
         """Mọi tên người rà có file trong outputs/timing (dang_chay_<tên>.json hoặc timing_<tên>.csv), sắp theo tên. Bỏ file có tên không hợp lệ (kể cả dang_chay_<tên>.hong-….json)."""
@@ -187,7 +208,7 @@ class DongHo:
         for mau, dau, duoi in (("dang_chay_*.json", "dang_chay_", ".json"), ("timing_*.csv", "timing_", ".csv")):
             for f in glob.glob(os.path.join(glob.escape(self.dir), mau)):
                 ten = os.path.basename(f)[len(dau):-len(duoi)]
-                if nguoi_hop_le(ten):
+                if nguoi_hop_le(ten) or nguoi_cu(ten):     # cả tên cũ có dấu _: tạm dừng tất cả, đổi tên vẫn thấy phiên của nó
                     out.add(ten)
         return sorted(out)
 
@@ -208,6 +229,9 @@ class DongHo:
         miss = [k for k in need if k not in st]
         if miss:
             bad("thiếu khoá " + ", ".join(miss))
+        if isinstance(st.get("nguoi"), str) and st["nguoi"] != nguoi and st["nguoi"].casefold() == str(nguoi).casefold():
+            raise DongHoLoi(f"Tên {nguoi} chỉ khác {st['nguoi']} ở chữ hoa/thường: máy này (Windows) coi là cùng một file. Dùng đúng tên {st['nguoi']} "
+                            "(tab Cài đặt, Save name). File trạng thái KHÔNG hỏng: đừng bấm Bỏ trạng thái hỏng.")
         if st["phien_ban"] != PHIEN_BAN or st["nguoi"] != nguoi or st["trang_thai"] not in TRANG_THAI_OK or st["dieu_kien"] not in DIEU_KIEN:
             bad("giá trị lạ")
         segs = st["doan"]
@@ -391,6 +415,61 @@ class DongHo:
         if rev is not None and rev != st["rev"]:
             raise DongHoLoi("Đồng hồ vừa đổi ở tab khác, đã tải lại: kiểm lại rồi bấm lại.", cu=True)
 
+    def chuyen_phien(self, cu, moi):
+        """Chuyển các phiên CHƯA LƯU của người `cu` sang người `moi`: đồng hồ đã chạy dưới tên MẶC ĐỊNH (P1, lúc chưa đặt tên) thuộc về tên vừa đặt ở tab Cài đặt.
+        Chỉ chuyển phiên của đợt mà `moi` chưa có phiên (trùng đợt thì giữ ở `cu`). Không đụng timing_<cu>.csv (dòng đã lưu). Trả [đợt đã chuyển]."""
+        self._chan_dong()
+        if (nguoi_hop_le(cu) or nguoi_cu(cu)) and not os.path.exists(self.p_state(cu)):
+            return []                                   # tên cũ không có phiên nào (kể cả tên cũ có dấu _ chưa từng bấm giờ): không có gì để chuyển, không báo lỗi
+        self._nguoi(cu)
+        self._nguoi(moi)
+        if cu.casefold() == moi.casefold():
+            return []                                   # cùng tên (Windows coi P1 và p1 là một file: khoá hai lần sẽ tự chờ mình)
+        self._khong_trung_hoa_thuong(moi)
+        a, b = sorted((cu, moi))                                           # thứ tự khoá cố định: hai trang đổi tên ngược nhau không khoá chéo
+        with self._khoa(a), self._khoa(b):
+            tep_cu, tep_moi = self._doc_tep(cu), self._doc_tep(moi)
+            goc_moi = dict(tep_moi)                                            # để hoàn tác nếu ghi tệp của tên cũ lỗi
+            g = nhom_mod.nhom_cua(nhom_mod.doc(self.root), moi)
+            moved = []
+            for dot, st in list(tep_cu.items()):
+                if dot in tep_moi:
+                    continue
+                st["nguoi"] = moi
+                st["rev"] = int(st.get("rev", 0)) + 1
+                ma = [m for m in st.get("canh_bao_ma", []) if m not in ("chua_co_nhom", "lech_nhom")]
+                if g is None:
+                    ma.append("chua_co_nhom")
+                elif g != st["dieu_kien"]:
+                    if "chua_co_nhom" in st.get("canh_bao_ma", []):          # nhóm cũ chỉ là mặc định (tên cũ chưa xếp nhóm): theo nhóm của tên mới
+                        st["dieu_kien"] = g
+                    else:
+                        ma.append("lech_nhom")
+                st["canh_bao_ma"], st["nhom_cau_hinh"] = ma, g or ""
+                st.tep = tep_moi
+                tep_moi[dot] = st
+                del tep_cu[dot]
+                moved.append(dot)
+            truoc = {}
+            chay = [tep_moi[d] for d in moved if tep_moi[d].get("trang_thai") == "chay"]
+            if chay:                                    # mỗi người một đồng hồ chạy: phiên vừa chuyển (trang đang dùng) chạy tiếp, phiên đang chạy khác của tên mới tạm dừng
+                truoc = {k: json.loads(json.dumps(dict(o))) for k, o in goc_moi.items() if o is not chay[0] and o.get("trang_thai") == "chay"}   # bản sâu: tạm dừng sửa cả các đoạn giờ bên trong
+                self._tam_dung_cac_phien_khac(tep_moi, chay[0])
+            if moved:
+                self._viet_tep(moi, tep_moi)
+                try:
+                    self._viet_tep(cu, tep_cu)
+                except OSError as e:                                           # tệp của tên cũ bị khoá (antivirus...): hoàn tác để không có phiên ở cả hai tên
+                    for k, v in truoc.items():                                 # phiên vừa bị tạm dừng: trả lại như cũ
+                        goc_moi[k].clear()
+                        goc_moi[k].update(v)
+                    try:
+                        self._viet_tep(moi, goc_moi)
+                    except OSError:
+                        pass
+                    raise DongHoLoi(f"Chưa chuyển được đồng hồ của {cu} sang {moi}: không ghi được tệp trạng thái ({type(e).__name__}). Đồng hồ vẫn ở tên {cu}.")
+        return moved
+
     def _chan_dong(self):
         if self.closing:
             raise DongHoLoi("Trang đang đóng: không ghi được nữa.")
@@ -515,6 +594,7 @@ class DongHo:
         bấm lần hai (cùng ô) mới bắt đầu."""
         self._chan_dong()
         self._nguoi(nguoi)
+        self._khong_trung_hoa_thuong(nguoi)
         if dieu_kien not in DIEU_KIEN:
             raise DongHoLoi("Chọn điều kiện manual (gán tay hoàn toàn) hoặc assisted (dùng tool, sửa nháp).")
         dot = _clean(dot, 64, "Đợt").strip()
@@ -1197,13 +1277,13 @@ class _Khoa:
                     f.write(f"{os.getpid()} {time.time():.0f}")
                 self.co = True
                 return
-            except FileExistsError:
+            except (FileExistsError, PermissionError):     # Windows: file khoá đang chờ xoá cho "Access denied" thay vì "đã có": chờ như khoá bận
                 if self._mo_coi(p):
                     try:
                         os.remove(p)
+                        continue
                     except OSError:
-                        pass
-                    continue
+                        pass                                # không xoá được (thư mục, không có quyền, Windows đang chờ xoá): chờ như khoá bận, không quay vòng mãi
                 if time.time() > t_end:
                     raise DongHoLoi("Đồng hồ đang bận ở một trang khác (khoá file): thử lại sau vài giây.")
                 time.sleep(0.05)
@@ -1212,8 +1292,8 @@ class _Khoa:
         try:
             with open(p, encoding="utf-8") as f:
                 pid_s, _s, t_s = f.read().partition(" ")
-            cu = time.time() - float(t_s or 0) > KHOA_CU_GIAY
-            return cu or not dang_chay.pid_alive(int(pid_s))
+            pid, t = int(pid_s), float(t_s)             # khoá vừa tạo, chưa kịp ghi (rỗng): ValueError -> xét theo giờ sửa file, KHÔNG coi là mồ côi
+            return time.time() - t > KHOA_CU_GIAY or not dang_chay.pid_alive(pid)
         except (OSError, ValueError):
             try:
                 return time.time() - os.path.getmtime(p) > KHOA_CU_GIAY
@@ -1221,9 +1301,13 @@ class _Khoa:
                 return True
 
     def __exit__(self, *exc):
-        try:
-            os.remove(self.dh.p_khoa(self.nguoi))
-        except OSError:
-            pass
+        for i in range(10):                             # Windows: antivirus/OneDrive giữ file một chút thì xoá lỗi; thử lại, kẻo khoá mang pid sống chặn chính người này 30 giây
+            try:
+                os.remove(self.dh.p_khoa(self.nguoi))
+                break
+            except FileNotFoundError:
+                break
+            except OSError:
+                time.sleep(0.02)
         self.tl.release()
         return False

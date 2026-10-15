@@ -26,6 +26,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 if TOOL_DIR not in sys.path:
@@ -40,7 +41,121 @@ MUC_TIEU_MAT_HONG = 10.0                 # % IOD (eval50.BAD)
 NGUONG_SUA = so_sanh.NGUONG_SUA_MAC_DINH
 NGUONG_SUA_MIN, NGUONG_SUA_MAX = 0.5, 10.0
 DIEU_KIEN_VI = {"manual": "Gán tay hoàn toàn (manual)", "assisted": "Dùng tool, sửa nháp (assisted)"}
-THU_MUC_GOI = (os.path.join("outputs", "ket_qua"), os.path.join("outputs", "goi_nhom"))
+THU_MUC_DA_NAP = os.path.join("outputs", "goi_da_nap")                 # gói của người khác nhóm trưởng đã nạp ở tab Thống kê: lưu lại để mở trang lần sau vẫn còn
+THU_MUC_GOI = (os.path.join("outputs", "ket_qua"), os.path.join("outputs", "goi_nhom"), THU_MUC_DA_NAP)
+_KHOA_GOI_NAP = threading.RLock()                                            # Load & Calculate và Remove package chạy ở hai hàng đợi khác nhau: không chuyển file chồng nhau
+THU_MUC_DA_NAP_BO = "_da_bo"                                                # thư mục con: gói đã gỡ (không xoá; thống kê không đọc thư mục con)
+_TEN_GOI_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,150}\.(?:zip|json)", re.I)
+
+
+def _chuyen_vao(src, d, ten, copy=True):
+    """Chép (copy=True) hoặc chuyển file `src` vào thư mục `d` với tên `ten`; trùng tên thì thêm _2, _3... Ghi qua file tạm rồi đổi tên. Trả tên đã dùng."""
+    os.makedirs(d, exist_ok=True)
+    stem, ext = os.path.splitext(ten)
+    cand, k = ten, 1
+    while os.path.exists(os.path.join(d, cand)):
+        k += 1
+        cand = f"{stem}_{k}{ext}"
+    dst = os.path.join(d, cand)
+    if copy:
+        tmp = dst + ".tmp"
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dst)
+    else:
+        os.replace(src, dst)
+    return cand
+
+
+_moi_hon = goi_kq.moi_hon                       # một cách so "mới hơn" cho cả lúc lưu gói và lúc quét (goi_kq.quet)
+
+
+def luu_goi_nap(project_root, paths, names=None):
+    """Lưu các gói tải lên ở tab Thống kê vào outputs\\goi_da_nap (giữ nguyên byte, file gói không bị sửa) để lần mở trang sau vẫn còn. Gói hỏng thì không lưu.
+    Cùng mã phiên với gói đã có trong các thư mục gói mặc định (outputs\\ket_qua, goi_nhom, goi_da_nap): nội dung giống hệt, hoặc bản tải lên cũ hơn/bằng (tao_luc),
+    thì không chép thêm (co_san); bản tải lên MỚI HƠN (ví dụ xuất lại gói có kèm nhãn) thì lưu (moi_hon) và chuyển bản cũ của phiên đó trong goi_da_nap vào _da_bo.
+    Trả dict(luu=[tên], moi_hon=[tên], da_bo=[tên file bản cũ đã chuyển vào _da_bo], co_san=[tên], loi=[(tên file tải lên, lý do)],
+    chua_luu=[tên file tải lên hợp lệ mà không chép được: ô nạp nên giữ để bấm lại])."""
+    with _KHOA_GOI_NAP:
+        return _luu_goi_nap(project_root, paths, names)
+
+
+def _luu_goi_nap(project_root, paths, names):
+    out = dict(luu=[], moi_hon=[], da_bo=[], co_san=[], loi=[], chua_luu=[])
+    da_co = {nd["phien"]: nd for _t, nd in goi_kq.quet([os.path.join(project_root, x) for x in THU_MUC_GOI], names)["tot"]}
+    d = os.path.join(project_root, THU_MUC_DA_NAP)
+    for p in paths or ():
+        ten = os.path.basename(p)
+        try:
+            nd, _w = goi_kq.doc_goi(p, names)
+        except goi_kq.GoiLoi as e:
+            out["loi"].append((ten, str(e)))
+            continue
+        cu = da_co.get(nd["phien"])
+        moi_hon = False
+        if cu is not None:
+            if goi_kq.sha256_noi_dung(cu) == goi_kq.sha256_noi_dung(nd) or not _moi_hon(nd, cu):
+                out["co_san"].append(ten)
+                continue
+            moi_hon = True
+        if not _TEN_GOI_RE.fullmatch(ten):
+            ten = "ketqua_" + re.sub(r"[^A-Za-z0-9_.-]", "_", nd["phien"]) + os.path.splitext(p)[1].lower()
+        try:
+            out["moi_hon" if moi_hon else "luu"].append(_chuyen_vao(p, d, ten))     # chép bản mới TRƯỚC: lỗi thì bản cũ vẫn còn nguyên chỗ
+        except OSError as e:
+            out["loi"].append((os.path.basename(p), f"không lưu được vào {THU_MUC_DA_NAP} ({type(e).__name__})"))   # tên file tải lên: tab vẫn tính từ file đó
+            out["chua_luu"].append(os.path.basename(p))
+            continue
+        if moi_hon:
+            try:
+                out["da_bo"] += _bo_ban_cu(project_root, nd, names)
+            except OSError:
+                pass                                                           # bản cũ còn lại: quet vẫn chọn bản mới hơn theo tao_luc
+        da_co[nd["phien"]] = nd
+    return out
+
+
+def _bo_ban_cu(project_root, nd_moi, names=None):
+    """Chuyển (không xoá) các file trong outputs\\goi_da_nap cùng mã phiên với `nd_moi` nhưng khác nội dung vào goi_da_nap\\_da_bo (bản cũ của một gói vừa có bản mới hơn)."""
+    d = os.path.join(project_root, THU_MUC_DA_NAP)
+    if not os.path.isdir(d):
+        return []
+    sha_moi, out = goi_kq.sha256_noi_dung(nd_moi), []
+    for f in sorted(os.listdir(d)):
+        p = os.path.join(d, f)
+        if not os.path.isfile(p) or not f.lower().endswith((".zip", ".json")):
+            continue
+        try:
+            nd, _w = goi_kq.doc_goi(p, names)
+        except goi_kq.GoiLoi:
+            continue
+        if nd["phien"] == nd_moi["phien"] and goi_kq.sha256_noi_dung(nd) != sha_moi:
+            out.append(_chuyen_vao(p, os.path.join(d, THU_MUC_DA_NAP_BO), f, copy=False))
+    return out
+
+
+def bo_goi_nap(project_root, phien, names=None):
+    """Gỡ gói có mã phiên `phien` khỏi outputs\\goi_da_nap: CHUYỂN (không xoá) mọi file của phiên đó (.zip và .json) vào outputs\\goi_da_nap\\_da_bo.
+    Chỉ đụng thư mục goi_da_nap (gói của chính máy này trong outputs\\ket_qua và bản nhập tay trong goi_nhom không gỡ ở đây). Trả [tên file đã chuyển]."""
+    with _KHOA_GOI_NAP:
+        return _bo_goi_nap(project_root, phien, names)
+
+
+def _bo_goi_nap(project_root, phien, names):
+    d = os.path.join(project_root, THU_MUC_DA_NAP)
+    if not phien or not os.path.isdir(d):
+        return []
+    out = []
+    for f in sorted(os.listdir(d)):
+        p = os.path.join(d, f)
+        if not os.path.isfile(p) or not f.lower().endswith((".zip", ".json")):
+            continue
+        try:
+            nd, _w = goi_kq.doc_goi(p, names)
+        except goi_kq.GoiLoi:
+            continue
+        if nd["phien"] == phien:
+            out.append(_chuyen_vao(p, os.path.join(d, THU_MUC_DA_NAP_BO), f, copy=False))
+    return out
 NGUON_NHAP_TAY = "nhap_tay"              # gói do nhóm trưởng nhập tay (m28core\\nhap_tay.py) cho người nhóm manual gán thẳng trong CVAT: tính như gói của đồng hồ
 TIMING_UU_TIEN = os.path.join("outputs", "timing")
 HAN_CHE = ("Thiết kế hai nhóm độc lập: tốc độ từng người khác nhau lẫn vào kết quả (nên có một đợt khởi động chung hoặc chia nhóm cân tốc độ); ít người mỗi nhóm thì khoảng tin cậy rất rộng.",
@@ -214,8 +329,9 @@ def doc_nhan_raw(project_root, cfg, nhom_cfg, luot_nhap, tat_ca_task, mat_phien_
             if not draft:
                 notes.append(dict(file=bang_mat.rel(project_root, paths[0]), task=task, nguoi=who, dieu_kien=cond,
                                   ghi_chu="không có nháp liên kết: chọn 'Lượt chứa nháp' đã dùng để dựng task (không đoán lượt)"))
+        ten_file = f"{task}_{who}_{day}.xml"                           # tên file nhãn (bản gộp job cũng mang tên này)
         for stem, pts in labels.items():
-            if (who, stem) in mat_phien_goi:
+            if (who, stem) in mat_phien_goi or (who, stem, ten_file) in mat_phien_goi:
                 continue
             faces.append(dict(nguoi=who, dieu_kien=cond, anh=stem, nhan=pts, nhap=(draft or {}).get(stem), nguon="raw", task=task, dot=run))
         files.append(dict(file=", ".join(bang_mat.rel(project_root, p) for p in paths) if from_jobs else bang_mat.rel(project_root, paths[0]), task=task, nguoi=who, dieu_kien=cond,
@@ -282,6 +398,11 @@ def tinh(project_root, luot_nhap=None, nguong_sua=NGUONG_SUA, tat_ca_task=False,
     goi_ok, doi_ten = ten_nguoi.ap_dung(quet["tot"], ten_nguoi.doc(project_root))             # nhóm trưởng đặt lại tên người cho từng gói (tab Thống kê)
     phien_goi = {nd["phien"] for _t, nd in goi_ok}
     mat_goi = {(nd["nguoi"], r["anh"]) for _t, nd in goi_ok for r in nd.get("ket_qua", [])}
+    for _t, nd in goi_ok:                           # gói đã đặt tên: nhãn raw\\ theo TÊN GỐC chỉ bị bỏ khi đúng là file nhãn gói đã dùng (nhan_file), vì tên gốc
+        goc = nd.get("nguoi_goc")                   # hay là P1 mặc định mà người P1 thật cũng có file raw riêng
+        if goc and goc != nd["nguoi"] and nd.get("nhan_file"):
+            for r in nd.get("ket_qua", []):
+                mat_goi.add((goc, r["anh"], nd["nhan_file"]))
     faces = [m for _t, nd in goi_ok for m in mat_tu_goi(nd)]
     rows_t = [r for t, nd in goi_ok for r in hang_thoi_gian_goi(nd, t)]
     files_raw, notes_raw, warns, files_timing, loi_timing, trung_timing = [], [], [], [], [], []

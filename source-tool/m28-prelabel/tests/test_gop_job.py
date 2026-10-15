@@ -204,7 +204,7 @@ def test_finish_model_reasons(proj):
     r = m(env={'CVAT_URL': 'http://localhost:9999', 'CVAT_ACCESS_TOKEN': TOKEN})
     assert not r['enabled'] and 'localhost:9999' in r['reason'] and URL in r['reason'] and 'đúng server' in r['reason']
     for who in ('a b', None, 'x' * 33, ''):
-        assert not m(who)['enabled'] and 'chữ, số' in m(who)['reason'], who
+        assert not m(who)['enabled'] and 'chữ không dấu, số' in m(who)['reason'], who
     assert not m(job_running=True)['enabled'] and 'Đang có việc chạy' in m(job_running=True)['reason']
     assert dang_chay.acquire(rd, 'collect')
     assert 'Đang có việc chạy cho đợt này (collect)' in m()['reason']
@@ -447,7 +447,7 @@ def test_invalid_reviewer_name_is_refused(proj):
     """(g) tên người rà của trang không hợp lệ (có dấu cách): từ chối, không mở hộp, không chạy gì."""
     app = make_app(proj, reviewer='a b')
     r = click(app)
-    assert not shown(r) and 'chữ, số' in r['msg'] and not app.seen and app.ctx.gop is None
+    assert not shown(r) and 'chữ không dấu, số' in r['msg'] and not app.seen and app.ctx.gop is None
 
 
 def test_cvat_link_mismatch_is_refused(proj):
@@ -784,3 +784,109 @@ def test_unexpected_error_after_saving_does_not_restart_the_clock(proj, monkeypa
     monkeypatch.setattr(gop_job, 'write_gop', lambda *a, **k: (_ for _ in ()).throw(TypeError('x')))
     r = tick(app)
     assert 'Lỗi không lường trước khi gộp job của đợt NAP_001 (TypeError)' in r['msg'] and app.ctx.gop is None and clock(app) == 'tam_dung'
+
+
+# ---------- tab Nạp ảnh: phải có link/token CVAT trước khi nạp ----------
+def test_upload_without_cvat_opens_the_settings_dialog_and_stages_nothing(proj, monkeypatch):
+    """Chưa có CVAT_URL / token: bấm Upload & Continue hay Upload & Open thì KHÔNG nạp gì, mở hộp (OK sang tab Cài đặt / Cancel), nói rõ thiếu gì."""
+    monkeypatch.delenv('CVAT_URL', raising=False)
+    monkeypatch.delenv('CVAT_ACCESS_TOKEN', raising=False)
+    app = make_app(proj)
+    import review_app as ra
+    for name in ('on_start', 'on_start_open'):
+        res = nap_fn(app, name)(None, '', '', None)
+        modal, body = res[-2], res[-1]
+        assert modal == {'__type__': 'update', 'visible': True}
+        assert 'Chưa kết nối CVAT' in body and 'link CVAT' in body and 'token CVAT' in body and 'OK' in body and 'Cancel' in body
+    assert sorted(os.listdir(os.path.join(proj.root, 'runs'))) == sorted(['_nap', RUN])                   # không tạo lượt NAP_xxx nào
+    blocks = {getattr(b, 'elem_id', None): b for b in app.demo.blocks.values()}
+    assert blocks['nap-cvat-ok'].value == 'OK' and blocks['nap-cvat-cancel'].value == 'Cancel' and blocks['nap-cvat'].visible is False
+    assert '#cd-url' in ra.CVAT_SANG_CAI_DAT_JS and '#cd-reviewer' in ra.CVAT_SANG_CAI_DAT_JS
+    src = open(os.path.join(os.path.dirname(ra.__file__), 'review_app.py'), encoding='utf-8').read()
+    assert 'return gr.Tabs(selected="caidat"), ("ten" if chua_dat_ten(ctx) else "cvat")' in src   # chuyển tab ở server: chạy cả khi tab nằm trong menu "More tabs"
+    assert 'nap_ok.click(on_nap_ok, None, [tabs, o_thieu]' in src and '.then(None, o_thieu, None, js=CVAT_SANG_CAI_DAT_JS)' in src   # server chọn ô cần điền
+
+
+def test_upload_with_cvat_does_not_show_the_dialog(proj):
+    app = make_app(proj)
+    res = nap_fn(app, 'on_start')(None, '', '', None)                                               # có CVAT (fixture): không hộp; thiếu ảnh thì báo như cũ
+    assert res[-2] == {'__type__': 'update'} and res[-1] == {'__type__': 'update'}
+
+
+def _app_auto(proj):
+    """Trang mở bằng menu (không ghi tên), chưa lưu tên nào: người rà là tên mặc định P1."""
+    gr = pytest.importorskip('gradio')  # noqa: F841
+    import review_app as ra
+    ctx = ra.AppCtx(reviewer='P1', run_dir=os.path.join('runs', '_nap'), nap_only=True, reviewer_auto=True, reviewer_mac_dinh=True)
+    ctx.dong_ho = dong_ho.DongHo(ctx.project_root, gio=FakeGio(), pid=os.getpid())
+    demo, _theme = ra.build_ui(None, ctx)
+    return types.SimpleNamespace(ctx=ctx, demo=demo)
+
+
+def test_upload_is_blocked_until_a_name_is_saved(proj, monkeypatch):
+    """Chưa đặt tên (tên mặc định P1) thì không nạp: mọi người cùng để P1 thì thống kê gộp họ làm một. Hộp nói thiếu tên (và CVAT nếu cũng thiếu)."""
+    import cai_dat
+    app = _app_auto(proj)
+    res = nap_fn(app, 'on_start')(None, '', '', None)
+    assert res[-2] == {'__type__': 'update', 'visible': True} and 'Chưa đặt tên người rà' in res[-1] and 'Save name' in res[-1] and 'CVAT' not in res[-1].split('</div>')[0]
+    monkeypatch.delenv('CVAT_URL', raising=False)
+    res = nap_fn(app, 'on_start_open')(None, '', '', None)
+    assert 'Chưa đặt tên người rà và chưa kết nối CVAT' in res[-1] and 'link CVAT' in res[-1]
+    monkeypatch.setenv('CVAT_URL', URL)
+    assert cai_dat.get().set_reviewer('Lan')['ok']
+    res = nap_fn(app, 'on_start')(None, '', '', None)
+    assert res[-2] == {'__type__': 'update'}                                                     # đã đặt tên và có CVAT: không hộp
+    assert sorted(os.listdir(os.path.join(proj.root, 'runs'))) == sorted(['_nap', RUN])
+
+
+def test_review_batch_is_refused_until_a_name_is_saved(proj):
+    app = _app_auto(proj)
+    f = next(x for x in app.demo.fns.values() if getattr(x.fn, '__name__', '') == 'do_act')
+    out = f.fn(json.dumps(dict(act='ra', run=RUN)), None)
+    assert any(isinstance(v, str) and 'Chưa đặt tên người rà' in v for v in out) and app.ctx.switch_to is None
+
+
+def test_push_and_merge_on_the_batch_card_are_refused_until_a_name_is_saved(proj):
+    """Push to CVAT và Merge jobs & Finish ở thẻ đợt cũng ghi tên người: chưa đặt tên thì từ chối như Review batch, không mở hộp xác nhận."""
+    app = _app_auto(proj)
+    f = next(x for x in app.demo.fns.values() if getattr(x.fn, '__name__', '') == 'do_act')
+    for act, nut in (('push', 'Push to CVAT'), ('finish', 'Merge jobs &amp; Finish')):
+        out = f.fn(json.dumps(dict(act=act, run=RUN)), None)
+        assert any(isinstance(v, str) and 'Chưa đặt tên người rà' in v and nut in v for v in out), act
+    assert app.ctx.push_pending.take('x') is None and not app.ctx.push_job.running and not app.ctx.collect_job.running
+
+
+def test_push_panel_refuses_without_a_name():
+    import dot_ui
+    import cai_dat
+    ctx = types.SimpleNamespace(reviewer='P1', reviewer_auto=True)
+    if cai_dat.get().default_reviewer():
+        pytest.skip('máy này đã lưu tên người rà')
+    with pytest.raises(dot_ui.RunError, match='Chưa đặt tên người rà'):
+        dot_ui.chan_khi_chua_dat_ten(ctx, 'bấm Push to CVAT')
+    dot_ui.chan_khi_chua_dat_ten(types.SimpleNamespace(reviewer='P5', reviewer_auto=False), 'bấm Push to CVAT')     # ghi tên rõ khi mở: không chặn
+
+
+def test_header_says_no_name_instead_of_the_placeholder(proj):
+    """Chưa đặt tên: đầu trang ghi "chưa đặt tên", không ghi tên tạm P1 như thể đó là tên thật; lưu tên xong thì ghi tên."""
+    import cai_dat
+    import review_app as ra
+    app = _app_auto(proj)
+    assert 'chưa đặt tên' in ra.head_nap(app.ctx) and '<b>P1</b>' not in ra.head_nap(app.ctx)
+    assert cai_dat.get().set_reviewer('Lan')['ok']
+    app.ctx.reviewer = 'Lan'
+    assert '<b>Lan</b>' in ra.head_nap(app.ctx) and 'chưa đặt tên' not in ra.head_nap(app.ctx)
+
+
+def test_ok_of_the_dialog_points_at_the_missing_field(proj, monkeypatch):
+    """OK của hộp: chuyển sang tab Cài đặt và nói JS ô nào còn thiếu. Chưa đặt tên thì ô tên trước; đã có tên (kể cả ghi tên rõ khi mở) thì ô link CVAT."""
+    import cai_dat
+    app = _app_auto(proj)
+    f = next(x for x in app.demo.fns.values() if getattr(x.fn, '__name__', '') == 'on_nap_ok')
+    tab, thieu = f.fn()
+    assert thieu == 'ten' and getattr(tab, 'selected', None) == 'caidat'
+    assert cai_dat.get().set_reviewer('Lan')['ok']
+    assert f.fn()[1] == 'cvat'
+    app2 = make_app(proj)                                                    # mở kèm tên (P5), chưa lưu tên mặc định nào: hộp chỉ nói thiếu CVAT
+    f2 = next((x for x in app2.demo.fns.values() if getattr(x.fn, '__name__', '') == 'on_nap_ok'), None)
+    assert f2 is None or f2.fn()[1] == 'cvat'

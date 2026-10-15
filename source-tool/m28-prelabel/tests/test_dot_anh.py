@@ -1037,10 +1037,13 @@ def test_open_folder_uses_the_file_manager_of_each_platform():
 def test_parse_action_keeps_the_folder_key_and_result_card_has_the_buttons():
     a = dot_ui.parse_action(json.dumps(dict(act='openfolder', folder='ket_qua', evil='x')))
     assert a['act'] == 'openfolder' and a['folder'] == 'ket_qua' and 'evil' not in a
-    fx = dict(run='Khoi', person='P1', n=3, xml_name='demo-Khoi_P1_1510.xml', jobs=[1, 2], chua=[], luu=None, xuat_lai=None, loi_luu='', loi_ghi='')
+    fx = dict(run='Khoi', person='P1', n=3, xml_name='demo-Khoi_P1_1510.xml', jobs=[1, 2], chua=[], luu=None, xuat_lai=dict(ten='ketqua_P1_1510_Khoi', zip='outputs/ket_qua/x.zip'),
+              loi_luu='', loi_ghi='')
     card = gop_job.result_html(fx)
     assert 'gop-done' in card and card.count('data-act="openfolder"') == 3
     assert all(f'data-folder="{k}"' in card for k in ('ket_qua', 'raw', 'timing')) and 'Mở thư mục gói kết quả' in card
+    card = gop_job.result_html(dict(fx, xuat_lai=None))                                       # chỉ xuất file gộp (không có gói): không mời mở thư mục gói
+    assert card.count('data-act="openfolder"') == 2 and 'data-folder="ket_qua"' not in card
 
 
 def test_open_folder_action_only_opens_the_three_project_folders(world, monkeypatch):
@@ -1057,8 +1060,10 @@ def test_open_folder_action_only_opens_the_three_project_folders(world, monkeypa
     go(folder='ket_qua')                                                                       # chưa có thư mục: không mở
     assert seen == []
     os.makedirs(os.path.join('outputs', 'ket_qua'))
-    go(folder='ket_qua')
+    res = go(folder='ket_qua')
     assert [os.path.realpath(p) for p in seen] == [os.path.realpath(os.path.join('outputs', 'ket_qua'))]
+    assert res[2] == {'__type__': 'update'}                                                   # #dot-msg giữ nguyên: thẻ kết quả gộp job không bị xoá
+    assert go(folder='raw')[2] == {'__type__': 'update'}                                      # chưa có thư mục: chỉ báo ở góc trang, thẻ vẫn giữ
     for bad in ('..', '../x', '/etc', 'runs', '', 'KET_QUA'):                                 # khoá lạ (kể cả đường dẫn): từ chối, không mở gì
         go(folder=bad)
     assert len(seen) == 1

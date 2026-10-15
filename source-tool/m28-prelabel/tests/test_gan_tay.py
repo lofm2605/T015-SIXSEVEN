@@ -488,3 +488,19 @@ def test_dot_tab_cvat_section_has_the_open_button_only_when_the_task_exists():
     assert 'push-open-btn' not in dot_anh.push_section_html(dict(name='Khoi', push=dict(ps, trang_thai='dang_tao')))           # chưa có id: không nút
     assert dot_anh.open_task_button('javascript:alert(1)') == '' and dot_anh.safe_task_url(' http://localhost:8080/tasks/4 ') == 'http://localhost:8080/tasks/4'
 
+
+
+def test_confirm_job_count_text_matches_the_two_job_split():
+    """job_size=0 (mặc định): một job Nhận + một job Gán tay; không có mặt Gán tay thì không nhắc job Gán tay."""
+    import re
+    import day_cvat
+    m = _model(dict(tay=0, tay_nhap=0, tay_trong=0, jobs=1))
+    m['pipe'] = dict(m['pipe'], job_size=0)
+    cell = re.search(r'<th>Số job dự kiến</th><td>(.*?)</td>', day_cvat.confirm_html(m)).group(1)
+    assert cell == '<b>1</b> (một job Nhận)'
+    m = _model(dict(jobs=2))
+    m['pipe'] = dict(m['pipe'], job_size=0)
+    cell = re.search(r'<th>Số job dự kiến</th><td>(.*?)</td>', day_cvat.confirm_html(m)).group(1)
+    assert cell == '<b>2</b> (một job Nhận + một job Gán tay riêng ở cuối)'
+    m = _model()                                                                            # job_size 8: như bản cũ
+    assert 'mỗi job Nhận 8 mặt + một job Gán tay riêng ở cuối' in day_cvat.confirm_html(m)

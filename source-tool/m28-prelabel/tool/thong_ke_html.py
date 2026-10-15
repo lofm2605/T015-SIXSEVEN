@@ -149,6 +149,9 @@ def phan_dau(st, tach=False):
         out.append(f'<div class="tk-note tk-warn">{e(w)}</div>')
     if m["n_xoa_mem"]:
         out.append(f'<div class="tk-note">Đã bỏ {m["n_xoa_mem"]} mặt xoá mềm khỏi số đo (chỉ đếm ở đây).</div>')
+    if m.get("n_mat_trung"):
+        out.append(f'<div class="tk-note tk-warn"><b>Đã bỏ {m["n_mat_trung"]} mặt trùng</b> (cùng tên người và cùng ảnh ở hai nguồn: chỉ tính một lần). Nếu đó là HAI người '
+                   "khác nhau mà cùng tên (ví dụ cùng để tên mặc định P1), số liệu đang gộp họ làm một: đặt tên người cho từng gói ở mục Gói đã nạp.</div>")
     return (out[0], "".join(out[1:])) if tach else "".join(out)
 
 
@@ -295,7 +298,10 @@ def noi_dung_gon(st):
     """(nội dung chính, log) cho trang: nội dung chính = dòng meta + ba chỉ số; log = nguồn dữ liệu, cảnh báo, bản trùng, hạn chế (hiện trong hộp của nút Log).
     Bản xuất HTML vẫn dùng noi_dung (đủ cả hai)."""
     meta, ghi = phan_dau(st, tach=True)
-    return meta + muc_nme(st) + muc_sua(st) + muc_thoi_gian(st, an_danh_dau=True), ghi + danh_dau_gon(st) + han_che(st)
+    n = st["meta"].get("n_mat_trung")
+    trung = (f'<div class="tk-note tk-warn"><b>Đã bỏ {n} mặt trùng</b> (cùng tên người, cùng ảnh): nếu là hai người khác nhau cùng tên (ví dụ cùng để mặc định P1) thì số '
+             "đang gộp họ làm một; đặt tên người cho từng gói ở mục Gói đã nạp. Chi tiết trong Log.</div>") if n else ""      # quan trọng: hiện cả ở trang chính, không chỉ trong Log
+    return meta + trung + muc_nme(st) + muc_sua(st) + muc_thoi_gian(st, an_danh_dau=True), ghi + danh_dau_gon(st) + han_che(st)
 
 
 # ---------- CSS ----------

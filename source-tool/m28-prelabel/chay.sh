@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# M28 - một file để chạy trên Ubuntu: cài môi trường (lần đầu), tải model, mở trang rà soát.
+# M28 - một file để chạy trên Ubuntu: cài môi trường (lần đầu), tải model, mở thẳng trang rà soát (không hỏi gì).
 # Bản Ubuntu của chay.bat. Chạy: ./chay.sh   (hoặc bash chay.sh nếu chưa có quyền chạy: chmod +x chay.sh)
+#   ./chay.sh              mở thẳng trang rà soát (đặt tên người rà ở tab Cài đặt, Save name)
+#   ./chay.sh luot <tên>   rà lại một lượt có sẵn trong runs/ (ví dụ ./chay.sh luot NAP_001)
+#   ./chay.sh menu         menu đủ việc phụ: chạy thử 5 mặt, kiểm tra nhanh CVAT, chạy test, cài lại môi trường
 cd "$(dirname "$(readlink -f "$0")")" || exit 1
 export PYTHONUTF8=1
 MODEL_URL="https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
@@ -69,8 +72,9 @@ mo_trang() {
 }
 
 luot() {
-  read -r -p "Tên lượt (thư mục trong runs/, ví dụ F5 hoặc NAP_001): " LUOT
-  [ -n "$LUOT" ] || return 0
+  LUOT="${1:-}"
+  [ -n "$LUOT" ] || read -r -p "Tên lượt (thư mục trong runs/, ví dụ F5 hoặc NAP_001): " LUOT
+  if [ -z "$LUOT" ]; then echo "Chưa gõ tên lượt: không mở gì."; return 0; fi
   if [ ! -d "runs/$LUOT" ]; then echo "Không thấy runs/$LUOT"; return 0; fi
   python tool/review_app.py "runs/$LUOT"
 }
@@ -121,26 +125,34 @@ cai_lai() {
   . .venv/bin/activate
 }
 
-while true; do
-  echo
-  echo "================= M28 - Nhãn nháp landmark khuôn mặt ================="
-  echo "  1. Mở trang rà soát   (Nạp ảnh kéo thả, Các đợt, Ca khó, Thống kê, Cài đặt)"
-  echo "  2. Rà lại một lượt có sẵn"
-  echo "  3. Chạy thử 5 mặt F in-cabin (chỉ cần gói dữ liệu giải nén vào data/)"
-  echo "  4. Kiểm tra nhanh CVAT   (tạo rồi xoá task demo-smoke, cần CVAT đang chạy)"
-  echo "  5. Chạy test"
-  echo "  6. Cài lại môi trường Python"
-  echo "  7. Thoát"
-  echo "======================================================================"
-  read -r -p "Chọn 1-7: " C
-  case "$C" in
-    1) mo_trang ;;
-    2) luot ;;
-    3) thu5 ;;
-    4) smoke ;;
-    5) chay_test ;;
-    6) cai_lai ;;
-    7) exit 0 ;;
-    *) echo "Chọn từ 1 đến 7." ;;
-  esac
-done
+menu() {
+  while true; do
+    echo
+    echo "================= M28 - Nhãn nháp landmark khuôn mặt ================="
+    echo "  1. Mở trang rà soát   (Nạp ảnh kéo thả, Các đợt, Ca khó, Thống kê, Cài đặt)"
+    echo "  2. Rà lại một lượt có sẵn"
+    echo "  3. Chạy thử 5 mặt F in-cabin (chỉ cần gói dữ liệu giải nén vào data/)"
+    echo "  4. Kiểm tra nhanh CVAT   (tạo rồi xoá task demo-smoke, cần CVAT đang chạy)"
+    echo "  5. Chạy test"
+    echo "  6. Cài lại môi trường Python"
+    echo "  7. Thoát"
+    echo "======================================================================"
+    read -r -p "Chọn 1-7: " C
+    case "$C" in
+      1) mo_trang ;;
+      2) luot ;;
+      3) thu5 ;;
+      4) smoke ;;
+      5) chay_test ;;
+      6) cai_lai ;;
+      7) exit 0 ;;
+      *) echo "Chọn từ 1 đến 7." ;;
+    esac
+  done
+}
+
+case "${1:-}" in
+  menu) menu ;;
+  luot) luot "${2:-}" ;;
+  *) mo_trang ;;
+esac

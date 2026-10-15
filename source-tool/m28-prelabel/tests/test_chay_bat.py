@@ -40,3 +40,17 @@ def test_thu5_uses_incabin_package_only():
     assert '--images data\\crops' in block and '--box crop' in block and '--dry-run' in block
     menu = t.split(':menu', 1)[1].split(':mo_trang', 1)[0]
     assert 'in-cabin' in menu
+
+
+def test_default_run_opens_the_review_page_directly_and_menu_is_behind_an_argument():
+    t = _text()
+    head = t.split('\n:co_model\r\n', 1)[1].split('\r\n:menu\r\n', 1)[0]
+    assert 'if /i "%~1"=="menu" goto :menu' in head and 'goto :mo_thang' in head           # không tham số: vào thẳng trang rà soát
+    assert 'if /i "%~1"=="luot" goto :luot_dong_lenh' in head
+    mo = t.split('\n:mo_thang', 1)[1].split('\n:luot_dong_lenh', 1)[0]
+    assert 'python tool\\review_app.py --nap' in mo and mo.rstrip().endswith('goto :het') and 'choice' not in mo and 'set /p' not in mo
+    assert 'pause' in mo                                                                    # nhấp đúp: giữ cửa sổ để đọc thông báo lúc tắt trang hoặc lỗi
+    luot = t.split('\n:luot_dong_lenh', 1)[1].split('\r\n:menu\r\n', 1)[0]
+    assert 'python tool\\review_app.py runs\\%LUOT%' in luot and luot.rstrip().endswith('goto :het')
+    assert luot.count('pause') == 3 and 'set /p LUOT=' in luot and 'Chua go ten luot' in luot                            # chay.bat luot (không kèm tên): hỏi tên lượt như chay.sh
+    assert ':hoi_nguoi' not in t and 'Ten nguoi ra' not in t

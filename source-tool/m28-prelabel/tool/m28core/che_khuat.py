@@ -6,12 +6,17 @@ MediaPipe không cho biết điểm nào bị che (visibility/presence của lan
   Góc quay ước lượng yaw = (|u| + 0.08) / 0.0405 độ: hồi quy trên 198 ảnh in-cabin (bo200_A) so với ma trận biến đổi mặt của MediaPipe (hệ số tương quan 0.98,
   yaw 0 đến 63 độ); ngoài khoảng đó chỉ là ngoại suy.
   Nửa mặt xa camera: lông mày và mắt bị che từ YAW_MAT độ; môi (các điểm cùng bên) bị che từ YAW_MOI độ. Sống mũi và các điểm trên trục (side M) không bao giờ bị che.
-VẬT THỂ CHE MẮT (mặt nhìn thẳng; kính râm, chai/cốc, tay...): đo trên ảnh cắt, vùng đa giác của mắt (lưới 478 điểm):
-  gm = độ nét = trung bình độ lớn gradient (Sobel, ảnh xám đã làm mờ nhẹ) trong vùng mắt / khoảng cách hai khoé mắt ngoài * 100.
-  Mắt bình thường có gm khoảng 25 đến 35 (trung vị 25 đến 34 trên 198 ảnh in-cabin); mắt bị kính đen hay vật mờ che chỉ còn 1 đến 6.
-  Mắt bị che khi gm < GM_MAX, hoặc vùng mắt tối (độ sáng vùng / vòng da quanh nó < LUM_TOI) và gm < GM_TOI (mắt kính đen).
-  Chỉ áp cho MẮT: đã xem tay các vùng thấp nhất; với miệng và lông mày, độ nét thấp chủ yếu là ảnh mờ hay tối, không phải bị che, nên không đoán.
-  Là phép đoán: ảnh quá tối hay quá mờ (mắt nhắm trong bóng tối) vẫn có thể bị đánh dấu nhầm; người rà sửa occluded ngay trong CVAT.
+VẬT THỂ CHE MẮT (mặt nhìn thẳng; kính đen, vật mờ trước mắt): đo trên ảnh cắt, vùng đa giác của mắt (lưới 478 điểm), so với vòng da quanh mắt:
+  gm   = độ nét = trung bình độ lớn gradient (Sobel, ảnh xám đã làm mờ nhẹ) trong vùng mắt / khoảng cách hai khoé mắt ngoài * 100 (mắt bình thường 15 đến 60).
+  lum  = độ sáng trung bình vùng mắt / độ sáng trung bình vòng da quanh.
+  sang = chỗ SÁNG NHẤT của vùng mắt (phân vị 90) / trung vị vòng da: mắt mở có lòng trắng sáng, mắt nhắm có mí cùng màu da (0,4 đến 1,2), tròng kính đen thì không có
+         chỗ nào sáng (0,14 đến 0,35 trên các ca kính đen của bo200_A).
+  Mắt bị che khi: gm < GM_PHANG (vùng gần như phẳng: vật mờ che, mắt chìm hẳn trong bóng tối), hoặc là tròng kính đen (sang < SANG_KINH và lum < LUM_KINH).
+  Một mắt là tròng kính đen thì mắt kia cũng bị che nếu nó tối (lum < LUM_KINH_CAP): kính râm che cả hai mắt.
+  Ngưỡng chọn CHẶT (15/10/2026, sau khi xem tay trên 198 ảnh in-cabin và 5 ảnh chạy qua prepare): bản trước (gm < 6 hoặc tối và gm < 10) báo nhầm mắt thật hơi mờ/tối
+  (ví dụ ảnh 010); bản này trên 198 ảnh chỉ đánh dấu 4 mặt (3 ca kính đen và 1 mắt chìm trong bóng tối). Kính râm PHẢN CHIẾU (sáng, nhiều chi tiết) thì KHÔNG bắt được.
+  Chỉ áp cho MẮT: với miệng và lông mày, độ nét thấp chủ yếu là ảnh mờ hay tối, không phải bị che, nên không đoán. Người rà sửa occluded ngay trong CVAT khi cần.
+  Vùng mắt PHẲNG hoàn toàn vì lý do khác (ảnh cháy sáng, ảnh hồng ngoại bị loá đúng chỗ mắt) cũng bị coi là bị che: đúng là không thấy mắt, người rà tự quyết.
 Không phát hiện tay che miệng, khẩu trang, vật che lông mày (chưa có cách đáng tin).
 """
 import numpy as np
@@ -20,8 +25,9 @@ NOSE, CHEEK_L, CHEEK_R = 1, 234, 454          # chỉ số trong lưới 478 đi
 YAW_MAT = 60.0                                # độ: từ đây lông mày và mắt của nửa mặt xa camera bị che
 YAW_MOI = 75.0                                # độ: từ đây môi của nửa mặt xa camera bị che
 _A, _B = 0.0405, 0.08                         # |u| = _A * yaw - _B (hồi quy nói ở trên)
-GM_MAX = 6.0                                  # độ nét vùng mắt dưới mức này: bị che
-LUM_TOI, GM_TOI = 0.30, 10.0                  # vùng mắt tối hơn 0.30 lần vòng da quanh nó và độ nét dưới 10: kính đen
+GM_PHANG = 4.0                                # độ nét vùng mắt dưới mức này: gần như phẳng, bị che
+SANG_KINH, LUM_KINH = 0.38, 0.25              # tròng kính đen: chỗ sáng nhất < 0,38 lần da quanh VÀ trung bình < 0,25 lần
+LUM_KINH_CAP = 0.45                           # mắt kia của người đeo kính đen: tối hơn 0,45 lần da quanh thì cũng bị che
 MAT_TRAI = (33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246)       # mắt của người ở nửa TRÁI ảnh (không soi gương)
 MAT_PHAI = (362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398)
 KHOE_NGOAI = (33, 263)                        # hai khoé mắt ngoài: đo khoảng cách hai mắt
@@ -47,7 +53,7 @@ def yaw_uoc_luong(pts478):
 
 
 def do_vung_mat(gray, pts478):
-    """{'L': (gm, tuong_doi_sang), 'R': (...)}: độ nét và độ sáng tương đối của mắt ở nửa trái, nửa phải ảnh. gray: ảnh xám (numpy 2 chiều). Vùng ngoài ảnh hoặc quá nhỏ thì bỏ."""
+    """{'L': (gm, lum, sang), 'R': (...)}: độ nét, độ sáng trung bình tương đối và chỗ sáng nhất tương đối của mắt ở nửa trái, nửa phải ảnh (xem đầu file). gray: ảnh xám (numpy 2 chiều). Vùng ngoài ảnh hoặc quá nhỏ thì bỏ."""
     import cv2
     p = np.asarray(pts478, float)
     if gray is None or getattr(gray, "ndim", 0) != 2 or p.ndim != 2 or len(p) <= max(MAT_TRAI + MAT_PHAI):
@@ -69,13 +75,19 @@ def do_vung_mat(gray, pts478):
         m = m.astype(bool)
         if m.sum() < 5 or ring.sum() < 5:
             continue
-        out[xa] = (float(gm[m].mean() / iod * 100.0), float(g[m].mean() / (g[ring].mean() + 1e-6)))
+        out[xa] = (float(gm[m].mean() / iod * 100.0), float(g[m].mean() / (g[ring].mean() + 1e-6)),
+                   float(np.percentile(g[m], 90) / (np.median(g[ring]) + 1e-6)))
     return out
 
 
 def mat_bi_che(gray, pts478):
     """Các nửa ảnh ('L', 'R') có mắt bị vật thể che theo độ nét và độ sáng (xem đầu file)."""
-    return {xa for xa, (gm, lum) in do_vung_mat(gray, pts478).items() if gm < GM_MAX or (lum < LUM_TOI and gm < GM_TOI)}
+    v = do_vung_mat(gray, pts478)
+    kinh = {xa for xa, (gm, lum, sang) in v.items() if sang < SANG_KINH and lum < LUM_KINH}
+    out = {xa for xa, (gm, lum, sang) in v.items() if gm < GM_PHANG} | kinh
+    if kinh:                                                                  # kính râm che cả hai mắt: mắt kia đủ tối thì cũng bị che
+        out |= {xa for xa, (gm, lum, sang) in v.items() if lum < LUM_KINH_CAP}
+    return out
 
 
 def diem_bi_che(pts478, cfg, gray=None):

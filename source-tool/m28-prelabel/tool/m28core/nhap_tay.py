@@ -23,10 +23,11 @@ import zipfile
 import zlib
 
 from m28core import goi_kq
+from m28core import ten_nguoi
 
 THU_MUC = os.path.join("outputs", "goi_nhom")
 THU_MUC_BO = "_da_bo"                                       # thư mục con của outputs\goi_nhom: bản đã gỡ (thống kê không đọc)
-THU_MUC_DOC = (goi_kq.THU_MUC, THU_MUC)                     # = thong_ke.THU_MUC_GOI: các thư mục gói mà thống kê đọc mặc định
+THU_MUC_DOC = (goi_kq.THU_MUC, THU_MUC, os.path.join("outputs", "goi_da_nap"))       # = thong_ke.THU_MUC_GOI: các thư mục gói mà thống kê đọc mặc định
 NGUON = "nhap_tay"
 DOT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")    # giống dong_ho.DOT_RE (và tên lượt của goi_kq.nhap_cua_dot)
 TASK_RE = re.compile(r"[A-Za-z0-9_.-]{0,64}")
@@ -275,7 +276,7 @@ def tao_noi_dung(project_root, cfg, nguoi, nhom, dot, giay, label_paths, bo_anh=
     if now.tzinfo is None:
         now = now.astimezone()
     if not isinstance(nguoi, str) or not goi_kq.NGUOI_RE.fullmatch(nguoi):
-        raise NhapTayLoi("Chưa chọn người hoặc tên không hợp lệ (chỉ chữ, số, _ và -, tối đa 32 ký tự).")
+        raise NhapTayLoi("Chưa chọn người hoặc tên không hợp lệ (chỉ chữ không dấu, số và dấu -, bắt đầu bằng chữ hoặc số, tối đa 32 ký tự).")
     if nhom not in goi_kq.CONDITIONS:
         raise NhapTayLoi("Nhóm phải là manual hoặc assisted.")
     dot = str(dot or "").strip()
@@ -416,7 +417,8 @@ def _loai_va_cach_go(ten, x, tay):
     """(loại gói, cách gỡ) của gói `ten` đang chặn bản nhập tay; `tay` = tên các bản nhập tay trong outputs\\goi_nhom (gỡ được bằng Remove entry)."""
     la_tay = x.get("nguon_nhap") == NGUON and os.path.splitext(ten)[0] in tay
     return (("bản nhập tay khác" if x.get("nguon_nhap") == NGUON else "gói của đồng hồ"),
-            ("Remove entry ở danh sách bản nhập tay" if la_tay else "chuyển file đó ra khỏi outputs\\ket_qua và outputs\\goi_nhom, hoặc bỏ nó khỏi ô tải lên"))
+            ("Remove entry ở danh sách bản nhập tay" if la_tay
+             else "gói đã nạp: Remove package ở mục Gói đã nạp (tab Thống kê); gói khác: chuyển file đó ra khỏi outputs\\ket_qua và outputs\\goi_nhom, hoặc bỏ nó khỏi ô tải lên"))
 
 
 def them(project_root, nd, nguon_them=()):
@@ -433,7 +435,9 @@ def them(project_root, nd, nguon_them=()):
     with _LOCK:
         q = goi_kq.quet([os.path.join(project_root, x) for x in THU_MUC_DOC] + [p for p in (nguon_them or ()) if p])
         tay = {t for t, _nd, _fs in _doc_nhap_tay(project_root)}
-        khac = [(ten, x) for ten, x in q["tot"] if x["nguoi"] == nd["nguoi"] and x["phien"] != nd["phien"]]
+        bang_ten = ten_nguoi.doc(project_root)            # so theo tên THỐNG KÊ DÙNG (nhóm trưởng có thể đã đặt tên cho gói ở mục Gói đã nạp), không theo tên gốc trong gói
+        ten_moi = ten_nguoi.ap_dung([("", nd)], bang_ten)[0][0][1]["nguoi"]
+        khac = [(ten, x) for ten, x in ten_nguoi.ap_dung(q["tot"], bang_ten)[0] if x["nguoi"] == ten_moi and x["phien"] != nd["phien"]]
         for ten, x in khac:
             if (x.get("dot") or "") == nd["dot"]:
                 loai, cach = _loai_va_cach_go(ten, x, tay)

@@ -56,6 +56,7 @@ import ca_kho  # noqa: E402  (ca khó, tab Ca khó và Họp team; chỉ thư vi
 import dot_anh  # noqa: E402
 import cai_dat  # noqa: E402  (cài đặt dùng chung cả tiến trình: CVAT, người rà, đường dẫn; chỉ thư viện chuẩn)
 import cai_dat_ui  # noqa: E402  (tab Cài đặt; không import gradio ở đầu module)
+import day_cvat  # noqa: E402  (trạng thái link/token CVAT: tab Nạp ảnh đòi có trước khi nạp)
 import dong_ho_ui  # noqa: E402  (chip đồng hồ ở đầu trang: bấm giờ theo phiên; không import gradio ở đầu module)
 import dot_ui  # noqa: E402  (khung Đẩy lên CVAT và tab Các đợt; không import gradio ở đầu module)
 import gop_job  # noqa: E402  (Merge jobs & Finish: yêu cầu gộp còn dở chặn chuyển lượt; không gradio, không mạng)
@@ -95,6 +96,12 @@ STATUS_COLOR = {"": "#9ca3af", "nhan": "#16a34a", "gan_tay": "#d97706", "bo": "#
 STATUS_LETTER = {"": "", "nhan": "N", "gan_tay": "G", "bo": "B"}
 # màu và kiểu chấm của ảnh chồng nằm ở m28core/mau_nhom.py (cùng nguồn với steps.overlays và label CVAT)
 DEFAULT_REVIEWER = "P1"          # tên người rà khi dòng lệnh không ghi và tab Cài đặt chưa lưu tên
+
+
+def chua_dat_ten(ctx):
+    """Trang mở không ghi tên (nhấp đúp chay.bat, chạy ./chay.sh) và tab Cài đặt CHƯA lưu tên nào: người rà đang là tên mặc định P1. Nạp ảnh và Review batch bị chặn đến khi
+    Save name, vì tên đi vào file kết quả, đồng hồ và gói gửi nhóm trưởng: mọi người cùng để P1 thì thống kê gộp họ thành một người."""
+    return bool(getattr(ctx, "reviewer_auto", False)) and not cai_dat.get().default_reviewer()
 NOTEBOOK_VARS = ("COLAB_RELEASE_TAG", "COLAB_GPU", "KAGGLE_KERNEL_RUN_TYPE", "SPACE_ID")
 VI_USAGE = ("Cách dùng: python tool\\review_app.py <thư mục lượt chạy> [người rà], ví dụ python tool\\review_app.py runs\\R1610 P5; "
             "chưa có lượt nào thì python tool\\review_app.py --nap [người rà] (chỉ tab Nạp ảnh), ví dụ python tool\\review_app.py --nap P5. "
@@ -1185,27 +1192,31 @@ CSS = """
 .m28-page { text-align: center; font-size: 14px; white-space: nowrap; color: var(--body-text-color-subdued); }
 .m28-page b { color: var(--body-text-color); }
 
-#big { position: relative; overflow: hidden !important; height: min(512px, 52vh, calc(100vw - 48px)) !important; padding: 0 !important; }
+#big { position: relative; isolation: isolate; overflow: hidden !important; height: min(512px, 52vh, calc(100vw - 48px)) !important; padding: 0 !important; }
 #big .image-container, #big .image-frame, #big .upload-container { height: 100% !important; overflow: hidden !important; }
 #big img { width: 100% !important; height: 100% !important; object-fit: contain !important; }
 /* Phóng to ảnh lớn: CSS transform trên <img> (lăn chuột, kéo, nút +/-/1:1, nhấp đúp); ảnh gốc không đổi. */
-#big img { transform-origin: 0 0 !important; transform: translate(var(--zx, 0px), var(--zy, 0px)) scale(var(--zz, 1)); will-change: transform;
+#big img { transform-origin: 0 0 !important; transform: translate(var(--zx, 0px), var(--zy, 0px)) scale(var(--zz, 1));
   cursor: zoom-in; user-select: none; -webkit-user-drag: none; }
+#big.m28-panning img { will-change: transform; }
 #big.m28-zoomed img { cursor: grab; } #big.m28-panning img { cursor: grabbing; }
-.m28-zoom { position: absolute; top: 8px; right: 8px; z-index: 5; display: flex; gap: 4px; align-items: center; padding: 3px 4px; border-radius: 8px;
+.m28-zoom { position: absolute; top: 8px; right: 8px; z-index: 1; opacity: .55; transition: opacity .15s; display: flex; gap: 4px; align-items: center; padding: 3px 4px; border-radius: 8px;
   border: 1px solid var(--border-color-primary); background: color-mix(in srgb, var(--block-background-fill) 82%, transparent); }
 #big:not(.m28-hasimg) .m28-zoom { display: none; }
+.m28-zoom:hover, .m28-zoom:focus-within { opacity: 1; }
 .m28-zoom button { min-width: 30px; height: 28px; padding: 0 8px; border-radius: 6px; font-weight: 800; cursor: pointer;
   border: 1px solid var(--border-color-primary); background: var(--button-secondary-background-fill); color: var(--body-text-color); }
 .m28-zoom button:hover { background: var(--button-secondary-background-fill-hover); }
 .m28-zoom-lbl { min-width: 42px; text-align: center; font-size: 12px; color: var(--body-text-color-subdued); }
+.m28-zoom-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .m28-legend { display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 13px; color: var(--body-text-color-subdued); }
 .m28-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .m28-legend .hollow { background: transparent; border: 2px solid #9ca3af; box-shadow: 0 0 0 1px #141414; width: 12px; height: 12px; margin-right: 4px; vertical-align: -3px; }
 .m28-legend .ring { width: 12px; height: 12px; margin-right: 4px; background: #9ca3af; border: 3px solid #fff; box-shadow: 0 0 0 1px #141414; vertical-align: -3px; }
 
 #decide { gap: 10px; flex-wrap: nowrap; }
-#decide button { min-height: 56px; font-size: 16px; font-weight: 800; min-width: 0 !important; color: #fff; white-space: nowrap; padding: 0 6px !important; }
+#decide button { min-height: 56px; font-size: 15px; font-weight: 800; min-width: 0 !important; color: #fff; white-space: normal; overflow-wrap: anywhere;
+  line-height: 1.15; padding: 0 6px !important; }                          /* cột giữa hẹp (khoảng 400 px): chữ xuống dòng trong nút thay vì tràn sang nút bên */
 #btn-nhan { background: #16a34a !important; border-color: #15803d !important; }
 #btn-gantay { background: #d97706 !important; border-color: #b45309 !important; }
 #btn-bo { background: #dc2626 !important; border-color: #b91c1c !important; }
@@ -1403,6 +1414,14 @@ ZOOM_JS = r"""
     const lbl = b.querySelector('.m28-zoom-lbl');
     const txt = Math.round(Z.z * 100) + '%';
     if (lbl && lbl.textContent !== txt) { lbl.textContent = txt; }
+    const sr = b.querySelector('.m28-zoom-sr');          // trình đọc màn hình: báo một lần sau khi thôi lăn, không báo từng nấc
+    if (sr) {
+      clearTimeout(Z.srT);
+      Z.srT = setTimeout(() => {
+        const t2 = 'Thu phóng ' + Math.round(Z.z * 100) + '%';
+        if (sr.textContent !== t2 && (sr.textContent || Z.z !== 1)) { sr.textContent = t2; }      // mở trang / đổi ảnh ở 100%: không đọc gì
+      }, 400);
+    }
   };
   const zClamp = () => {
     const b = bigEl();
@@ -1431,29 +1450,52 @@ ZOOM_JS = r"""
     if (!b.querySelector('.m28-zoom')) {
       const t = document.createElement('div');
       t.className = 'm28-zoom';
-      t.innerHTML = '<button type="button" data-z="in" title="Phóng to (hoặc lăn chuột lên)">+</button>'
-        + '<button type="button" data-z="out" title="Thu nhỏ (hoặc lăn chuột xuống)">\u2212</button>'
-        + '<button type="button" data-z="reset" title="Về cỡ vừa (hoặc nhấp đúp vào ảnh)">1:1</button><span class="m28-zoom-lbl">100%</span>';
+      t.innerHTML = '<button type="button" data-z="in" title="Phóng to (hoặc lăn chuột lên)" aria-label="Phóng to ảnh">+</button>'
+        + '<button type="button" data-z="out" title="Thu nhỏ (hoặc lăn chuột xuống)" aria-label="Thu nhỏ ảnh">\u2212</button>'
+        + '<button type="button" data-z="reset" title="Về cỡ vừa (hoặc nhấp đúp vào ảnh)" aria-label="Về cỡ vừa">1:1</button>'
+        + '<span class="m28-zoom-lbl" aria-hidden="true">100%</span>'
+        + '<span class="m28-zoom-sr" role="status" aria-live="polite"></span>';
       b.appendChild(t);
+    }
+    if (!b.__m28Wheel) {                                  // lăn chuột gắn vào #big (không phải cả trang): cuộn ở chỗ khác không phải chờ
+      b.__m28Wheel = true;
+      b.addEventListener('wheel', zWheel, { passive: false });
     }
     if (b.classList.contains('m28-hasimg') !== !!img) { b.classList.toggle('m28-hasimg', !!img); }
     zApply();
   };
-  let zQueued = false;
-  new MutationObserver(() => { if (!zQueued) { zQueued = true; setTimeout(() => { zQueued = false; zEnsure(); }, 30); } })
-    .observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class', 'style'] });
-  zEnsure();
-  document.addEventListener('wheel', (e) => {
+  function zWheel(e) {
     const b = bigEl();
-    if (!b || !bigImg() || !b.contains(e.target) || zBlocked()) { return; }
+    if (!b || !bigImg() || zBlocked() || Math.abs(e.deltaX) > Math.abs(e.deltaY)) { return; }
+    const z2 = Math.min(ZMAX, Math.max(1, Z.z * Math.exp(-e.deltaY * 0.0015)));
+    if (Math.abs(z2 - Z.z) < 1e-3) { return; }          // đã ở 100% mà lăn xuống (hay 600% mà lăn lên): để trang cuộn bình thường
     e.preventDefault();
     const r = b.getBoundingClientRect();
-    zAt(Z.z * Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
-  }, { passive: false });
+    zAt(z2, e.clientX - r.left, e.clientY - r.top);
+  }
+  const zSrcDoi = (ms) => ms.some((m) => {               // ảnh lớn vừa đổi (Nhận/Gán tay/Bỏ, Next): về 100% NGAY, không để mặt mới hiện ở mức phóng cũ
+    const t = m.target;
+    if (m.type === 'attributes') { return m.attributeName === 'src' && t.closest && t.closest('#big'); }
+    return t.closest && t.closest('#big') && Array.from(m.addedNodes).some((n) => n.nodeName === 'IMG' || (n.querySelector && n.querySelector('img')));
+  });
+  let zQueued = false;
+  new MutationObserver((ms) => {
+    if (zSrcDoi(ms)) { zEnsure(); return; }
+    if (!zQueued) { zQueued = true; setTimeout(() => { zQueued = false; zEnsure(); }, 30); }
+  }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'class', 'style'] });
+  zEnsure();
+  window.addEventListener('resize', () => { if (Z.z > 1) { zClamp(); zApply(); } });
+  const zThaKeo = () => {
+    if (!Z.drag) { return; }
+    Z.drag = null;
+    const b = bigEl();
+    if (b) { b.classList.remove('m28-panning'); }
+  };
+  window.addEventListener('blur', zThaKeo);                // chuyển cửa sổ giữa lúc kéo: không kẹt ở chế độ kéo
   document.addEventListener('click', (e) => {
     const btn = e.target && e.target.closest ? e.target.closest('.m28-zoom button[data-z]') : null;
     const b = bigEl();
-    if (!btn || !b) { return; }
+    if (!btn || !b || zBlocked()) { return; }
     const r = b.getBoundingClientRect();
     const w = btn.getAttribute('data-z');
     if (w === 'reset') { zReset(); } else { zAt(Z.z * (w === 'in' ? 1.5 : 1 / 1.5), r.width / 2, r.height / 2); }
@@ -1467,17 +1509,13 @@ ZOOM_JS = r"""
   });
   document.addEventListener('mousemove', (e) => {
     if (!Z.drag) { return; }
+    if (!(e.buttons & 1)) { zThaKeo(); return; }        // nút chuột đã nhả ở ngoài cửa sổ
     Z.x = Z.drag.x + e.clientX - Z.drag.cx;
     Z.y = Z.drag.y + e.clientY - Z.drag.cy;
     zClamp();
     zApply();
   });
-  document.addEventListener('mouseup', () => {
-    if (!Z.drag) { return; }
-    Z.drag = null;
-    const b = bigEl();
-    if (b) { b.classList.remove('m28-panning'); }
-  });
+  document.addEventListener('mouseup', zThaKeo);
   document.addEventListener('dblclick', (e) => {
     const b = bigEl();
     if (!b || !bigImg() || !b.contains(e.target) || (e.target.closest && e.target.closest('.m28-zoom')) || zBlocked()) { return; }
@@ -1654,9 +1692,36 @@ def _review_tab(gr, demo, store, ctx, header):
 
 NO_RUN_HTML = ('<div class="m28-empty">Chưa có lượt nào: nạp ảnh ở tab <b>Nạp ảnh</b> bằng <b>Upload &amp; Open</b> (hoặc mở đợt ở tab <b>Các đợt</b> → <b>Review batch</b>).</div>')
 HEAD_NAP_HTML = ('<div class="m28-head"><div class="m28-top"><div class="m28-title">Rà soát nhãn nháp M28</div>'
-                 '<div class="m28-sub">chưa có lượt nào · người rà <b>{rev}</b></div></div></div>')
+                 '<div class="m28-sub">chưa có lượt nào · người rà {rev}</div></div></div>')
+
+
+
+def head_nap(ctx):
+    """Dòng đầu trang khi chưa mở lượt nào. Chưa đặt tên thì nói rõ, không ghi tên tạm P1 như thể đó là tên thật."""
+    rev = "<b>chưa đặt tên</b> (đặt ở tab Cài đặt)" if chua_dat_ten(ctx) else f"<b>{html.escape(ctx.reviewer)}</b>"
+    return HEAD_NAP_HTML.format(rev=rev)
+
 
 # Chờ trang mới (cùng cổng) dựng xong rồi tải lại: hỏi /config của Gradio, so tiêu đề với lượt mới.
+CVAT_SANG_CAI_DAT_JS = r"""(thieu) => {
+  // Nút OK của hộp "chưa đặt tên / chưa kết nối CVAT" ở tab Nạp ảnh: server đã chuyển sang tab Cài đặt (chạy cả khi tab nằm trong menu "More tabs" lúc cửa sổ hẹp);
+  // ở đây chỉ đưa con trỏ vào ô server báo còn thiếu: ô tên người rà (thiếu tên) hoặc ô link CVAT.
+  // Tab có thể dựng chậm (máy yếu, trang nặng): thử lại mỗi 100 ms tới khoảng 3 giây, đến khi ô cần đã hiện.
+  const can0 = thieu || '';                             // server nói còn thiếu gì: 'ten' (tên người rà) hoặc 'cvat' (link + token)
+  const t0 = Date.now();
+  const thu = () => {
+    const tab = document.getElementById('tab-caidat');
+    const a = document.activeElement;
+    if (tab && a && a !== document.body && tab.contains(a)) { return; }      // người dùng đã tự bấm vào một ô của tab: không giành con trỏ
+    const ten = document.querySelector('#cd-reviewer textarea, #cd-reviewer input');
+    const can = can0 || ((ten && !ten.value.trim()) ? 'ten' : 'cvat');
+    const el = (can === 'ten' && ten) ? ten : document.querySelector('#cd-url textarea, #cd-url input');
+    if (el && el.getClientRects().length > 0) { el.focus(); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+    if (Date.now() - t0 < 3000) { setTimeout(thu, 100); }
+  };
+  setTimeout(thu, 100);
+}"""
+
 NAP_SWITCH_JS = r"""(title) => {
   if (!title) { return; }
   const t0 = Date.now();
@@ -1690,6 +1755,9 @@ class AppCtx:
     run_dir: str
     nap_only: bool = False
     reviewer_auto: bool = False        # người rà không ghi ở dòng lệnh: chế độ --nap đổi `reviewer` theo tên vừa lưu ở tab Cài đặt (Save name), không phải mở lại trang
+    reviewer_mac_dinh: bool = False    # tên hiện tại là tên MẶC ĐỊNH (P1) vì chưa lưu tên nào: Save name thì đồng hồ chưa lưu của tên này chuyển sang tên mới
+    ten_cu_mac_dinh: object = None     # tên vừa bị thay bằng Save name (chế độ --nap tự động): after_reviewer chuyển phiên đồng hồ chưa lưu của tên đó rồi đặt lại None
+    ten_cu_bo: object = None           # tên cũ có dấu _ (bản trước) bị bỏ khi đọc cài đặt: Save name cũng chuyển phiên đồng hồ chưa lưu của tên đó sang tên mới
     job: object = None
     push_job: object = None            # nap_anh.PushJob: đẩy lên CVAT bằng tiến trình con
     del_job: object = None             # nap_anh.DeleteTaskJob: xoá task trên CVAT bằng tiến trình con
@@ -1777,6 +1845,12 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         b_start = gr.Button("Upload & Continue", variant="primary", elem_id="nap-start", interactive=False)
         b_cancel = gr.Button("Cancel", variant="stop", elem_id="nap-cancel", interactive=False)
         b_retry = gr.Button("Retry", elem_id="nap-retry", interactive=False)
+    with gr.Column(visible=False, elem_id="nap-cvat", elem_classes=["m28-modal"]) as cvat_modal:        # chưa kết nối CVAT: hỏi rồi chuyển sang tab Cài đặt
+        with gr.Column(elem_classes=["m28-modal-box"]):
+            cvat_body = gr.HTML(elem_id="nap-cvat-body", apply_default_css=False)
+            with gr.Row(elem_classes=["m28-modal-btns"]):
+                b_cvat_ok = gr.Button("OK", variant="primary", elem_id="nap-cvat-ok")
+                b_cvat_no = gr.Button("Cancel", elem_id="nap-cvat-cancel")
     msg = gr.HTML(elem_id="nap-msg", apply_default_css=False)
     prog = gr.HTML(elem_id="nap-prog", apply_default_css=False)
     log_tb = gr.Textbox(label="Log prepare", lines=10, max_lines=14, interactive=False, autoscroll=True, elem_id="nap-log")
@@ -1839,7 +1913,33 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         can_start = gr.update(interactive=usable and bool(plan and plan["ok"]) and not job.running)
         return (plan_st, gr.update(value=items, visible=bool(items)), nap_anh.rejected_html(plan), nap_anh.count_html(plan), can_start, can_start)
 
+    def cvat_thieu_html(thieu_ten, thieu_cvat):
+        """Nội dung hộp "chưa đủ cài đặt" của tab Nạp ảnh: chưa đặt tên người rà và/hoặc chưa kết nối CVAT (thiếu link, token, hay link sai); bấm OK sang tab Cài đặt.
+        Không in giá trị token."""
+        muc = []
+        if thieu_ten:
+            muc.append(f"Bạn chưa đặt <b>tên người rà</b> (đang là tên mặc định {html.escape(ctx.reviewer)}): gõ tên của bạn ở mục Người rà rồi bấm <b>Save name</b>. "
+                       "Tên đi vào file kết quả, đồng hồ và gói gửi nhóm trưởng; mọi người cùng để mặc định thì thống kê gộp họ thành một người.")
+        if thieu_cvat:
+            e = cai_dat.cvat_env()
+            cv = day_cvat.env_state()
+            thieu = [t for t, v in (("link CVAT (CVAT_URL, ví dụ http://localhost:8080)", e["url"]), ("token CVAT (Personal Access Token)", e["token"])) if not v]
+            muc.append(html.escape(("Bạn đang thiếu " + " và ".join(thieu) + ".") if thieu else (cv["reason"] or "Cài đặt CVAT chưa hợp lệ.")))
+        tieu = "Chưa đặt tên người rà" if thieu_ten and not thieu_cvat else ("Chưa kết nối CVAT" if not thieu_ten else "Chưa đặt tên người rà và chưa kết nối CVAT")
+        return (f'<div class="modal-title" id="nap-cvat-title">{tieu}</div>'
+                + "".join(f'<div class="nap-box nap-warn" role="alert">{m}</div>' for m in muc)
+                + '<div class="nap-note">Cần điền trước khi nạp ảnh. Bấm <b>OK</b> để sang tab <b>Cài đặt</b>, bấm <b>Cancel</b> để ở lại tab này. Chưa nạp ảnh nào.</div>')
+
     def start(files, name, note, plan_st, open_after):
+        """Bọc _start: chưa đặt tên người rà (đang là tên mặc định) hoặc chưa có link/token CVAT thì KHÔNG nạp, mở hộp OK / Cancel (OK sang tab Cài đặt).
+        Đủ rồi thì chạy _start như cũ."""
+        thieu_ten, thieu_cvat = chua_dat_ten(ctx), not day_cvat.env_state()["ok"]
+        if not ctx.closing and (thieu_ten or thieu_cvat):
+            return ((gr.update(), plan_st, gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update())
+                    + job_update(job.snapshot(), n_ok_of(plan_st)) + (gr.update(visible=True), cvat_thieu_html(thieu_ten, thieu_cvat)))
+        return _start(files, name, note, plan_st, open_after) + (gr.update(), gr.update())
+
+    def _start(files, name, note, plan_st, open_after):
         """Chung cho Upload & Continue (open_after=False) và Upload & Open (True: chuẩn bị xong thì tự mở trang rà soát, xem on_auto_open)."""
         def refuse(text):
             gr.Warning(text, title="Chưa bắt đầu được")
@@ -1866,7 +1966,10 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
             job.start(run, ctx.runs_root, ctx.project_root)
         except RunError as e:
             return refuse(str(e))
-        dong_ho_ui.auto_start(gr, ctx, run, len(plan_st["plan"]["ok"]), open_after)     # bấm Nạp ảnh là đồng hồ CỦA ĐỢT MỚI bắt đầu (Open: chuyển sang đợt mới; Continue: đợt cũ giữ nguyên)
+        try:
+            dong_ho_ui.auto_start(gr, ctx, run, len(plan_st["plan"]["ok"]), open_after)     # bấm Nạp ảnh là đồng hồ CỦA ĐỢT MỚI bắt đầu (Open: chuyển sang đợt mới; Continue: đợt cũ giữ nguyên)
+        except Exception as ex:                                             # prepare đã chạy: lỗi đồng hồ (lạ) không được làm mất kết quả nạp (trang không tự mở, dễ nạp trùng)
+            gr.Warning(f"Chưa chạy được đồng hồ ({type(ex).__name__}): bấm Start ở đầu trang. Ảnh vẫn nạp bình thường.", title="Đồng hồ")
         ctx.auto_open = run if open_after else None
         text = (f"Đã nạp {len(plan_st['plan']['ok'])} ảnh vào runs\\{run}\\inbox, đang chạy prepare"
                 + (": xong thì trang tự mở rà soát lượt này." if open_after else "."))
@@ -1953,13 +2056,17 @@ def _nap_tab(gr, demo, store, ctx, dh=None):
         ctx.auto_open = None
         return on_go(plan_st) if act == "go" else (gr.skip(), "")
 
-    start_outs = [drop, plan_state, gal, rej, count, name_tb, note_tb, msg] + job_outs
+    start_outs = [drop, plan_state, gal, rej, count, name_tb, note_tb, msg] + job_outs + [cvat_modal, cvat_body]
     nap = dict(opts, concurrency_id="nap")
     nap_load = (on_load, [plan_state], [env_html, name_tb] + job_outs, dict(opts, concurrency_id="nap"))
     demo.load(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])
     drop.change(on_files, [drop, plan_state], [plan_state, gal, rej, count, b_start_open, b_start], **nap)
     ev_start = b_start.click(on_start, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
     ev_open = b_start_open.click(on_start_open, [drop, name_tb, note_tb, plan_state], start_outs, **nap)
+    hide_cvat = gr.update(visible=False)
+    b_cvat_no.click(lambda: hide_cvat, None, cvat_modal, **dict(opts, concurrency_id="nap_cvat"))
+    b_cvat_ok.click(lambda: hide_cvat, None, cvat_modal, **dict(opts, concurrency_id="nap_cvat"))
+    ctx.nap_cvat_ok = b_cvat_ok                                        # build_ui nối thêm: chuyển sang tab Cài đặt (server) rồi đưa con trỏ vào ô còn thiếu
     if dh is not None:                                                  # chip đồng hồ cập nhật ngay sau khi Nạp (không chờ nhịp 15 giây)
         for ev in (ev_start, ev_open):
             ev.then(dh.refresh, None, dh.outs, **dh.opts)
@@ -2035,7 +2142,7 @@ def build_ui(store, ctx=None):
                            font_mono=["ui-monospace", "Consolas", "monospace"])
     with gr.Blocks(title=title, fill_width=True) as demo:
         ctx.demo = demo
-        header = gr.HTML(HEAD_NAP_HTML.format(rev=html.escape(ctx.reviewer)) if store is None else "", elem_id="progress",
+        header = gr.HTML(head_nap(ctx) if store is None else "", elem_id="progress",
                          apply_default_css=False)
         close_ui = _close_bar(gr, demo, store, ctx)
         dh = dong_ho_ui.chip(gr, demo, ctx)                                  # chip đồng hồ + nút Pause/Resume ở mọi tab
@@ -2050,6 +2157,7 @@ def build_ui(store, ctx=None):
                     review = _review_tab(gr, demo, store, ctx, header)
             with gr.Tab("Nạp ảnh", id="nap", elem_id="tab-nap") as tab_nap:
                 nap_load = _nap_tab(gr, demo, store, ctx, dh)
+                nap_ok = getattr(ctx, "nap_cvat_ok", None)
             with gr.Tab("Các đợt", id="dot", elem_id="tab-dot") as tab_dot:
                 refresh, dot_ses, dot_outs, dot_opts = dot_ui.dot_tab(
                     gr, demo, store, ctx, dict(Store=Store, switch_js=NAP_SWITCH_JS, run_name=run_name, dh=dh))
@@ -2068,10 +2176,12 @@ def build_ui(store, ctx=None):
                     ev.then(refresh, [dot_ses], dot_outs, **dot_opts)
                 def after_model(ev):                        # Save đường dẫn model xong: tab Nạp ảnh kiểm lại ngay (chế độ --nap không phát sự kiện chọn tab Nạp ảnh)
                     ev.then(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])
-                def after_reviewer(ev):                     # Save name xong: lần Nạp ảnh bị bỏ qua đồng hồ vì chưa có tên người rà hợp lệ thì chạy bù, chip cập nhật ngay
-                    def bu():
-                        dong_ho_ui.bu_khi_co_ten(gr, ctx)
-                    ev.then(bu, None, None, **dh.opts).then(dh.refresh, None, dh.outs, **dh.opts)
+                def after_reviewer(ev):                     # Save name xong: đồng hồ chưa lưu của tên cũ chuyển sang tên mới, chip và dòng đầu trang cập nhật ngay
+                    def chuyen():
+                        dong_ho_ui.chuyen_ten_mac_dinh(gr, ctx)
+                    ev2 = ev.then(chuyen, None, None, **dh.opts).then(dh.refresh, None, dh.outs, **dh.opts)
+                    if store is None:                       # chế độ --nap: dòng đầu trang ghi tên người rà của trang
+                        ev2.then(lambda: head_nap(ctx), None, header, show_progress="hidden", api_visibility="private")
                 cd_fn, cd_in, cd_out, cd_opts = cai_dat_ui.settings_tab(gr, demo, store, ctx, after_cvat, run_name, after_model, after_reviewer)
         tab_ck.select(ck_fn, ck_in, ck_out, **ck_opts)                      # tab Ca khó tự làm mới khi chọn (ca vừa đánh dấu ở tab Rà soát)
         tab_dot.select(refresh, [dot_ses], dot_outs, **dot_opts)           # tự làm mới khi chọn tab (không quét lại mỗi giây)
@@ -2079,6 +2189,14 @@ def build_ui(store, ctx=None):
         tab_loc.select(lc_fn, lc_in, lc_out, **lc_opts)                     # Lọc dữ liệu: làm mới danh sách lượt/người rà/cấu hình khi chọn tab
         tab_nap.select(nap_load[0], nap_load[1], nap_load[2], **nap_load[3])  # kiểm lại model/cấu hình khi chọn tab (vừa đổi đường dẫn ở tab Cài đặt)
         tab_cd.select(cd_fn, cd_in, cd_out, **cd_opts)                     # tab Cài đặt: nạp lại trạng thái từ server khi chọn (nhiều tab trình duyệt)
+        if nap_ok is not None:                                             # OK của hộp "chưa đặt tên / chưa kết nối CVAT": chọn tab Cài đặt ở server (chạy cả khi tab nằm trong menu "More tabs")
+            o_thieu = gr.Textbox(visible="hidden", elem_id="nap-cvat-thieu")     # server chọn ô cần điền (hộp đã bị gỡ khỏi trang trước khi JS kịp đọc)
+
+            def on_nap_ok():
+                return gr.Tabs(selected="caidat"), ("ten" if chua_dat_ten(ctx) else "cvat")
+
+            nap_ok.click(on_nap_ok, None, [tabs, o_thieu], show_progress="hidden", api_visibility="private"
+                         ).then(None, o_thieu, None, js=CVAT_SANG_CAI_DAT_JS)
         if review is not None:                                             # chọn lại tab Rà soát: vẽ lại (ảnh vừa xoá/khôi phục ở tab Các đợt)
             n_outs = len(review.all_outs)
 
@@ -2136,8 +2254,15 @@ def main(argv=None):
         return 2
     mode, run_dir, reviewer = parsed
     tu_dong = reviewer is None                         # không ghi người rà ở dòng lệnh (menu chay.sh/chay.bat): lấy tên đã lưu ở tab Cài đặt
+    mac_dinh = False
     if tu_dong:
-        reviewer = cai_dat.get().default_reviewer() or DEFAULT_REVIEWER
+        reviewer = cai_dat.get().default_reviewer()
+        mac_dinh = not reviewer
+        reviewer = reviewer or DEFAULT_REVIEWER
+        if mac_dinh and mode == "run":                 # mở thẳng một đợt mà chưa có tên: không rà dưới tên mặc định P1 (triage_P1.csv lệch với tên đã rà trước đó)
+            print(f"Chưa đặt tên người rà nên chưa mở đợt {run_name(run_dir)}: mở trang chính. Vào tab Cài đặt, gõ tên của bạn rồi bấm Save name, "
+                  f"sau đó mở đợt {run_name(run_dir)} ở tab Các đợt → Review batch.", flush=True)
+            mode, run_dir = "nap", None
     try:
         check_reviewer(reviewer)
         bad = notebook_env()
@@ -2161,7 +2286,7 @@ def main(argv=None):
     except ValueError:
         print(f"Lỗi: GRADIO_SERVER_PORT={os.environ.get('GRADIO_SERVER_PORT')!r} không phải số.", file=sys.stderr)
         return 2
-    ctx = AppCtx(reviewer=reviewer, run_dir=run_dir, nap_only=store is None, reviewer_auto=tu_dong)
+    ctx = AppCtx(reviewer=reviewer, run_dir=run_dir, nap_only=store is None, reviewer_auto=tu_dong, reviewer_mac_dinh=mac_dinh)
     demo, first = None, True
     try:
         while True:
@@ -2179,7 +2304,8 @@ def main(argv=None):
                       file=sys.stderr)
                 return 2
             if store is None:
-                print(f"Trang rà soát (chưa có lượt nào), người rà {reviewer}: nạp ảnh ở tab Nạp ảnh.\n"
+                ai = "chưa đặt tên (đặt ở tab Cài đặt, mục Người rà)" if chua_dat_ten(ctx) else reviewer
+                print(f"Trang rà soát (chưa có lượt nào), người rà {ai}: nạp ảnh ở tab Nạp ảnh.\n"
                       f"Mở {url} nếu trình duyệt chưa tự mở (chỉ máy này vào được). Ctrl+C để đóng.", flush=True)
             else:
                 p = store.progress()

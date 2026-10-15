@@ -10,9 +10,11 @@ khác cùng đợt, hoặc trùng tên ảnh dù khác đợt, thì từ chối;
 Quy ước (giống ca_kho.py):
   * Đầu module KHÔNG nạp gradio (nhận `gr` làm tham số); chỉ thư viện chuẩn và các module tool/ chỉ thư viện chuẩn + numpy nạp lười. Không gọi mạng, không đọc token.
   * Tính KHI CHỌN TAB (tab.select) hoặc bấm Load & Calculate (đọc các gói ở ô nạp rồi tính), không tính lúc mở trang; chỉ ĐỌC runs\\, raw\\, data\\, outputs\\. Chỉ ghi khi bấm "Export CSV + HTML" (chỉ dưới outputs\\thong_ke)
-    và khi bấm "Add manual entry" / "Remove entry" của mục Nhập tay (chỉ dưới outputs\\goi_nhom). Chỉ tải gói lên (ô "Nạp các gói...") thì không ghi gì.
+    và khi bấm "Add manual entry" / "Remove entry" của mục Nhập tay (chỉ dưới outputs\\goi_nhom). Chỉ tải gói lên (ô "Nạp các gói...") hay chọn tab thì không ghi gì;
+    bấm "Load & Calculate" thì gói hợp lệ ở ô nạp được CHÉP nguyên byte vào outputs\\goi_da_nap (mở lại trang vẫn còn; "Remove package" chuyển vào goi_da_nap\\_da_bo,
+    không xoá). "Set name" / "Clear name" ghi outputs\\ten_nguoi.json (không nằm trong thư mục trang phát qua URL).
   * Giá trị từ trình duyệt (lượt chứa nháp, đường dẫn bấm giờ) được kiểm lại ở server: lượt phải là phần tử của danh sách do server tính; đường dẫn bấm giờ phải nằm trong thư mục dự án;
-    gói kết quả tải lên (nút "Nạp các gói kết quả của nhóm") được đọc từ file tạm của Gradio, kiểm sha256 và cấu trúc trước khi tin, không lưu vào dự án.
+    gói kết quả tải lên (ô "Nạp các gói kết quả của nhóm") được đọc từ file tạm của Gradio, kiểm sha256 và cấu trúc trước khi tin (gói hỏng không được lưu).
   * Handler: api_visibility="private", concurrency_id riêng (thongke, thongke_xuat, thongke_tay), không chặn tab khác; lỗi -> gr.Warning và thông báo tiếng Việt, không traceback
     lên trang; trang đang đóng (Close page) thì từ chối ghi.
   * Trang không hiện ảnh mặt (chỉ số); bản xuất tĩnh cũng không có ảnh mặt, không mã tài xế.
@@ -47,7 +49,7 @@ CSS = thong_ke_html.CSS + """
 #tk-tay-row, #tk-tay-bo { gap: 10px; flex-wrap: wrap; align-items: flex-end; } #tk-tay-row > * { min-width: 150px !important; }
 #tk-tay-bo > * { min-width: 200px !important; } #tk-tay-remove { flex: 0 1 160px !important; min-width: 0 !important; }
 #tk-log-view { padding: 0 !important; }
-#tk-log-panel { position: fixed !important; top: 7vh; left: 50%; transform: translateX(-50%); width: min(940px, 94vw); max-height: 84vh; overflow: auto; z-index: 60;
+#tk-log-panel { position: fixed !important; top: 7vh; left: 50%; transform: translateX(-50%); width: min(940px, 94vw); max-height: 84vh; overflow: auto; z-index: 45;
   padding: 14px 16px !important; border: 1px solid var(--border-color-primary); border-radius: 12px; background: var(--background-fill-primary); box-shadow: 0 12px 40px rgba(0,0,0,.45); }
 #tk-log-head { align-items: center; justify-content: space-between; } #tk-log-head button { flex: 0 0 auto !important; width: auto !important; min-width: 90px !important; }
 #tk-ten-msg, #tk-ten-list, #tk-tay-msg, #tk-tay-list { padding: 0 !important; } #tk-tay-msg:not(:has(.html-container > div > *)) { display: none; }
@@ -74,31 +76,48 @@ JS_BODY = r"""
     if (e.key !== 'Escape') { return; }
     const p = document.getElementById('tk-log-panel');
     const c = document.getElementById('tk-log-close');
-    if (p && c && p.getClientRects().length > 0 && !document.querySelector('.m28-modal')) { e.preventDefault(); c.click(); }      // panel position:fixed nên offsetParent luôn null: dùng getClientRects
+    const t = e.target;
+    const loai = (t && t.tagName === 'INPUT') ? (t.getAttribute('type') || 'text').toLowerCase() : '';
+    const go = t && (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable
+                     || (t.tagName === 'INPUT' && ['checkbox', 'radio', 'range', 'button', 'submit', 'file'].indexOf(loai) < 0));   // Esc trong ô gõ chữ (đóng dropdown...): không đóng Log; ô tick, thanh trượt thì vẫn đóng
+    if (p && c && !go && p.getClientRects().length > 0 && !document.querySelector('.m28-modal')) { e.preventDefault(); c.click(); }      // panel position:fixed nên offsetParent luôn null: dùng getClientRects
   });
 """
+LOG_MO_JS = r"""() => {
+  // Mở hộp Log: nhãn cho trình đọc màn hình và đưa con trỏ bàn phím vào nút Close (Esc hoặc Enter để đóng).
+  setTimeout(() => {
+    const p = document.getElementById('tk-log-panel');
+    if (p) { p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Log của thống kê'); }
+    const c = document.getElementById('tk-log-close');
+    if (c) { c.focus(); }
+  }, 120);
+}"""
+LOG_DONG_JS = r"""() => {
+  setTimeout(() => { const b = document.getElementById('tk-log-open'); if (b) { b.focus(); } }, 80);          // trả con trỏ về nút Log
+}"""
 LOG_TRONG = '<div class="tk-root"><div class="tk-note">Chưa tính: bấm Load &amp; Calculate rồi mở lại Log.</div></div>'
 
 
-def goi_note(files, st):
-    """Câu báo kết quả nạp các gói ở ô "Nạp các gói kết quả của nhóm" sau khi bấm Load & Calculate: (chữ, mức) hoặc ("", "info") khi không có file nào. Nói rõ từng file được tính,
-    là bản trùng (cùng mã phiên với gói đã tính, chỉ tính một lần) hay bị loại vì hỏng, để không phải đoán trong bảng số liệu bên dưới."""
-    tens = list(dict.fromkeys(os.path.basename(p) for p in goi_paths(files)))
-    if not tens:
+def nap_note(r, files, tinh_xong=True):
+    """Câu báo sau khi bấm Load & Calculate với các file ở ô nạp: (chữ, mức) hoặc ("", "info") khi ô nạp trống hay không làm gì (trang đang đóng).
+    r = thong_ke.luu_goi_nap(...). tinh_xong=False: tính lỗi sau khi đã lưu, không nói "số liệu đã tính lại"."""
+    if not goi_paths(files):
         return "", "info"
-    ng = st.get("nguon") or {}
-    tinh = set(ng.get("goi") or [])
-    trung = dict(ng.get("goi_trung") or [])
-    hong = dict(ng.get("goi_hong") or [])
-    ok = [t for t in tens if t in tinh and t not in trung]
-    bo = [t for t in tens if t in trung]
-    loi = [(t, hong[t]) for t in tens if t in hong]
-    text = f"Đã đọc {len(tens)} file ở ô nạp gói: {len(ok)} gói được tính" + (f" ({', '.join(ok)})" if ok else "")
-    if bo:
-        text += f"; {len(bo)} bản trùng bị bỏ vì cùng mã phiên với gói đã tính, chỉ tính một lần ({', '.join(bo)})"
-    if loi:
-        text += f"; {len(loi)} file lỗi: " + "; ".join(f"{t}: {w}" for t, w in loi[:3])
-    return text + ". Số liệu ở dưới đã tính lại với các gói này.", ("warn" if loi else "ok")
+    parts = []
+    if r["luu"]:
+        parts.append(f"Đã lưu {len(r['luu'])} gói vào outputs\\goi_da_nap, mở lại trang vẫn còn ({', '.join(r['luu'])})")
+    if r.get("moi_hon"):
+        parts.append(f"{len(r['moi_hon'])} gói là bản MỚI HƠN của gói đã có (cùng mã phiên), đã lưu và thống kê dùng bản mới ({', '.join(r['moi_hon'])})"
+                     + (f"; bản cũ chuyển vào outputs\\goi_da_nap\\_da_bo ({', '.join(r['da_bo'])})" if r.get("da_bo") else ""))
+    if r["co_san"]:
+        parts.append(f"{len(r['co_san'])} file đã có sẵn (cùng mã phiên với gói đã lưu, giống hệt hoặc cũ hơn: không chép thêm: {', '.join(r['co_san'])})")
+    if r["loi"]:
+        parts.append(f"{len(r['loi'])} file lỗi, không lưu: " + "; ".join(f"{t}: {w}" for t, w in r["loi"][:3]))
+    if not parts:
+        return "", "info"
+    duoi = ((". Số liệu ở dưới đã tính lại, kể cả gói chưa lưu được (còn trong ô nạp: bấm lại để lưu)." if r.get("chua_luu")
+             else ". Số liệu ở dưới đã tính lại với các gói đã lưu.") if tinh_xong else ".")
+    return "; ".join(parts) + duoi, ("warn" if r["loi"] else "ok")
 
 
 def reviewers(runs_root):
@@ -163,7 +182,7 @@ def stats_tab(gr, demo, store, ctx):
         c_bo = gr.Checkbox(value=True, label="Chỉ bộ ảnh thí nghiệm", info="theo bo_anh trong config\\nhom_thi_nghiem.json (nếu có)", elem_id="tk-chibo")
         c_ttest = gr.Checkbox(value=False, label="Gồm Ttest", info="Ttest là tập đo một lần của đề tài", elem_id="tk-ttest")
         t_timing = gr.Textbox(value="", label="Thư mục/file bấm giờ thêm (trong thư mục dự án, tuỳ chọn)", elem_id="tk-timing")
-    f_goi = gr.File(label="Nạp các gói kết quả của nhóm (ketqua_*.zip hoặc .json; chỉ đọc, không lưu vào dự án)", file_count="multiple", file_types=[".zip", ".json"], type="filepath",
+    f_goi = gr.File(label="Nạp các gói kết quả của nhóm (ketqua_*.zip hoặc .json); bấm Load & Calculate để lưu vào outputs\\goi_da_nap và tính, mở lại trang vẫn còn", file_count="multiple", file_types=[".zip", ".json"], type="filepath",
                     elem_id="tk-goi", height=120)
     with gr.Accordion("Nhập tay: nhóm gán tay trực tiếp trong CVAT (không dùng tool)", open=False, elem_id="tk-tay") as acc_tay:
         with gr.Row(elem_id="tk-tay-row"):
@@ -182,13 +201,14 @@ def stats_tab(gr, demo, store, ctx):
         with gr.Row(elem_id="tk-tay-bo"):
             d_tay_bo = gr.Dropdown(choices=[], value=None, label="Bản nhập tay (gỡ thì chuyển vào outputs\\goi_nhom\\_da_bo, không xoá)", elem_id="tk-tay-chon")
             b_tay_bo = gr.Button("Remove entry", elem_id="tk-tay-remove")
-    with gr.Accordion("Đặt tên người cho gói: biết gói nào của ai (nhóm trưởng)", open=False, elem_id="tk-ten") as acc_ten:
+    with gr.Accordion("Gói đã nạp: đặt tên người, gỡ gói (nhóm trưởng)", open=False, elem_id="tk-ten") as acc_ten:
         with gr.Row(elem_id="tk-ten-row"):
-            d_ten_goi = gr.Dropdown(choices=[], value=None, label="Gói (chọn sau khi nạp gói ở ô trên; hiện cả gói trong outputs\\ket_qua và outputs\\goi_nhom)", elem_id="tk-ten-goi")
+            d_ten_goi = gr.Dropdown(choices=[], value=None, allow_custom_value=True, label="Gói (đã lưu trong outputs\\goi_da_nap, outputs\\ket_qua, outputs\\goi_nhom, hoặc đang ở ô nạp)", elem_id="tk-ten-goi")
             t_ten = gr.Textbox(value="", label="Tên người", placeholder="ví dụ Cuong", max_lines=1, elem_id="tk-ten-ten")
         with gr.Row(elem_id="tk-ten-btns"):
             b_ten = gr.Button("Set name", variant="primary", elem_id="tk-ten-set")
             b_ten_xoa = gr.Button("Clear name", elem_id="tk-ten-clear")
+            b_goi_bo = gr.Button("Remove package", elem_id="tk-goi-remove")
         ten_msg = gr.HTML(elem_id="tk-ten-msg", apply_default_css=False)
         ten_list = gr.HTML(elem_id="tk-ten-list", apply_default_css=False)
     with gr.Row(elem_id="tk-btns"):
@@ -204,7 +224,7 @@ def stats_tab(gr, demo, store, ctx):
     download = gr.DownloadButton("Download thong_ke.html", visible=False, elem_id="tk-download")
     view = gr.HTML(elem_id="tk-view", apply_default_css=False, elem_classes=["tk-root"])
     inputs = [d_nhap, s_nguong, c_task, c_bo, c_ttest, t_timing, f_goi]
-    outs = [d_nhap, msg, view, log_view]
+    outs = [d_nhap, msg, view, log_view, f_goi]
 
     def compute(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, files):
         luot_nhap = clean_args(ctx.runs_root, luot_nhap)
@@ -212,17 +232,38 @@ def stats_tab(gr, demo, store, ctx):
                              goi_paths(files), bool(chi_bo))
 
     def on_refresh(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, files):
+        """Tính lại (chọn tab, sau Set name, sau Add manual entry...): KHÔNG lưu gì; file ở ô nạp chỉ được đọc như trước. Lưu gói là việc của nút Load & Calculate."""
+        return _tinh_va_ve(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, files, luu=False)
+
+    def on_load_calc(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, files):
+        """Nút Load & Calculate: các gói ở ô nạp được LƯU vào outputs\\goi_da_nap (gói hỏng thì không), ô nạp được làm trống, rồi tính từ các thư mục gói đã lưu."""
+        return _tinh_va_ve(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, files, luu=True)
+
+    def _tinh_va_ve(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, files, luu):
+        """Không lưu được (lỗi đĩa) thì vẫn tính trực tiếp từ file tải lên như trước."""
         runs = dot_anh.list_runs(ctx.runs_root)
         luot_nhap = luot_nhap if luot_nhap in runs else ""
         up = gr.update(choices=[("(không)", "")] + [(r, r) for r in runs], value=luot_nhap)
+        paths, keep = goi_paths(files), gr.update()
+        r = dict(luu=[], moi_hon=[], da_bo=[], co_san=[], loi=[])
+        if paths and luu and not ctx.closing:
+            try:
+                r = thong_ke.luu_goi_nap(ctx.project_root, paths, {p["name"] for p in bang_mat.load_cfg(ctx.project_root)["points"]})
+                tinh_tu = [p for p in paths if os.path.basename(p) in {t for t, _w in r["loi"]}]                 # file lỗi: vẫn đưa vào để Log nêu lý do
+                keep = gr.update() if r.get("chua_luu") else gr.update(value=None)                                # chép lỗi (đĩa đầy...): giữ ô nạp để bấm lại
+            except (bang_mat.BangLoi, OSError) as ex:
+                r, tinh_tu = dict(luu=[], moi_hon=[], da_bo=[], co_san=[], loi=[("(lưu gói)", str(ex))]), paths
+        else:
+            tinh_tu = paths
         try:
-            st = compute(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, files)
+            st = compute(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, tinh_tu)
         except (nap_anh.RunError, bang_mat.BangLoi, toc_do.TocDoLoi, OSError) as ex:
             gr.Warning(str(ex), title="Chưa tính được thống kê")
-            return up, msg_html(str(ex), "warn"), "", gr.update()
-        note, level = goi_note(files, st)
+            da_luu = nap_note(r, files, tinh_xong=False)[0] if luu else ""          # gói đã lưu rồi: vẫn nói, kẻo tưởng mất
+            return up, msg_html((da_luu + " " if da_luu else "") + "Chưa tính được thống kê: " + str(ex), "warn"), "", gr.update(), keep
+        note, level = nap_note(r, files) if luu else ("", "info")
         chinh, log = thong_ke_html.noi_dung_gon(st)
-        return up, msg_html(note, level), f'<div class="tk-root">{chinh}</div>', f'<div class="tk-root">{log}</div>'
+        return up, msg_html(note, level), f'<div class="tk-root">{chinh}</div>', f'<div class="tk-root">{log}</div>', keep
 
     def on_export(luot_nhap, nguong, tat_ca, chi_bo, ttest, timing, files):
         if ctx.closing:
@@ -315,18 +356,26 @@ def stats_tab(gr, demo, store, ctx):
                 continue
             seen.add(ph)
             e = m.get(ph)
-            ch.append((f'{t} · đợt {nd.get("dot") or "-"} · người {e["ten"] + " (đã đặt, gốc " + nd["nguoi"] + ")" if e else nd["nguoi"]}', ph))
+            bd = str(nd.get("bat_dau") or "")
+            bd = f"{bd[8:10]}/{bd[5:7]} {bd[11:16]}" if len(bd) >= 16 else "?"
+            chi_tiet = f'{nd.get("nhom") or "?"} · {nd.get("so_mat") or len(nd.get("ket_qua") or [])} mặt · bắt đầu {bd}'
+            ch.append((f'{t} · đợt {nd.get("dot") or "-"} · người {e["ten"] + " (đã đặt, gốc " + nd["nguoi"] + ")" if e else nd["nguoi"]} · {chi_tiet}', ph))
             rows.append(f'<tr><td>{html.escape(t)}</td><td>{html.escape(str(nd.get("dot") or "-"))}</td><td>{html.escape(nd["nguoi"])}</td>'
-                        f'<td><b>{html.escape(e["ten"]) if e else "—"}</b></td></tr>')
-        table = ('<div class="tk-root"><table class="tk-table"><tr><th>Gói</th><th>Đợt</th><th>Tên trong gói</th><th>Tên nhóm trưởng đặt</th></tr>' + "".join(rows) + "</table></div>") if rows else \
+                        f'<td>{html.escape(chi_tiet)}</td><td><b>{html.escape(e["ten"]) if e else "—"}</b></td></tr>')
+        table = ('<div class="tk-root"><table class="tk-table"><tr><th>Gói</th><th>Đợt</th><th>Tên trong gói</th><th>Nhóm · số mặt · bắt đầu</th><th>Tên nhóm trưởng đặt</th></tr>'
+                 + "".join(rows) + "</table></div>") if rows else \
             '<div class="tk-root"><div class="tk-note">Chưa đọc được gói nào (chọn gói ở ô nạp phía trên hoặc đặt gói vào outputs\\ket_qua).</div></div>'
         return ch, table
 
-    def on_ten_open(files):
+    def ds_an_toan(files):
+        """ten_goi_ds nhưng không bao giờ ném lỗi (thiếu/hỏng config, file bị khoá): ([], cập nhật trống)."""
         try:
-            ch, table = ten_goi_ds(files)
+            return ten_goi_ds(files)
         except (bang_mat.BangLoi, OSError):
-            ch, table = [], ""
+            return [], gr.update()
+
+    def on_ten_open(files):
+        ch, table = ds_an_toan(files)
         return gr.update(choices=ch), table
 
     def _ten_label(files, phien):
@@ -335,7 +384,7 @@ def stats_tab(gr, demo, store, ctx):
 
     def on_ten_set(phien, ten, files):
         if ctx.closing:
-            return msg_html(nap_anh.CLOSING_MSG, "warn"), gr.update(), ""
+            return msg_html(nap_anh.CLOSING_MSG, "warn"), gr.update(), gr.update()
         try:
             hit, ch = _ten_label(files, phien)
             if hit is None:
@@ -345,22 +394,42 @@ def stats_tab(gr, demo, store, ctx):
             moi = ten_nguoi.dat(ctx.project_root, phien, ten, goi=hit[0].split(" · ")[0], goc=nd["nguoi"])
         except (ten_nguoi.TenNguoiLoi, bang_mat.BangLoi, OSError) as ex:
             gr.Warning(str(ex), title="Chưa đặt được tên")
-            return msg_html(str(ex), "warn"), gr.update(), ten_goi_ds(files)[1]
-        ch, table = ten_goi_ds(files)
+            return msg_html(str(ex), "warn"), gr.update(), ds_an_toan(files)[1]
+        ch, table = ds_an_toan(files)
         return msg_html(f"Đã đặt tên {moi} cho gói {hit[0].split(' · ')[0]}; thống kê tính lại bên dưới. File gói gốc không bị sửa.", "ok"), gr.update(choices=ch), table
 
     def on_ten_clear(phien, files):
         if ctx.closing:
-            return msg_html(nap_anh.CLOSING_MSG, "warn"), gr.update(), ""
+            return msg_html(nap_anh.CLOSING_MSG, "warn"), gr.update(), gr.update()
         try:
             co = ten_nguoi.bo(ctx.project_root, phien) if phien else False
         except OSError as ex:
             gr.Warning(str(ex), title="Chưa bỏ được tên")
-            return msg_html(str(ex), "warn"), gr.update(), ""
-        ch, table = ten_goi_ds(files)
+            return msg_html(str(ex), "warn"), gr.update(), gr.update()
+        ch, table = ds_an_toan(files)
         return (msg_html("Đã bỏ tên đã đặt: gói dùng lại tên người gốc trong gói." if co else "Gói này chưa được đặt tên.", "ok" if co else "info"), gr.update(choices=ch), table)
 
+    def on_goi_bo(phien, files):
+        if ctx.closing:
+            return msg_html(nap_anh.CLOSING_MSG, "warn"), gr.update(), gr.update()
+        try:
+            moved = thong_ke.bo_goi_nap(ctx.project_root, phien, {p["name"] for p in bang_mat.load_cfg(ctx.project_root)["points"]}) if phien else []
+        except (bang_mat.BangLoi, OSError) as ex:
+            gr.Warning(str(ex), title="Chưa gỡ được gói")
+            return msg_html(str(ex), "warn"), gr.update(), gr.update()
+        ch, table = ds_an_toan(files)
+        if not phien:
+            return msg_html("Chưa chọn gói.", "warn"), gr.update(choices=ch), table
+        if not moved:
+            return (msg_html("Gói này không nằm trong outputs\\goi_da_nap (gói của chính máy này trong outputs\\ket_qua, hoặc bản nhập tay: gỡ ở mục Nhập tay), "
+                             "hoặc chỉ đang ở ô nạp chưa lưu: không gỡ gì.", "warn"), gr.update(choices=ch, value=None), table)
+        con = any(v == phien for _l, v in ch)
+        return (msg_html(f"Đã gỡ {', '.join(moved)}: chuyển vào outputs\\goi_da_nap\\_da_bo (không xoá; muốn tính lại thì chép về outputs\\goi_da_nap)."
+                         + (" Gói cùng mã phiên vẫn còn ở outputs\\ket_qua hoặc outputs\\goi_nhom (hoặc ở ô nạp) nên thống kê VẪN tính bản đó." if con else ""),
+                         "warn" if con else "ok"), gr.update(choices=ch, value=None), table)
+
     ten_out = [ten_msg, d_ten_goi, ten_list]
+    b_goi_bo.click(on_goi_bo, [d_ten_goi, f_goi], ten_out, **ten_opts).then(on_refresh, inputs, outs, **opts)
     b_ten.click(on_ten_set, [d_ten_goi, t_ten, f_goi], ten_out, **ten_opts).then(on_refresh, inputs, outs, **opts)
     b_ten_xoa.click(on_ten_clear, [d_ten_goi, f_goi], ten_out, **ten_opts).then(on_refresh, inputs, outs, **opts)
     acc_ten.expand(on_ten_open, [f_goi], [d_ten_goi, ten_list], **ten_opts)
@@ -372,8 +441,8 @@ def stats_tab(gr, demo, store, ctx):
     acc_tay.expand(on_tay_open, [t_dot], [t_dot, tay_list, d_tay_bo], **tay_opts)
 
     log_opts = dict(show_progress="hidden", api_visibility="private", concurrency_limit=None)
-    b_log.click(lambda: gr.update(visible=True), None, log_panel, **log_opts)
-    b_log_close.click(lambda: gr.update(visible=False), None, log_panel, **log_opts)
-    b_refresh.click(on_refresh, inputs, outs, **opts).then(on_tay_list, None, [tay_list, d_tay_bo], **tay_opts)
+    b_log.click(lambda: gr.update(visible=True), None, log_panel, **log_opts).then(None, None, None, js=LOG_MO_JS)
+    b_log_close.click(lambda: gr.update(visible=False), None, log_panel, **log_opts).then(None, None, None, js=LOG_DONG_JS)
+    b_refresh.click(on_load_calc, inputs, outs, **opts).then(on_tay_list, None, [tay_list, d_tay_bo], **tay_opts)
     b_export.click(on_export, inputs, [msg, download], **dict(opts, concurrency_id="thongke_xuat"))
     return on_refresh, inputs, outs, opts

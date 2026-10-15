@@ -1408,7 +1408,7 @@ CSS = """
 #ck-badge, #ck-msg, #ck-m-msg, #ck-ngoai, #ck-sum, #ck-list, #hop-msg, #hop-report, #hop-counts, #hop-hint { padding: 0 !important; }
 #ck-row #btn-cakho { min-height: 40px; font-weight: 700; }
 #decide #btn-cakho { background: #7c3aed !important; border-color: #6d28d9 !important; }            /* nút thứ tư cùng hàng với Nhận, Gán tay, Bỏ ảnh (kiểu dáng chung ở #decide button) */
-#ck-row:not(:has(.html-container > div > *)) { display: none; }                                      /* hàng chỉ còn nhãn "Đã đánh dấu" thì trống: không chiếm chỗ */
+#ck-row:not(:has(button)):not(:has(.html-container > div > *)) { display: none; }                                      /* hàng chỉ còn nhãn "Đã đánh dấu" thì trống: không chiếm chỗ */
 #ck-panel { background: var(--block-background-fill) !important; padding: 10px 12px !important; gap: 8px; border: 1px solid var(--border-color-primary); border-radius: 10px; }
 #ck-panel-face { font-size: 15px; padding: 0 !important; }
 #ck-loai .wrap { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }

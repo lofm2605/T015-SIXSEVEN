@@ -101,10 +101,13 @@ def test_thresholds_of_the_eye_rule(monkeypatch):
     def fake(values):
         monkeypatch.setattr(che_khuat, 'do_vung_mat', lambda gray, pts: values)
         return che_khuat.mat_bi_che(object(), None)
-    assert fake({'L': (che_khuat.GM_MAX - 0.1, 1.0), 'R': (che_khuat.GM_MAX + 0.1, 1.0)}) == {'L'}              # nét thấp: bị che
-    assert fake({'L': (9.0, che_khuat.LUM_TOI - 0.01), 'R': (9.0, che_khuat.LUM_TOI + 0.01)}) == {'L'}         # tối và ít nét: kính đen
-    assert fake({'R': (che_khuat.GM_TOI + 1, 0.05)}) == set()                                                    # tối nhưng còn nét: thôi
-    assert fake({'L': (28.0, 0.7), 'R': (30.0, 0.8)}) == set()                                                   # mắt bình thường
+    G, S, L = che_khuat.GM_PHANG, che_khuat.SANG_KINH, che_khuat.LUM_KINH
+    assert fake({'L': (G - 0.1, 0.6, 0.9), 'R': (G + 0.1, 0.6, 0.9)}) == {'L'}                                  # gần như phẳng: bị che
+    assert fake({'L': (9.0, L - 0.01, S - 0.01), 'R': (25.0, 0.7, 1.0)}) == {'L'}                                # tròng kính đen một bên, mắt kia sáng (kính phản chiếu): chỉ một
+    assert fake({'L': (9.0, L - 0.01, S - 0.01), 'R': (25.0, che_khuat.LUM_KINH_CAP - 0.01, 0.7)}) == {'L', 'R'}   # kính đen: mắt kia đủ tối cũng bị che
+    assert fake({'L': (9.0, L + 0.01, S - 0.01), 'R': (9.0, L - 0.01, S + 0.01)}) == set()                       # chỉ tối HOẶC chỉ thiếu chỗ sáng: chưa đủ (ảnh 010)
+    assert fake({'L': (6.2, 0.30, 0.56), 'R': (5.3, 0.31, 0.39)}) == set()                                       # số đo thật của ảnh 010 (mắt thật hơi mờ, tối): không báo nhầm
+    assert fake({'L': (28.0, 0.7, 1.0), 'R': (30.0, 0.8, 1.1)}) == set()                                         # mắt bình thường
 
 
 def test_eye_rule_survives_bad_inputs():

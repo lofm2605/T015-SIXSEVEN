@@ -436,3 +436,17 @@ def test_dau_cuoi_tong_ket_tu_doc_ban_nhap_tay_cua_nhom_truong(hai_nhom, tmp_pat
     assert tong_ket.main(['--project', hai_nhom, '--vao', os.path.join(hai_nhom, GOI_NHOM), '--ra', 'ra']) == 0       # đã nêu outputs/goi_nhom: không đọc thêm lần nữa
     out = capsys.readouterr().out
     assert 'Đọc thêm' not in out and 'Đã dùng 4 gói' in out
+
+
+def test_goi_da_dat_ten_khac_khong_chan_nhap_tay_cua_nguoi_that_cung_ten_goc(tmp_path):
+    """Gói làm với tên mặc định P2 (thật ra của Lan) đã được nhóm trưởng đặt tên Lan: nhập tay cho người P2 thật không bị chặn vì "trùng ảnh";
+    ngược lại nhập tay dưới tên Lan thì bị chặn (cùng người theo tên thống kê dùng). Thông báo nhắc cả Remove package của mục Gói đã nạp."""
+    from m28core import ten_nguoi
+    root = du_an(tmp_path / 'p')
+    f = xml_file(tmp_path, 'a.xml', mats(ANH[2:5]))
+    nd_g = nd_goi('P2', 'manual', 40.0, dot='NAP_001')
+    viet_goi(root, nd_g)
+    ten_nguoi.dat(root, nd_g['phien'], 'Lan')
+    assert nt.them(root, nd_tay(root, [f], nguoi='P2', dot='NAP_005'))['ten'] == 'ketqua_P2_1410_NAP_005'
+    with pytest.raises(nt.NhapTayLoi, match=r'ketqua_P2_1410_NAP_001\.zip của Lan .*trùng 3 ảnh.*Remove package'):
+        nt.them(root, nd_tay(root, [f], nguoi='Lan', dot='NAP_006'))

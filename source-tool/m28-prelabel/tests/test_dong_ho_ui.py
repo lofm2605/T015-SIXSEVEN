@@ -156,34 +156,44 @@ def test_auto_start_with_an_invalid_reviewer_name_says_why_and_does_not_run(app)
     assert 'không hợp lệ' in out['dh-mini-wrap'] and out['dh-mini-btn']['interactive'] is False
 
 
-def test_auto_start_without_a_name_runs_later_when_the_name_is_saved_in_settings(app):
-    """Lỗi: bấm Nạp ảnh lúc chưa có tên hợp lệ thì đồng hồ báo cần tên và không tạo phiên; đặt tên ở Cài đặt xong đồng hồ vẫn không chạy (nút Start khoá vì chưa có phiên)."""
+def test_rename_then_new_batch_never_leaves_two_clocks_running(app):
+    """Đổi tên giữa chừng (Save name) rồi nạp đợt mới: đồng hồ đợt mới dùng tên mới (đúng tên trang của đợt đó), đồng hồ của tên cũ tự tạm dừng: luôn chỉ một đồng hồ chạy."""
     import cai_dat
     root, ctx, g = app
-    os.makedirs(os.path.join('runs', 'NAP_001'), exist_ok=True)
-    ctx2 = ra.AppCtx(reviewer='Lam Tran', run_dir=os.path.join('runs', '_nap'), nap_only=True)
-    ctx2.dong_ho = ctx.dong_ho
-    assert 'không hợp lệ' in dong_ho_ui.auto_start(None, ctx2, 'NAP_001', 5)
-    assert dong_ho_ui.bu_khi_co_ten(None, ctx2) is None                              # tên vẫn chưa hợp lệ: không chạy, vẫn nhớ lần Nạp ảnh đó
-    assert ctx.dong_ho.cac_nguoi() == []
-    assert cai_dat.get().set_reviewer('P3')['ok']                                    # Save name ở tab Cài đặt
-    txt = dong_ho_ui.bu_khi_co_ten(None, ctx2)
-    assert 'P3' in txt and 'NAP_001' in txt
-    v = ctx.dong_ho.xem('P3')
-    assert v['co_phien'] and v['dot'] == 'NAP_001' and v['trang_thai'] == 'chay'
-    assert dong_ho_ui.bu_khi_co_ten(None, ctx2) is None                              # chỉ chạy bù một lần
-    assert len([s for s in ctx.dong_ho.liet_ke('P3')]) == 1
+    for r in ('A', 'B', 'C'):
+        os.makedirs(os.path.join('runs', r), exist_ok=True)
+    dong_ho_ui.auto_start(None, ctx, 'A', 5)                                            # trang của P5: A chạy
+    assert ctx.dong_ho.dang_chay_ai() == ['P5']
+    assert cai_dat.get().set_reviewer('Lan')['ok']                                       # Save name: tên cho đợt sau
+    assert dong_ho_ui.nguoi_dot_moi(ctx) == 'Lan'
+    dong_ho_ui.auto_start(None, ctx, 'B', 5, True)                                      # Upload & Open: đồng hồ B của Lan, A của P5 tạm dừng
+    assert ctx.dong_ho.dang_chay_ai() == ['Lan'] and ctx.dong_ho.xem('Lan', 'B')['chay'] and ctx.dong_ho.xem('P5', 'A')['trang_thai'] == 'tam_dung'
+    txt = dong_ho_ui.auto_start(None, ctx, 'C', 5, False)                               # Upload & Continue lúc Lan/B đang chạy: C chờ
+    assert ctx.dong_ho.xem('Lan', 'C')['cho'] and ctx.dong_ho.dang_chay_ai() == ['Lan'] and 'chờ' in txt
+    c_ctx = page_ctx(root, ctx, 'C')
+    c_ctx.reviewer = 'Lan'
+    msg = dong_ho_ui.theo_trang(c_ctx)                                                   # Review batch sang C: C chạy, B tạm dừng
+    assert ctx.dong_ho.xem('Lan', 'C')['chay'] and not ctx.dong_ho.xem('Lan', 'C')['cho'] and ctx.dong_ho.xem('Lan', 'B')['trang_thai'] == 'tam_dung' and 'C' in msg
+    ctx.dong_ho.tiep_tuc('P5', None, dot='A')                                           # ai đó bấm Resume ở đồng hồ cũ của P5: hai đồng hồ...
+    a_ctx = page_ctx(root, ctx, 'C')
+    a_ctx.reviewer = 'Lan'
+    msg = dong_ho_ui.theo_trang(a_ctx)                                                   # ...chuyển trang là đồng hồ của tên khác tạm dừng
+    assert ctx.dong_ho.dang_chay_ai() == ['Lan'] and 'P5' in msg
 
 
-def test_late_start_is_skipped_when_the_run_was_deleted_meanwhile(app):
-    import cai_dat
+def test_waiting_batch_starts_when_opened_even_if_no_clock_is_running(app):
     root, ctx, g = app
-    ctx2 = ra.AppCtx(reviewer='Lam Tran', run_dir=os.path.join('runs', '_nap'), nap_only=True)
-    ctx2.dong_ho = ctx.dong_ho
-    dong_ho_ui.auto_start(None, ctx2, 'NAP_404', 5)                                  # thư mục runs/NAP_404 không tồn tại
-    assert cai_dat.get().set_reviewer('P2')['ok']
-    assert dong_ho_ui.bu_khi_co_ten(None, ctx2) is None
-    assert ctx.dong_ho.cac_nguoi() == []
+    for r in ('A', 'B'):
+        os.makedirs(os.path.join('runs', r), exist_ok=True)
+    dong_ho_ui.auto_start(None, ctx, 'A', 5)
+    dong_ho_ui.auto_start(None, ctx, 'B', 5, False)                                     # B chờ
+    ctx.dong_ho.tam_dung('P5', None, dot='A')                                           # nghỉ: không đồng hồ nào chạy
+    msg = dong_ho_ui.theo_trang(page_ctx(root, ctx, 'B'))                                # Review batch sang B
+    v = ctx.dong_ho.xem('P5', 'B')
+    assert v['chay'] and not v['cho'] and 'đợt đang chờ' in msg
+    assert dong_ho_ui.theo_trang(page_ctx(root, ctx, 'A')) != '' and ctx.dong_ho.xem('P5', 'A')['chay']     # đang chạy B: chuyển sang A thì A chạy tiếp, B dừng
+    ctx.dong_ho.tam_dung('P5', None, dot='A')
+    assert dong_ho_ui.theo_trang(page_ctx(root, ctx, 'A')) == ''                          # A đã tạm dừng (không phải chờ), không gì chạy: không tự Resume
 
 
 def test_auto_start_does_nothing_while_closing(app):
@@ -592,3 +602,169 @@ def test_clock_bar_is_hidden_outside_the_three_batch_tabs():
     for tab in ('Ca khó', 'Họp team', 'Thống kê', 'Lọc dữ liệu', 'Cài đặt'):
         assert f"'{tab}'" not in js.split('const SHOW')[1].split(';')[0]
     assert 'setInterval' in js and 'dh-mini-time' in js                      # bộ đếm mm:ss không gắn với việc ẩn/hiện thanh
+
+
+def test_save_name_hands_the_default_names_unsaved_clock_to_the_new_name(app):
+    """Mở bằng menu, chưa lưu tên nào (tên mặc định P1), nạp đợt A (đồng hồ P1/A chạy) rồi Save name 'Lan': đồng hồ A chuyển sang Lan, giữ giờ; không còn phiên P1."""
+    import cai_dat
+    import cai_dat_ui  # noqa: F401
+    root, ctx, g = app
+    os.makedirs(os.path.join('runs', 'A'), exist_ok=True)
+    c = ra.AppCtx(reviewer='P1', run_dir=os.path.join('runs', '_nap'), nap_only=True, reviewer_auto=True, reviewer_mac_dinh=True)
+    c.dong_ho = ctx.dong_ho
+    dong_ho_ui.auto_start(None, c, 'A', 5)
+    g.tick(42)
+    assert ctx.dong_ho.dang_chay_ai() == ['P1']
+    assert cai_dat.get().set_reviewer('Lan')['ok']                                       # như on_reviewer của tab Cài đặt
+    c.ten_cu_mac_dinh, c.reviewer_mac_dinh, c.reviewer = 'P1', False, 'Lan'
+    txt = dong_ho_ui.chuyen_ten_mac_dinh(None, c)
+    v = ctx.dong_ho.xem('Lan', 'A')
+    assert 'chuyển sang Lan' in txt and v['chay'] and v['giay_phien'] == pytest.approx(42.0) and ctx.dong_ho.dang_chay_ai() == ['Lan']
+    assert ctx.dong_ho.liet_ke('P1') == [] and not os.path.exists(ctx.dong_ho.p_state('P1'))   # tệp của P1 không còn phiên: xoá
+    assert c.ten_cu_mac_dinh is None and dong_ho_ui.chuyen_ten_mac_dinh(None, c) == ''           # chỉ một lần
+
+
+def test_handover_keeps_sessions_of_batches_the_new_name_already_has(app):
+    root, ctx, g = app
+    d = ctx.dong_ho
+    for r in ('A', 'B'):
+        os.makedirs(os.path.join('runs', r), exist_ok=True)
+    d.bat_dau('P1', 'assisted', dot='A', n_mat=3)
+    d.bat_dau('P1', 'assisted', dot='B', n_mat=3, cho=True)
+    d.bat_dau('Lan', 'assisted', dot='B', n_mat=3, cho=True)
+    assert d.chuyen_phien('P1', 'Lan') == ['A']                                              # B: Lan đã có phiên, giữ phiên của P1 ở P1
+    assert sorted(s['dot'] for s in d.liet_ke('Lan')) == ['A', 'B'] and [s['dot'] for s in d.liet_ke('P1')] == ['B']
+    assert d.chuyen_phien('Lan', 'Lan') == []
+
+
+def test_handover_rolls_back_when_the_old_file_cannot_be_written(app, monkeypatch):
+    root, ctx, g = app
+    d = ctx.dong_ho
+    os.makedirs(os.path.join('runs', 'A'), exist_ok=True)
+    d.bat_dau('P1', 'assisted', dot='A', n_mat=3)
+    real = d._viet_tep
+
+    def hong(nguoi, tep):
+        if nguoi == 'P1':
+            raise PermissionError('antivirus giữ file')
+        return real(nguoi, tep)
+    monkeypatch.setattr(d, '_viet_tep', hong)
+    with pytest.raises(dong_ho.DongHoLoi, match='Chưa chuyển được'):
+        d.chuyen_phien('P1', 'Lan')
+    monkeypatch.setattr(d, '_viet_tep', real)
+    assert d.dang_chay_ai() == ['P1'] and d.liet_ke('Lan') == []                       # hoàn tác: không có phiên ở cả hai tên
+    c = ra.AppCtx(reviewer='Lan', run_dir=os.path.join('runs', '_nap'), nap_only=True)
+    c.dong_ho, c.ten_cu_mac_dinh = d, 'P1'
+    monkeypatch.setattr(d, '_viet_tep', hong)
+    assert 'Chưa chuyển được' in dong_ho_ui.chuyen_ten_mac_dinh(None, c)                 # báo, không văng lỗi (chip vẫn làm mới được)
+
+
+def test_moved_session_takes_the_group_of_the_new_name(app):
+    root, ctx, g = app
+    d = ctx.dong_ho
+    os.makedirs(os.path.join('runs', 'A'), exist_ok=True)
+    os.makedirs('config', exist_ok=True)
+    json.dump({'nhom': {'Lan': 'manual'}, 'bo_anh': ''}, open(os.path.join('config', 'nhom_thi_nghiem.json'), 'w'))
+    d.bat_dau('P1', 'assisted', dot='A', n_mat=3)                                       # P1 chưa xếp nhóm: assisted mặc định, cờ chua_co_nhom
+    assert 'chua_co_nhom' in d.doc_trang_thai('P1', 'A')['canh_bao_ma']
+    d.chuyen_phien('P1', 'Lan')
+    st = d.doc_trang_thai('Lan', 'A')
+    assert st['dieu_kien'] == 'manual' and 'chua_co_nhom' not in st['canh_bao_ma'] and 'lech_nhom' not in st['canh_bao_ma'] and st['nhom_cau_hinh'] == 'manual'
+
+
+def test_legacy_underscore_name_clock_is_still_listed_paused_and_moved(app, monkeypatch):
+    """Bản trước cho tên có dấu _ (Lan_2): đồng hồ chưa lưu của tên đó vẫn được liệt kê, tạm dừng được và chuyển sang tên mới khi Save name;
+    tên mới có dấu _ (chưa có file) thì vẫn bị từ chối."""
+    root, ctx, g = app
+    d = ctx.dong_ho
+    os.makedirs(os.path.join('runs', 'A'), exist_ok=True)
+    with monkeypatch.context() as m:
+        m.setattr(dong_ho, 'NGUOI_RE', dong_ho.NGUOI_CU_RE)                              # như bản trước: tạo phiên cho Lan_2
+        d.bat_dau('Lan_2', 'assisted', dot='A', n_mat=3)
+    g.tick(30)
+    assert 'Lan_2' in d.cac_nguoi() and d.dang_chay_ai() == ['Lan_2']
+    with pytest.raises(dong_ho.DongHoLoi, match='không hợp lệ'):
+        d.bat_dau('Moi_1', 'assisted', dot='A', n_mat=3)
+    c = ra.AppCtx(reviewer='Lan-2', run_dir=os.path.join('runs', '_nap'), nap_only=True)
+    c.dong_ho, c.ten_cu_bo = d, 'Lan_2'
+    txt = dong_ho_ui.chuyen_ten_mac_dinh(None, c)
+    v = d.xem('Lan-2', 'A')
+    assert 'Lan_2' in txt and v['chay'] and v['giay_phien'] == pytest.approx(30.0) and d.dang_chay_ai() == ['Lan-2'] and c.ten_cu_bo is None
+
+
+def test_handover_keeps_one_running_clock_per_person(app):
+    """Tên mới đã có một đồng hồ CHẠY ở đợt khác (trang cũ không tắt, máy treo...): sau khi chuyển, chỉ phiên vừa chuyển chạy, phiên kia tạm dừng giữ giây."""
+    root, ctx, g = app
+    d = ctx.dong_ho
+    for r in ('A', 'B'):
+        os.makedirs(os.path.join('runs', r), exist_ok=True)
+    d.bat_dau('Lan', 'assisted', dot='B', n_mat=3)
+    g.tick(20)
+    d.bat_dau('P1', 'assisted', dot='A', n_mat=3)                                      # tên khác: không tạm dừng đồng hồ của Lan
+    g.tick(10)
+    assert sorted(d.dang_chay_ai()) == ['Lan', 'P1']
+    assert d.chuyen_phien('P1', 'Lan') == ['A']
+    assert d.xem('Lan', 'A')['chay'] and not d.xem('Lan', 'B')['chay'] and d.xem('Lan', 'B')['giay_phien'] == pytest.approx(30.0)
+    assert d.chuyen_phien('Lan', 'lan') == [] and d.chuyen_phien('Khong-co', 'Lan') == []   # chỉ khác hoa/thường, hoặc tên cũ không có phiên: không làm gì
+
+
+def test_handover_rollback_restores_the_paused_clock_fully(app, monkeypatch):
+    """Ghi tệp tên cũ lỗi sau khi đã tạm dừng đồng hồ đang chạy của tên mới: hoàn tác phải trả đồng hồ đó về CHẠY thật (đoạn giờ còn mở), không chỉ cờ trang_thai."""
+    root, ctx, g = app
+    d = ctx.dong_ho
+    for r in ('A', 'B'):
+        os.makedirs(os.path.join('runs', r), exist_ok=True)
+    d.bat_dau('Lan', 'assisted', dot='A', n_mat=3)
+    d.bat_dau('P1', 'assisted', dot='B', n_mat=3)
+    g.tick(5)
+    real = d._viet_tep
+
+    def hong(nguoi, tep):
+        if nguoi == 'P1':
+            raise PermissionError('antivirus giữ file')
+        return real(nguoi, tep)
+    monkeypatch.setattr(d, '_viet_tep', hong)
+    with pytest.raises(dong_ho.DongHoLoi, match='Chưa chuyển được'):
+        d.chuyen_phien('P1', 'Lan')
+    monkeypatch.setattr(d, '_viet_tep', real)
+    a0 = d.xem('Lan', 'A')['giay_phien']
+    g.tick(7)
+    v = d.xem('Lan', 'A')
+    assert v['chay'] and v['giay_phien'] == pytest.approx(a0 + 7.0)                    # vẫn đếm giờ
+    assert d.chuyen_phien('Lan_2', 'Lan') == []                                          # tên cũ có dấu _ chưa từng bấm giờ: không lỗi, không làm gì
+
+
+def test_auto_start_reports_a_locked_timing_folder_instead_of_raising(app, monkeypatch):
+    """outputs\\timing bị khoá (antivirus, OneDrive): nạp ảnh không được hỏng vì đồng hồ; chỉ báo và gợi ý bấm Start."""
+    root, ctx, g = app
+    os.makedirs(os.path.join('runs', 'A'), exist_ok=True)
+
+    def khoa(*_a, **_k):
+        raise PermissionError('bị khoá')
+    monkeypatch.setattr(ctx.dong_ho, 'bat_dau', khoa)
+    txt = dong_ho_ui.auto_start(None, ctx, 'A', 3)
+    assert 'Chưa chạy được đồng hồ' in txt and 'Start' in txt
+
+
+def test_failed_handover_is_retried_on_the_next_clock_tick(app, monkeypatch):
+    """Windows: tệp của tên cũ bị khoá lúc Save name -> chuyển chưa được; lần sau (nhịp đồng hồ) thử lại và chuyển được, không bỏ giờ dưới tên cũ."""
+    root, ctx, g = app
+    d = ctx.dong_ho
+    os.makedirs(os.path.join('runs', 'A'), exist_ok=True)
+    d.bat_dau('P1', 'assisted', dot='A', n_mat=3)
+    real = d._viet_tep
+
+    def hong(nguoi, tep):
+        if nguoi == 'P1':
+            raise PermissionError('[WinError 32] file đang được dùng')
+        return real(nguoi, tep)
+    monkeypatch.setattr(d, '_viet_tep', hong)
+    c = ra.AppCtx(reviewer='Lan', run_dir=os.path.join('runs', '_nap'), nap_only=True)
+    c.dong_ho, c.ten_cu_mac_dinh = d, 'P1'
+    txt = dong_ho_ui.chuyen_ten_mac_dinh(None, c)
+    assert txt.count('Chưa chuyển được đồng hồ') == 1 and 'thử lại' in txt and c.ten_cu_mac_dinh == 'P1'
+    monkeypatch.setattr(d, '_viet_tep', real)
+    assert 'chuyển sang Lan' in dong_ho_ui.chuyen_ten_mac_dinh(None, c) and c.ten_cu_mac_dinh is None and d.dang_chay_ai() == ['Lan']
+    c.ten_cu_mac_dinh = 'Sai_ten'                                                     # tên sai (không có file): không thử lại mãi
+    dong_ho_ui.chuyen_ten_mac_dinh(None, c)
+    assert c.ten_cu_mac_dinh is None

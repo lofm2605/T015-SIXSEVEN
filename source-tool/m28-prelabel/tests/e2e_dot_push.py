@@ -367,7 +367,7 @@ def run(pw, W, imgs_dir, shots, port):
         gt = next(v for k, v in rows.items() if k.startswith('Mặt Gán tay'))
         check('1 có nháp' in gt and 'low_conf' in gt and '1 ảnh trống' in gt, f'hộp xác nhận tách Gán tay có nháp / ảnh trống: {gt!r}')
         shot('gantay_confirm.png')
-        check(int(rows['Số job dự kiến'].split()[0]) == -(-n_nhan // 8) + (1 if n_tay else 0), f'hộp xác nhận ghi số job dự kiến: {rows["Số job dự kiến"]!r}')
+        check(int(rows['Số job dự kiến'].split()[0]) == (1 if n_nhan else 0) + (1 if n_tay else 0), f'hộp xác nhận ghi số job dự kiến: {rows["Số job dự kiến"]!r}')
         shot('push_confirm.png')
         before_csv = open(os.path.join(runs, 'Khoi', 'review', 'triage_E2E.csv'), encoding='utf-8').read()
         pg.keyboard.press('n')                                   # modal mở: phím tắt không tác dụng

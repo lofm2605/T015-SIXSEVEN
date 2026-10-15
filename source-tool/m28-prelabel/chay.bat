@@ -1,5 +1,8 @@
 @echo off
-rem M28 - mot file de chay: cai moi truong (lan dau), tai model, mo trang ra soat. Nhap doi vao file nay trong Explorer.
+rem M28 - mot file de chay: cai moi truong (lan dau), tai model, mo thang trang ra soat (khong hoi gi). Nhap doi vao file nay trong Explorer.
+rem   chay.bat             mo thang trang ra soat (dat ten nguoi ra o tab Cai dat, Save name)
+rem   chay.bat luot NAP_001  ra soat lai mot luot co san trong runs\
+rem   chay.bat menu        menu viec phu: chay thu 5 mat, kiem tra nhanh CVAT, chay test, cai lai moi truong
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
@@ -17,6 +20,35 @@ echo Chua co face_landmarker.task, dang tai (khoang 4 MB)...
 curl -L -o face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 if errorlevel 1 goto :loi_model
 :co_model
+
+if /i "%~1"=="menu" goto :menu
+if /i "%~1"=="luot" goto :luot_dong_lenh
+goto :mo_thang
+
+:mo_thang
+echo.
+echo Dang mo trang ra soat (chi may nay vao duoc, dia chi http://127.0.0.1:7860). Dat ten nguoi ra o tab Cai dat (Save name). Xong viec bam "Close page" tren trang.
+python tool\review_app.py --nap
+rem nhap dup thi cua so tu dong khi het lenh: dung lai de doc thong bao luc tat trang (dong ho tam dung, chua bam Xong...) hoac loi (cong ban, thieu model)
+pause
+goto :het
+
+:luot_dong_lenh
+set "LUOT=%~2"
+if "%LUOT%"=="" set /p LUOT=Ten luot (thu muc trong runs\, vi du F5 hoac NAP_001): 
+if "%LUOT%"=="" (
+  echo Chua go ten luot: khong mo gi.
+  pause
+  goto :het
+)
+if not exist "runs\%LUOT%" (
+  echo Khong thay runs\%LUOT%
+  pause
+  goto :het
+)
+python tool\review_app.py runs\%LUOT%
+pause
+goto :het
 
 :menu
 echo.
@@ -128,7 +160,7 @@ python -m pip install -r requirements-ui.txt
 if errorlevel 1 exit /b 1
 python -c "import mediapipe as mp; print('mediapipe', mp.__version__)"
 if errorlevel 1 (
-  echo mediapipe khong import duoc: thu cai Python 3.12 roi chon muc 5 (cai lai moi truong^).
+  echo mediapipe khong import duoc: thu cai Python 3.12 roi chay "chay.bat menu", muc 6 (cai lai moi truong^).
   exit /b 1
 )
 exit /b 0

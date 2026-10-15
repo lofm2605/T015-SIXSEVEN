@@ -339,8 +339,7 @@ def test_corrupt_cvat_file_does_not_break_and_is_not_echoed(tmp_path, content):
 def test_corrupt_prefs_file(tmp_path):
     d = tmp_path / 'cfg' / 'm28'
     d.mkdir(parents=True)
-    for content in (b'{', b'[]', json.dumps(dict(version=1, reviewer='có dấu', images_dir='', model_path='')).encode(),
-                    json.dumps(dict(version=1, reviewer=5)).encode()):
+    for content in (b'{', b'[]', json.dumps(dict(version=1, reviewer=5)).encode()):                     # tên sai quy tắc (có dấu, có '_'): chỉ bỏ tên, xem test_old_saved_reviewer_...
         (d / 'cai_dat.json').write_bytes(content)
         s = settings_in(tmp_path)
         assert s.prefs_status == 'hong' and s.default_reviewer() == '' and s.next_reviewer('P2') == 'P2'
@@ -485,10 +484,10 @@ def test_scrub_knows_registered_secrets_and_session_token(S):
 
 # ---------- người rà ----------
 def test_reviewer_rules_are_the_same_as_review_app(S):
-    for name in ('P2', 'P5', 'a_b-c', 'x' * 32, ' P3 '):
+    for name in ('P2', 'P5', 'a-b-c', 'Lan-2', 'x' * 32, ' P3 '):
         got = S.set_reviewer(name)
         assert got['ok'] and got['name'] == name.strip()
-    for name in ('', ' ', 'P 2', 'có dấu', 'x' * 33, 'a/b', '..', None, 5):
+    for name in ('', ' ', 'P 2', 'có dấu', 'x' * 33, 'a/b', '..', None, 5, 'a_b', '-x', '_x'):      # không '_' (dấu ngăn trong tên file raw), phải bắt đầu bằng chữ/số
         r = S.set_reviewer(name)
         assert not r['ok'] and 'không hợp lệ' in r['msg']
         with pytest.raises(na.RunError):
@@ -1404,3 +1403,72 @@ def test_save_name_in_nap_mode_without_cli_name_applies_to_this_page(world):
         results[(auto, nap)] = (ctx.reviewer, dong_ho_ui.default_person(ctx))
     assert results[(True, True)] == ('Cuong', 'Cuong')                                   # nạp ảnh bằng menu không tên: đồng hồ chạy với tên vừa lưu
     assert results[(False, True)][0] == 'P1' and results[(True, False)][0] == 'P1'          # tên ghi ở dòng lệnh hoặc đã có lượt: không đổi giữa chừng
+
+
+def test_old_saved_reviewer_with_underscore_keeps_the_other_settings(tmp_path):
+    """Bản cũ cho phép '_' trong tên người rà; nay không (dấu ngăn trong tên file raw). File cài đặt cũ có tên như Lan_2: chỉ bỏ tên, giữ thư mục ảnh và model."""
+    d = tmp_path / 'cfg' / 'm28'
+    d.mkdir(parents=True)
+    (d / cai_dat.FILE_PREFS).write_text(json.dumps(dict(version=1, reviewer='Lan_2', images_dir='/data/frames', model_path='/m/face_landmarker.task')), encoding='utf-8')
+    s = settings_in(tmp_path)
+    assert s.prefs['reviewer'] == '' and s.prefs['images_dir'] == '/data/frames' and s.prefs['model_path'] == '/m/face_landmarker.task'
+    assert s.next_reviewer('P1') == 'P1'
+
+
+def test_saved_reviewer_that_breaks_the_rule_is_dropped_alone(tmp_path):
+    d = tmp_path / 'cfg' / 'm28'
+    d.mkdir(parents=True)
+    (d / 'cai_dat.json').write_bytes(json.dumps(dict(version=1, reviewer='có dấu', images_dir='/x', model_path='')).encode())
+    s = settings_in(tmp_path)
+    assert s.prefs_status != 'hong' and s.default_reviewer() == '' and s.prefs['images_dir'] == '/x'
+
+
+def test_save_name_refuses_a_case_variant_of_a_person_with_clock_files(world):
+    pytest.importorskip('gradio')
+    import dong_ho
+    demo, ctx, store = build(world)
+    dong_ho.DongHo(ctx.project_root).bat_dau('P1', 'manual', dot='Khoi')
+    rev = handlers(demo)['on_reviewer'][0]
+    m = as_map(rev, rev.fn('p1', None))
+    assert 'chữ hoa/thường' in m['cd-reviewer-msg'] and 'Dùng đúng tên P1' in m['cd-reviewer-msg'] and cai_dat.get().default_reviewer() != 'p1'
+    m = as_map(rev, rev.fn('P1', None))
+    assert 'Đã lưu tên người rà mặc định: P1' in m['cd-reviewer-msg']
+
+
+def test_every_rename_in_auto_nap_mode_queues_a_clock_handover(world):
+    """Sửa tên lần hai (Lan -> Lan-2, gõ nhầm rồi sửa) cũng chuyển đồng hồ: on_reviewer ghi tên cũ mỗi lần tên đổi."""
+    pytest.importorskip('gradio')
+    ra.prepare_env(os.path.join('runs', '_nap'))
+    ctx = ra.AppCtx(reviewer='P1', run_dir=os.path.join('runs', '_nap'), nap_only=True, reviewer_auto=True, reviewer_mac_dinh=True)
+    demo, _theme = ra.build_ui(None, ctx)
+    rev = handlers(demo)['on_reviewer'][0]
+    rev.fn('Lan', None)
+    assert (ctx.reviewer, ctx.ten_cu_mac_dinh) == ('Lan', 'P1')
+    ctx.ten_cu_mac_dinh = None                                                          # after_reviewer đã xử lý
+    rev.fn('Lan-2', None)
+    assert (ctx.reviewer, ctx.ten_cu_mac_dinh) == ('Lan-2', 'Lan')
+    ctx.ten_cu_mac_dinh = None
+    rev.fn('Lan-2', None)                                                               # lưu lại cùng tên: không có gì để chuyển
+    assert ctx.ten_cu_mac_dinh is None
+
+
+def test_dropped_old_name_is_reported_in_the_settings_tab(tmp_path):
+    d = tmp_path / 'cfg' / 'm28'
+    d.mkdir(parents=True)
+    (d / cai_dat.FILE_PREFS).write_text(json.dumps(dict(version=1, reviewer='Lan_2', images_dir='', model_path='')), encoding='utf-8')
+    s = settings_in(tmp_path)
+    snap = s.snapshot()
+    h = cai_dat_ui.reviewer_info_html(snap, 'P1', None, 'P1')
+    assert snap['ten_bo'] == 'Lan_2' and 'Lan_2' in h and 'không còn hợp lệ' in h
+    assert s.set_reviewer('Lan-2')['ok'] and s.snapshot()['ten_bo'] == '' and 'không còn hợp lệ' not in cai_dat_ui.reviewer_info_html(s.snapshot(), 'P1', None, 'Lan-2')
+
+
+def test_save_name_also_hands_over_the_clock_of_a_dropped_underscore_name(world):
+    """Tên đã lưu từ bản trước có dấu _ (Lan_2) bị bỏ khi đọc cài đặt: Save name tên mới ghi nhận tên đó để after_reviewer chuyển đồng hồ chưa lưu của nó."""
+    pytest.importorskip('gradio')
+    ra.prepare_env(os.path.join('runs', '_nap'))
+    ctx = ra.AppCtx(reviewer='P1', run_dir=os.path.join('runs', '_nap'), nap_only=True, reviewer_auto=True, reviewer_mac_dinh=True)
+    demo, _theme = ra.build_ui(None, ctx)
+    cai_dat.get().ten_bo = 'Lan_2'                                                       # như khi đọc file cài đặt cũ
+    handlers(demo)['on_reviewer'][0].fn('Lan-2', None)
+    assert (ctx.reviewer, ctx.ten_cu_mac_dinh, ctx.ten_cu_bo) == ('Lan-2', 'P1', 'Lan_2') and cai_dat.get().ten_bo == ''

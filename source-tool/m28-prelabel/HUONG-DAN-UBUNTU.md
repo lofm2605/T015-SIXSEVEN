@@ -5,7 +5,7 @@ Bản Ubuntu của `HUONG-DAN-WINDOWS.md`. Mọi lệnh viết cho **bash**, CPU
 Ảnh trong xe (YawDD, DrivFace) là ảnh người lái xe, chỉ dùng nội bộ nhóm, không đăng, không đưa vào chat AI.
 
 > **Cách nhanh nhất:** lấy code (mục 1), giải nén dữ liệu (mục 4), rồi trong thư mục `source-tool/m28-prelabel` chạy `./chay.sh`.
-> File tự cài môi trường Python lần đầu, tải model, rồi hiện menu giống `chay.bat`.
+> File tự cài môi trường Python lần đầu, tải model, rồi **mở thẳng trang rà soát** (không hỏi gì). Đặt tên người rà ở tab Cài đặt. `./chay.sh luot NAP_001` rà lại một lượt có sẵn; `./chay.sh menu` hiện menu việc phụ (chạy thử 5 mặt, kiểm tra nhanh CVAT, chạy test, cài lại môi trường).
 
 ## 0. Chuẩn bị
 ```bash
@@ -14,7 +14,7 @@ sudo apt install -y git curl unzip python3 python3-venv python3-pip
 ```
 - **Phiên bản Python:** kế hoạch ghi Python 3.14, nhưng Ubuntu thường chỉ có 3.10 (22.04) hoặc 3.12 (24.04). `chay.sh` tự chọn bản mới nhất có sẵn (3.14 → 3.10).
   Mã nguồn biên dịch được trên 3.10; **mediapipe 1.0.1 và gradio 6.29.1 có chạy trên 3.10 hay không thì chưa kiểm**: nếu `pip install` báo không có bản phù hợp, cài Python mới hơn
-  (Ubuntu 22.04: PPA `deadsnakes`, `sudo apt install python3.12 python3.12-venv`) rồi chạy lại (menu mục 6 để cài lại `.venv`).
+  (Ubuntu 22.04: PPA `deadsnakes`, `sudo apt install python3.12 python3.12-venv`) rồi chạy lại (`./chay.sh menu` mục 6 để cài lại `.venv`).
 - Thiếu `python3-venv` thì `python3 -m venv` báo thiếu `ensurepip`: cài đúng gói theo phiên bản (`python3.12-venv`...).
 - CVAT cài **Docker Engine gốc trên Ubuntu** (không cần WSL): làm theo `de-tai-m28/huong-dan-chung.md`, bỏ phần WSL; `docker compose up -d` chạy thẳng, chỉ mở ở `http://localhost:8080`.
 
@@ -97,8 +97,8 @@ Khác với Windows:
 Đội chia **hai nhóm độc lập**: `manual` (gán tay hoàn toàn) và `assisted` (dùng tool, sửa nháp), cùng một bộ ảnh. Ai ở nhóm nào do cả đội chốt, ghi vào `config/nhom_thi_nghiem.json` (file mẫu để trống; tool không đoán). Đồng hồ thay `facetimer.py`.
 
 **Quy trình một buổi (mỗi người nhóm assisted; nhóm manual xem "Nhóm manual" bên dưới):**
-1. Đầu buổi **khôi phục task của hôm nay** (file sao lưu P4 phát) rồi mở trang: `./chay.sh` mục 1 (hoặc `python tool/review_app.py --nap P5`).
-2. **Nạp ảnh** ở tab Nạp ảnh (**Upload & Continue** hoặc **Upload & Open**): đồng hồ ⏱ ở đầu trang **tự chạy** cho người rà của trang (tên bất kỳ gồm chữ, số, _ và -, tối đa 32 ký tự; đặt ở tab Cài đặt). Nhóm lấy từ file nhóm, người chưa có trong file thì mặc định `assisted` và dòng bấm giờ ghi cờ `chua_co_nhom`. **Mỗi đợt một đồng hồ riêng**, giờ của đợt này không lẫn vào đợt khác (mỗi lần Nạp ảnh là một đợt mới): **Upload & Open** chuyển đồng hồ sang đợt mới (đồng hồ đợt cũ tạm dừng, giữ nguyên giờ); **Upload & Continue** lúc đã có đồng hồ ở đợt khác thì đồng hồ đó giữ nguyên và đợt mới chờ ở 00:00. Một người chỉ có một đồng hồ chạy tại một lúc. Đợt đã có đồng hồ thì giữ nguyên, không đè.
+1. Đầu buổi **khôi phục task của hôm nay** (file sao lưu P4 phát) rồi mở trang: `./chay.sh` (vào thẳng trang, hoặc `python tool/review_app.py --nap P5`). **Lần đầu trên máy:** tab **Cài đặt** → gõ tên người rà → **Save name**, và điền link + token CVAT → **Save**; chưa có hai thứ này thì tab Nạp ảnh không cho nạp (hộp nhắc, **OK** sang tab Cài đặt); chưa đặt tên thì Review batch, Push to CVAT và Merge jobs & Finish cũng báo cần Save name trước.
+2. **Nạp ảnh** ở tab Nạp ảnh (**Upload & Continue** hoặc **Upload & Open**): đồng hồ ⏱ ở đầu trang **tự chạy** cho người rà của trang (tên bất kỳ gồm chữ không dấu, số và dấu -, bắt đầu bằng chữ hoặc số, tối đa 32 ký tự (không dùng _); đặt ở tab Cài đặt). Nhóm lấy từ file nhóm, người chưa có trong file thì mặc định `assisted` và dòng bấm giờ ghi cờ `chua_co_nhom`. **Mỗi đợt một đồng hồ riêng**, giờ của đợt này không lẫn vào đợt khác (mỗi lần Nạp ảnh là một đợt mới): **Upload & Open** chuyển đồng hồ sang đợt mới (đồng hồ đợt cũ tạm dừng, giữ nguyên giờ); **Upload & Continue** lúc đã có đồng hồ ở đợt khác thì đồng hồ đó giữ nguyên và đợt mới chờ ở 00:00. Một người chỉ có một đồng hồ chạy tại một lúc. Đợt đã có đồng hồ thì giữ nguyên, không đè.
 3. Gán nhãn trong CVAT như thường. Nghỉ thì bấm nút **Pause** cạnh đồng hồ, quay lại bấm **Resume** (cùng một nút, đổi chữ; **Start** với đợt đang chờ). Chuyển trang sang đợt khác (**Review batch** ở tab Các đợt) lúc đồng hồ đang chạy thì đồng hồ đi theo sang đợt đó nếu đợt đó đã có đồng hồ; đợt chưa có đồng hồ thì đồng hồ cũ tạm dừng và đợt mới tự có đồng hồ riêng, chạy ngay (trừ đợt đã Merge jobs & Finish). Chip ghi giờ của đợt đang mở, giờ các đợt khác ghi mờ cạnh chip và trên thẻ đợt ở tab Các đợt. Không còn tab Đồng hồ.
 4. Sửa xong trên CVAT (bấm **Save** trong từng job; nên bấm cả **Finish the job**): quay lại trang, tab **Các đợt**, bấm **Merge jobs & Finish** trên thẻ của đợt đó. Xác nhận thì **đồng hồ tạm dừng ngay**, tool xuất cả task thành **MỘT file** `raw/demo-<đợt>_P<số>_<DDMM>.xml` (gộp mọi job; bản cũ cùng ngày chuyển vào `raw/_cu/`) rồi **dừng và lưu đồng hồ của đợt**: dòng vào `outputs/timing/timing_P<số>.csv` và gói **`outputs/ket_qua/ketqua_P<số>_<DDMM>_<đợt>.zip`** có nhãn cuối (và nháp): **gửi file `.zip` này cho nhóm trưởng** (gói không có ảnh, token, email hay đường dẫn). Còn job chưa Finish the job: hỏi lần hai **Merge anyway** (gộp luôn) hoặc **Cancel** (quay lại CVAT, đồng hồ chạy lại). File gộp không có nhãn nào, lỗi kết nối: không lưu gì, đồng hồ chạy lại. Gộp treo: **Cancel** dưới thanh tiến độ. Việc gộp chưa xong thì trang không cho chuyển đợt hay xoá. Cách cũ vẫn được: `python tool/m28.py collect --task demo-<đợt> --reviewer P<số> --overwrite` rồi **Close page** → **Save timing**.
 5. Quên bấm, nghỉ lâu, qua nửa đêm, tắt trang đột ngột: phiên vẫn lưu được, kèm cờ `canh_bao` trong dòng bấm giờ để thống kê đánh dấu (không còn nút Sửa thời gian trên giao diện); khi có cảnh báo chưa xử lý, Save timing hỏi bằng cách bấm thêm một lần. **Giữ trang rà soát mở trong lúc sửa trên CVAT**: đóng trang khi đồng hồ chạy thì nó **tự tạm dừng**; mở lại trang, bấm **Resume**. Muốn bỏ phiên (không lưu gì): hộp Đóng trang → chọn đợt → **Discard session**, bấm hai lần.
@@ -124,7 +124,7 @@ cp config/loc_mau.json outputs/loc_cua_toi.json
 python tool/loc_du_lieu.py --cau-hinh outputs/loc_cua_toi.json --dry-run
 python tool/loc_du_lieu.py --cau-hinh outputs/loc_cua_toi.json --ten finetune_v1
 ```
-Hai tab **Thống kê** và **Lọc dữ liệu** nằm trong trang rà soát (`./chay.sh` mục 1 hoặc `python tool/review_app.py --nap P5`). Gói train chứa ảnh mặt người lái xe thật: chỉ dùng nội bộ nhóm, không đưa lên git hay chat AI.
+Hai tab **Thống kê** và **Lọc dữ liệu** nằm trong trang rà soát (`./chay.sh` hoặc `python tool/review_app.py --nap P5`). Gói train chứa ảnh mặt người lái xe thật: chỉ dùng nội bộ nhóm, không đưa lên git hay chat AI.
 
 ## 7. Nhập vào CVAT
 Cài CVAT cùng bản 2.77.0 (mục 0), rồi:

@@ -1,5 +1,6 @@
 """Thử hai tab mới của trang rà soát ("Thống kê", "Lọc dữ liệu"): dựng build_ui có lượt và chế độ --nap, handler gọi trực tiếp (không trình duyệt), allowed_paths hẹp."""
 import json
+import io
 import os
 import sys
 
@@ -105,7 +106,7 @@ def test_hai_module_ui_khong_nap_gradio_o_dau_module():
 def test_thong_ke_lam_moi_tinh_khi_goi_va_loc_lua_chon_do_server_tinh(world):
     fn, demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
     out = fn('', 2.0, False, False, False, '', None)
-    nhap, msg, view, log = out
+    nhap, msg, view, log, _ogoi = out
     assert nhap['choices'][1] == ('R1', 'R1') and msg == ''
     assert 'tk-root' in view and 'So sánh thời gian' in view and 'NME của nháp' in view and 'Tỉ lệ điểm phải sửa' in view
     for gone in ('low_conf', 'AUROC', 'Số lượng dữ liệu', 'Tiến độ', 'giờ tiết kiệm', 'Giây rà'):
@@ -147,14 +148,22 @@ def test_thong_ke_nap_goi_ket_qua_tu_nguoi_khac_qua_o_tai_len(world, tmp_path):
             shutil.copy(ngoai / 'outputs' / 'goi_nhom' / f, d)
     files = [str(d / f) for f in sorted(os.listdir(d))]
     fn, demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
-    nhap, msg, view, log = fn('', 2.0, False, False, False, '', files)
+    nhap, msg, view, log, ogoi = fn('', 2.0, False, False, False, '', files)                                       # chọn tab / tính lại: chỉ ĐỌC, không lưu
+    assert msg == '' and not os.path.exists(os.path.join(world['root'], 'outputs', 'goi_da_nap')) and '4 gói kết quả' in log
+    load = next(f.fn for f in demo.fns.values() if getattr(f.fn, '__name__', '') == 'on_load_calc')                 # nút Load & Calculate
+    nhap, msg, view, log, ogoi = load('', 2.0, False, False, False, '', files)
     assert 'assisted nhanh hơn manual' in view and 'Chưa có số' not in view
+    assert 'Đã lưu 4 gói vào outputs\\goi_da_nap' in msg and ogoi['value'] is None                            # gói tải lên được LƯU, ô nạp làm trống
+    assert sorted(os.listdir(os.path.join(world['root'], 'outputs', 'goi_da_nap'))) == sorted(os.listdir(d))
+    nhap, msg, view, log, ogoi = fn('', 2.0, False, False, False, '', None)                                      # mở lại (ô nạp trống): vẫn còn 4 gói
+    assert '4 gói kết quả' in log and 'assisted nhanh hơn manual' in view and msg == ''
     assert '4 gói kết quả' in log and '4 gói kết quả' not in view and 'Hạn chế của thiết kế' in log and 'Hạn chế của thiết kế' not in view      # nguồn, cảnh báo, hạn chế nằm trong nút Log
     assert not os.path.exists(os.path.join(world['root'], 'outputs', 'ket_qua')) and not os.path.exists(os.path.join(world['root'], 'outputs', 'goi_nhom'))
     bad = d / 'hong.zip'
     bad.write_bytes(b'PK\x03\x04 hong')
-    nhap, msg, view, log = fn('', 2.0, False, False, False, '', files + [str(bad)])
-    assert 'Gói bị loại' in log and 'hong.zip' in log and 'Gói bị loại' not in view
+    nhap, msg, view, log, ogoi = load('', 2.0, False, False, False, '', files + [str(bad)])
+    assert 'Gói bị loại' in log and 'hong.zip' in log and 'Gói bị loại' not in view                              # gói hỏng: không lưu, Log nói lý do
+    assert 'file lỗi, không lưu: hong.zip' in msg and '4 file đã có sẵn' in msg and 'hong.zip' not in os.listdir(os.path.join(world['root'], 'outputs', 'goi_da_nap'))
 
 
 def test_thong_ke_xuat_ghi_duoi_outputs_thong_ke_va_tu_choi_khi_dong(world):
@@ -229,7 +238,7 @@ def test_nhap_tay_add_ghi_vao_goi_nhom_va_hien_danh_sach(world, tmp_path):
     assert 'P2' in lst and 'NAP_001' in lst and '06:00' in lst and '90,0' in lst and len(sel['choices']) == 1 and sel['choices'][0][1] == files[0][:-5] and sel['value'] is None
     assert tree_hash(world['root'], ('runs', 'raw', 'final', 'data', 'config')) == before                # chỉ ghi dưới outputs/goi_nhom
     fn, _demo = tab_fns(world['ctx'], thong_ke_ui.stats_tab)
-    nhap, m2, view, log = fn('', 2.0, False, False, False, '', None)
+    nhap, m2, view, log, _ogoi = fn('', 2.0, False, False, False, '', None)
     assert '(nhập tay)' in log and 'manual (gán tay): P2' in log
     msg2, _l, _s = f['on_tay_add']('P2', 'manual', 'NAP_001', '6:00', '', [x], '', None)                 # bấm lần hai: không thêm gói
     assert 'Đã thêm' in msg2 and sorted(os.listdir(d)) == files
@@ -469,24 +478,24 @@ def test_nhap_tay_hien_gio_bang_chu_va_canh_bao_go_nham_hoac_lech_nhom(world, tm
 
 
 # ---------- câu báo sau khi nạp gói ở ô "Nạp các gói kết quả của nhóm" ----------
-def test_goi_note_says_what_happened_to_each_uploaded_file(tmp_path):
-    a, b, c = (tmp_path / n for n in ('ketqua_P1_1510_A.zip', 'ketqua_P1_1510_A.json', 'ketqua_P2_1510_B.zip'))
-    for p in (a, b, c):
-        p.write_text('x')
-    st = dict(nguon=dict(goi=['ketqua_P1_1510_A.zip'], goi_trung=[('ketqua_P1_1510_A.json', 'trùng nội dung')], goi_hong=[('ketqua_P2_1510_B.zip', 'sai sha256')]))
-    text, level = thong_ke_ui.goi_note([str(a), str(b), str(c)], st)
-    assert level == 'warn' and 'Đã đọc 3 file' in text and '1 gói được tính (ketqua_P1_1510_A.zip)' in text
-    assert '1 bản trùng bị bỏ' in text and 'ketqua_P1_1510_A.json' in text and '1 file lỗi: ketqua_P2_1510_B.zip: sai sha256' in text
-    text, level = thong_ke_ui.goi_note([str(a)], dict(nguon=dict(goi=['ketqua_P1_1510_A.zip'], goi_trung=[], goi_hong=[])))
-    assert level == 'ok' and text.startswith('Đã đọc 1 file') and 'tính lại' in text
-    assert thong_ke_ui.goi_note(None, st) == ('', 'info') and thong_ke_ui.goi_note([], st) == ('', 'info')
+def test_nap_note_says_what_was_saved_already_there_or_broken(tmp_path):
+    files = []
+    for n in ('ketqua_P1_1510_A.zip', 'ketqua_P1_1510_A.json', 'hong.zip', 'a.zip'):
+        (tmp_path / n).write_text('x')
+        files.append(str(tmp_path / n))
+    r = dict(luu=['ketqua_P1_1510_A.zip'], co_san=['ketqua_P1_1510_A.json'], loi=[('hong.zip', 'sai sha256')])
+    text, level = thong_ke_ui.nap_note(r, files[:3])
+    assert level == 'warn' and 'Đã lưu 1 gói vào outputs\\goi_da_nap' in text and 'mở lại trang vẫn còn' in text
+    assert '1 file đã có sẵn' in text and 'ketqua_P1_1510_A.json' in text and '1 file lỗi, không lưu: hong.zip: sai sha256' in text
+    text, level = thong_ke_ui.nap_note(dict(luu=['a.zip'], co_san=[], loi=[]), files[3:])
+    assert level == 'ok' and text.startswith('Đã lưu 1 gói') and 'tính lại' in text
+    assert thong_ke_ui.nap_note(dict(luu=[], co_san=[], loi=[]), None) == ('', 'info')
 
 
-# ---------- mục "Đặt tên người cho gói" ----------
 def ten_fns(world):
     with gr.Blocks() as demo:
         thong_ke_ui.stats_tab(gr, demo, None, world['ctx'])
-    return demo, {n: next(x.fn for x in demo.fns.values() if getattr(x.fn, '__name__', '') == n) for n in ('on_ten_open', 'on_ten_set', 'on_ten_clear')}      # on_ten_open gắn hai sự kiện
+    return demo, {n: next(x.fn for x in demo.fns.values() if getattr(x.fn, '__name__', '') == n) for n in ('on_ten_open', 'on_ten_set', 'on_ten_clear', 'on_goi_bo')}      # on_ten_open gắn hai sự kiện
 
 
 def test_dat_ten_nguoi_cho_goi_tu_giao_dien(world):
@@ -535,3 +544,64 @@ def test_noi_dung_gon_tach_log_va_ban_xuat_van_du(world):
     assert 'Lập lúc' in chinh and '1. NME của nháp' in chinh and 'Nguồn:' not in chinh and 'Hạn chế của thiết kế' not in chinh
     assert 'Nguồn:' in log and 'Hạn chế của thiết kế' in log and 'Lập lúc' not in log
     assert 'Nguồn:' in full and 'Hạn chế của thiết kế' in full and '1. NME của nháp' in full             # bản xuất HTML vẫn có đủ
+
+
+def test_go_goi_da_luu_tu_giao_dien_chi_trong_goi_da_nap(world):
+    from tk_fake import nd_goi, viet_goi
+    root = world['root']
+    viet_goi(root, nd_goi('P7', 'assisted', 30.0, n_nguoi_seed=4), 'outputs/goi_da_nap')                        # gói đã lưu từ lần nạp trước
+    viet_goi(root, nd_goi('P6', 'manual', 40.0, n_nguoi_seed=3), 'outputs/goi_nhom')                            # bản nhập tay / gói trong goi_nhom
+    demo, f = ten_fns(world)
+    blocks = {getattr(b, 'elem_id', None): b for b in demo.blocks.values()}
+    assert blocks['tk-goi-remove'].value == 'Remove package' and 'Gói đã nạp' in blocks['tk-ten'].label
+    up, _table = f['on_ten_open'](None)
+    ph = {l.split(' · ')[0][:15]: v for l, v in up['choices']}
+    p7 = next(v for l, v in up['choices'] if 'P7' in l)
+    p6 = next(v for l, v in up['choices'] if 'P6' in l)
+    msg, up2, table = f['on_goi_bo'](p6, None)
+    assert 'm-warn' in msg and 'không nằm trong outputs' in msg and 'P6' in table                                # không gỡ gói ngoài goi_da_nap
+    msg, up2, table = f['on_goi_bo'](p7, None)
+    assert 'm-ok' in msg and 'Đã gỡ' in msg and '_da_bo' in msg and 'P7' not in table
+    d = os.path.join(root, 'outputs', 'goi_da_nap')
+    assert [x for x in os.listdir(d) if x != '_da_bo'] == [] and len(os.listdir(os.path.join(d, '_da_bo'))) == 2       # chuyển cả .zip và .json, không xoá
+    assert 'Chưa chọn gói' in f['on_goi_bo'](None, None)[0]
+
+
+def test_go_goi_bao_ro_khi_cung_phien_con_o_thu_muc_khac(world):
+    from tk_fake import nd_goi, viet_goi
+    root = world['root']
+    nd = nd_goi('P7', 'assisted', 30.0, n_nguoi_seed=4)
+    viet_goi(root, nd, 'outputs/goi_da_nap')
+    viet_goi(root, nd, 'outputs/goi_nhom')                                                   # cùng phiên ở cả hai chỗ
+    demo, f = ten_fns(world)
+    up, _t = f['on_ten_open'](None)
+    p7 = next(v for l, v in up['choices'] if 'P7' in l)
+    msg, _u, _t = f['on_goi_bo'](p7, None)
+    assert 'Đã gỡ' in msg and 'VẪN tính' in msg and 'm-warn' in msg
+
+
+def test_nut_dat_ten_go_goi_khong_vang_loi_khi_thieu_config_va_zip_hong(world):
+    """Thiếu config\\m28_config.json, hay một gói zip hỏng phần nén: các nút của mục Gói đã nạp báo chữ rõ, không văng lỗi Error chung chung; zip hỏng thành gói hỏng."""
+    import zipfile as zf
+    from tk_fake import nd_goi, viet_goi
+    root = world['root']
+    r = viet_goi(root, nd_goi('P7', 'assisted', 30.0, n_nguoi_seed=4), 'outputs/goi_nhom')
+    demo, f = ten_fns(world)
+    hong = os.path.join(root, 'hong_nen.zip')
+    data = open(os.path.join(root, 'outputs', 'goi_nhom', os.path.basename(r['zip'])), 'rb').read()
+    with zf.ZipFile(io.BytesIO(data)) as z:
+        info = z.infolist()[0]
+    start = 30 + len(info.filename.encode()) + len(info.extra)                         # đầu dữ liệu nén của file đầu tiên
+    bad = bytearray(data)
+    for i in range(start, min(start + 40, start + info.compress_size)):
+        bad[i] ^= 0xFF
+    open(hong, 'wb').write(bytes(bad))
+    with pytest.raises(thong_ke_ui.thong_ke.goi_kq.GoiLoi):
+        thong_ke_ui.thong_ke.goi_kq.doc_goi(hong)
+    up, _table = f['on_ten_open']([hong])                                               # zip hỏng ở ô nạp: vẫn liệt kê gói còn lại
+    assert any('ketqua_P7_1410' in l for l, _v in up['choices'])
+    os.remove(os.path.join(root, 'config', 'm28_config.json'))
+    for name, args in (('on_ten_set', ('x', 'Cuong', None)), ('on_ten_clear', ('x', None)), ('on_goi_bo', ('', None)), ('on_ten_open', (None,))):
+        f[name](*args)                                                                 # không văng lỗi
+    blocks = {getattr(b, 'elem_id', None): b for b in demo.blocks.values()}
+    assert blocks['tk-ten-goi'].allow_custom_value is True

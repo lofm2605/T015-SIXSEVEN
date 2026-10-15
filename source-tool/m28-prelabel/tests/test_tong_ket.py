@@ -142,3 +142,19 @@ def test_tong_ket_chay_nhu_script_va_khong_nap_gradio(lead):
     code = "import sys\nsys.path.insert(0, %r)\nimport tong_ket\nfor m in ('gradio', 'torch', 'cv2', 'mediapipe', 'cvat_sdk', 'pandas'):\n    assert m not in sys.modules, m\nprint('ok')\n" % os.path.join(HERE, '..', 'tool')
     r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, encoding='utf-8')
     assert r.returncode == 0 and 'ok' in r.stdout, r.stderr
+
+
+def test_tong_ket_dung_ten_nguoi_nhom_truong_da_dat(lead, capsys):
+    """Nhóm trưởng đặt tên cho gói ở tab Thống kê (outputs\\ten_nguoi.json của dự án): tong_ket.py chạy trên cùng dự án cũng dùng tên đó."""
+    from m28core import ten_nguoi
+    root, goi = lead
+    ph = json.load(open(os.path.join(goi, 'ketqua_P3_1410_NAP_001.json'), encoding='utf-8'))['noi_dung']['phien']
+    ten_nguoi.dat(root, ph, 'Cuong', goi='ketqua_P3_1410_NAP_001.zip', goc='P3')
+    assert tong_ket.main(['--project', root, '--vao', goi, '--ra', 'outputs/tong_ket']) == 0
+    capsys.readouterr()
+    base = os.path.join(root, 'outputs', 'tong_ket')
+    html = open(os.path.join(base, os.listdir(base)[0], 'thong_ke.html'), encoding='utf-8').read()
+    assert 'Tên người do nhóm trưởng đặt' in html and 'P3 → Cuong' in html
+    rows = list(csv.DictReader(open(os.path.join(base, os.listdir(base)[0], 'thoi_gian_nguoi.csv'), encoding='utf-8-sig')))
+    nguoi = {r.get('nguoi') or r.get('person') for r in rows}
+    assert 'Cuong' in nguoi and 'P3' not in nguoi

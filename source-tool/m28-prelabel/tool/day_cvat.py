@@ -205,7 +205,8 @@ def confirm_html(m):
             ("Mặt Bỏ (không tải lên)", f'<b>{p["bo"]}</b>')]
     if p["xoa"]:
         rows.append(("Ảnh đã xoá (không tải lên)", f'<b>{p["xoa"]}</b>'))
-    rows += [("Số job dự kiến", f'<b>{p["jobs"]}</b> (' + (f'mỗi job Nhận {m["pipe"]["job_size"]} mặt' if m["pipe"]["job_size"] else 'một job Nhận') + ' + một job Gán tay riêng ở cuối)'),
+    phan = ([(f'mỗi job Nhận {m["pipe"]["job_size"]} mặt' if m["pipe"]["job_size"] else 'một job Nhận')] if p["nhan"] else []) + (['một job Gán tay riêng ở cuối'] if p["tay"] else [])
+    rows += [("Số job dự kiến", f'<b>{p["jobs"]}</b>' + (f' ({" + ".join(phan)})' if phan else "")),
              ("Địa chỉ CVAT", f'<code>{_e(m["env"]["url"])}</code>' + (f' · tổ chức {_e(m["env"]["org"])}' if m["env"]["org"] else ""))]
     body = "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in rows)
     extra = ""

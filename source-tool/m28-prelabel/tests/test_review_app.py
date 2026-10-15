@@ -158,9 +158,9 @@ def test_run_errors_are_helpful(tmp_path, monkeypatch):
 
 
 def test_check_reviewer():
-    for ok in ('P2', 'P5', 'E2E', 'a_b-c', 'x' * 32):
+    for ok in ('P2', 'P5', 'E2E', 'a-b-c', 'x' * 32):
         assert ra.check_reviewer(ok) == ok
-    for bad in ('', '../x', 'a b', 'P2\n', 'P/2', 'x' * 33, 'Phạm', None):
+    for bad in ('', '../x', 'a b', 'P2\n', 'P/2', 'x' * 33, 'Phạm', None, 'a_b', '-a', '_a'):        # '_' là dấu ngăn trong tên file raw\\<task>_<người>_<DDMM>.xml
         with pytest.raises(ra.RunError):
             ra.check_reviewer(bad)
 
@@ -1560,3 +1560,22 @@ def test_main_without_a_name_uses_the_saved_default_and_follows_save_name(tmp_pa
         ra.main(['--nap', 'P4'])                                                        # có ghi tên ở dòng lệnh: giữ nguyên tên đó, không tự đổi theo Cài đặt
     assert seen['ctx'].reviewer == 'P4' and seen['ctx'].reviewer_auto is False
     assert 'ctx.reviewer = r["name"]' in open(os.path.join(TOOL, 'cai_dat_ui.py'), encoding='utf-8').read()
+
+
+def test_opening_a_batch_without_any_name_opens_the_main_page_instead(tmp_path, monkeypatch, capsys):
+    """chay.bat luot X / review_app.py runs/X khi chưa lưu tên nào: không rà dưới tên mặc định P1 (lệch với triage_<tên thật>.csv), mở trang chính và hướng dẫn đặt tên."""
+    import cai_dat
+    monkeypatch.chdir(tmp_path)
+    make_run(tmp_path, {'F_001': 0}, run='X', crops=['F_001'], overlays=['F_001'])
+    seen = {}
+
+    def fake_build(store, ctx=None):
+        seen['store'], seen['ctx'] = store, ctx
+        raise SystemExit(0)
+    monkeypatch.setattr(ra, 'build_ui', fake_build)
+    with pytest.raises(SystemExit):
+        ra.main(['runs/X'])
+    assert seen['store'] is None and seen['ctx'].nap_only and 'Chưa đặt tên người rà nên chưa mở đợt X' in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        ra.main(['runs/X', 'P3'])                                                              # có ghi tên ở dòng lệnh: mở đợt như cũ (rồi build_ui giả dừng)
+    assert seen['ctx'].nap_only is False and seen['ctx'].reviewer == 'P3'

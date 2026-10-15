@@ -276,7 +276,38 @@ def so_mat_cua_luot(run_dir):
         return None
 
 
-_CHO_TEN = {}      # {thư mục dự án: (đợt, n_mat, mo_ngay)}: lần bấm Nạp ảnh gần nhất bị bỏ qua vì chưa có tên người rà hợp lệ. Để ở module (không ở ctx) vì Upload & Open dựng lại ctx.
+def nguoi_dot_moi(ctx):
+    """Tên người rà của ĐỢT MỚI nạp: tên mà trang của đợt đó sẽ dùng (Upload & Open, Review batch dựng trang mới với ctx.next_reviewer(): tên đã lưu ở tab Cài đặt,
+    không có thì tên của trang này). Dùng cho đồng hồ của đợt mới để không có hai đồng hồ (tên cũ và tên mới) cho cùng một đợt."""
+    for cand in (cai_dat.get().next_reviewer(ctx.reviewer), ctx.reviewer):
+        if dong_ho.nguoi_hop_le(cand):
+            return cand
+    return None
+
+
+def _dang_chay_khac(d, nguoi, dot=None):
+    """[(người, phiên)] đang chạy của NGƯỜI KHÁC `nguoi` trên máy này (mỗi máy một người làm: chỉ một đồng hồ chạy tại một lúc)."""
+    out = []
+    for p in d.cac_nguoi():
+        if p == nguoi:
+            continue
+        try:
+            out += [(p, s) for s in d.liet_ke(p) if s["chay"]]
+        except DongHoLoi:
+            continue
+    return out
+
+
+def _dung_khac(d, ds):
+    """Tạm dừng các phiên (người, phiên) trong ds; trả câu nói việc đã làm."""
+    out = ""
+    for p, s in ds:
+        try:
+            d.tam_dung(p, None, dot=s["dot"])
+            out += f" Đồng hồ của {p} ở đợt {s['dot']} tạm dừng ở {fmt_giay(s['giay_phien'])}."
+        except (DongHoLoi, OSError):                     # tệp bị khoá (antivirus, OneDrive): bỏ qua, không làm hỏng việc đang làm
+            pass
+    return out
 
 
 def auto_start(gr, ctx, run, n_mat=None, mo_ngay=True):
@@ -294,44 +325,64 @@ def auto_start(gr, ctx, run, n_mat=None, mo_ngay=True):
         return text
     try:
         d = get_dh(ctx)
-        nguoi = default_person(ctx)
+        nguoi = nguoi_dot_moi(ctx)
         if nguoi is None:
-            _CHO_TEN[os.path.abspath(ctx.project_root)] = (run, n_mat, mo_ngay)          # đặt tên xong (Save name ở tab Cài đặt) thì chạy bù bằng bu_khi_co_ten
-            return noi(f"Chưa chạy đồng hồ: tên người rà không hợp lệ (chỉ chữ, số, _ và -, tối đa 32 ký tự). Đặt ở tab Cài đặt (Save name): đồng hồ của đợt {run} sẽ tự chạy ngay sau đó.", warn=True)
+            return noi("Chưa chạy đồng hồ: tên người rà không hợp lệ (chỉ chữ không dấu, số và dấu -, bắt đầu bằng chữ hoặc số, tối đa 32 ký tự). Đặt ở tab Cài đặt (Save name) rồi nạp lại.", warn=True)
         ses = d.liet_ke(nguoi)
         co = {s["dot"]: s for s in ses}
         if run in co:
             tt = "đang chạy" if co[run]["chay"] else ("đang chờ bắt đầu (mở đợt này rồi bấm Start ở đầu trang)" if co[run]["cho"] else "đang tạm dừng (bấm Resume ở đầu trang)")
             return noi(f"Đồng hồ của {nguoi} cho đợt {run} {tt}, giữ nguyên.")
         cond = nhom_mod.nhom_cua(nhom_mod.doc(ctx.project_root), nguoi) or DIEU_KIEN_MAC_DINH
-        cho = (not mo_ngay) and bool(ses)
+        khac = _dang_chay_khac(d, nguoi)
+        cho = (not mo_ngay) and (bool(ses) or bool(khac))           # Upload & Continue lúc đã có đồng hồ (của tên này hay tên khác trên máy): đợt mới chờ
         d.bat_dau(nguoi, cond, dot=run, bo_anh=run, n_mat=n_mat or dong_ho.N_MAT_MAC_DINH, rev=0, cho=cho)
         ctx.dh_started = getattr(ctx, "dh_started", set()) | {run}
-        chay = [s for s in ses if s["chay"]]
+        chay = [s for s in ses if s["chay"]] + [s for _p, s in khac]
         if cho:
             giu = f"Đồng hồ đợt {chay[0]['dot']} giữ nguyên." if chay else "Đồng hồ các đợt khác giữ nguyên."
             return noi(f"Đợt {run} có đồng hồ riêng, đang chờ ở 00:00 ({cond}). {giu} Mở đợt {run} (Review batch) thì đồng hồ đang chạy tự chuyển sang đợt này; "
                        "nếu không thì bấm Start ở đầu trang.")
-        dung = "".join(f" Đồng hồ đợt {s['dot']} tạm dừng ở {fmt_giay(s['giay_phien'])}." for s in chay)
+        dung = "".join(f" Đồng hồ đợt {s['dot']} tạm dừng ở {fmt_giay(s['giay_phien'])}." for s in ses if s["chay"]) + _dung_khac(d, khac)
         return noi(f"Đồng hồ của {nguoi} bắt đầu chạy (đợt {run}, {cond})." + dung)
     except DongHoLoi as ex:
         return noi(f"Chưa chạy được đồng hồ: {vi_hop(str(ex))}", warn=True)
+    except OSError as ex:                               # outputs\\timing bị khoá hay chỉ đọc: báo, ảnh vẫn nạp
+        return noi(f"Chưa chạy được đồng hồ: không ghi được outputs\\timing ({type(ex).__name__}: file đang mở ở chương trình khác hoặc không có quyền). "
+                   "Ảnh vẫn nạp bình thường; bấm Start ở đầu trang khi ghi lại được.", warn=True)
 
 
-def bu_khi_co_ten(gr, ctx):
-    """Gọi sau khi lưu tên người rà ở tab Cài đặt: nếu lần bấm Nạp ảnh trước bị bỏ qua đồng hồ vì chưa có tên người rà hợp lệ, và giờ đã có tên hợp lệ, thì chạy auto_start bù cho đợt đó
-    (một lần). Đợt đã bị xoá thì bỏ qua. Chưa có tên hợp lệ thì giữ nguyên để lần Save name sau thử lại. Trả thông báo hoặc None."""
-    if ctx.closing:
-        return None
-    key = os.path.abspath(ctx.project_root)
-    cho = _CHO_TEN.get(key)
-    if cho is None or default_person(ctx) is None:
-        return None
-    del _CHO_TEN[key]
-    run, n_mat, mo_ngay = cho
-    if not os.path.isdir(os.path.join(ctx.runs_root, run)):
-        return None
-    return auto_start(gr, ctx, run, n_mat, mo_ngay)
+def chuyen_ten_mac_dinh(gr, ctx):
+    """Sau Save name (chế độ --nap mở bằng menu, không ghi tên ở dòng lệnh): các phiên đồng hồ chưa lưu của tên cũ (mặc định P1, hay tên vừa gõ nhầm) chuyển sang tên mới, để giờ đã đo
+    không bị bỏ lại dưới tên cũ (Merge jobs & Finish, Save timing chỉ tìm theo tên mới). Trả câu nói việc đã làm ('' nếu không có gì)."""
+    cac = [getattr(ctx, "ten_cu_mac_dinh", None), getattr(ctx, "ten_cu_bo", None)]      # tên mặc định/tên gõ nhầm, và tên cũ có dấu _ của bản trước
+    ctx.ten_cu_mac_dinh = ctx.ten_cu_bo = None
+    out = []
+    for cu in dict.fromkeys(c for c in cac if c):
+        if ctx.closing or cu == ctx.reviewer:
+            continue
+        try:
+            moved = get_dh(ctx).chuyen_phien(cu, ctx.reviewer)
+        except (DongHoLoi, OSError) as ex:
+            loi = vi_hop(str(ex))
+            text = (loi if loi.startswith("Chưa chuyển được đồng hồ") else f"Chưa chuyển được đồng hồ của {cu} sang {ctx.reviewer}: {loi}")
+            tam_thoi = isinstance(ex, OSError) or loi.startswith("Chưa chuyển được đồng hồ") or "đang bận" in loi   # file bị khoá: thử lại được; tên sai thì không
+            if tam_thoi and cu == cac[1]:               # giữ lại để thử lại (nhịp 15 giây của đồng hồ), không bỏ giờ đã đo dưới tên cũ
+                ctx.ten_cu_bo = cu
+            elif tam_thoi:
+                ctx.ten_cu_mac_dinh = cu
+            if tam_thoi:
+                text += " Trang tự thử lại sau ít giây."
+            if gr is not None:
+                gr.Warning(text, title="Đồng hồ")
+            out.append(text)
+            continue
+        if moved:
+            text = f"Đồng hồ của {cu} ở đợt {', '.join(moved)} chuyển sang {ctx.reviewer} (tên vừa đặt), giữ nguyên giờ đã đo."
+            if gr is not None:
+                gr.Info(text, title="Đồng hồ")
+            out.append(text)
+    return " ".join(out)
 
 
 def theo_trang(ctx):
@@ -347,7 +398,11 @@ def theo_trang(ctx):
         if nguoi is None or dot is None:
             return ""
         ses = {s["dot"]: s for s in d.liet_ke(nguoi)}
+        dung_khac = _dung_khac(d, _dang_chay_khac(d, nguoi))        # trang mới thuộc về `nguoi`: đồng hồ của tên khác trên máy này tạm dừng (một đồng hồ chạy một lúc)
         cu = next((s for s in ses.values() if s["chay"] and s["dot"] != dot), None)
+        if dot in ses and ses[dot].get("cho") and cu is None:
+            d.tiep_tuc(nguoi, None, dot=dot)                                  # đợt nạp bằng Upload & Continue (đang chờ 00:00): mở đợt là bắt đầu tính giờ
+            return f"Đồng hồ của {nguoi} bắt đầu chạy ở đợt {dot} (đợt đang chờ)." + dung_khac
         if dot not in ses and not any(str(nd.get("dot") or "") == dot for _t, nd in d.goi_da_luu(nguoi)):
             cond = nhom_mod.nhom_cua(nhom_mod.doc(ctx.project_root), nguoi) or DIEU_KIEN_MAC_DINH
             try:
@@ -356,9 +411,9 @@ def theo_trang(ctx):
                 n_mat = dong_ho.N_MAT_MAC_DINH
             d.bat_dau(nguoi, cond, dot=dot, bo_anh=dot, n_mat=min(n_mat, dong_ho.N_MAT_MAX), rev=0)        # phiên chạy ở đợt khác tự tạm dừng
             dung = f" Đồng hồ đợt {cu['dot']} tạm dừng ở {fmt_giay(cu['giay_phien'])}." if cu else ""
-            return f"Đồng hồ của {nguoi} bắt đầu chạy ở đợt {dot} ({cond})." + dung
+            return f"Đồng hồ của {nguoi} bắt đầu chạy ở đợt {dot} ({cond})." + dung + dung_khac
         if cu is None:
-            return ""
+            return dung_khac.strip()
         if dot in ses and not ses[dot].get("du_mat"):
             d.tiep_tuc(nguoi, None, dot=dot)                                  # phiên đang chạy ở đợt khác tự tạm dừng
             return f"Đồng hồ của {nguoi} chuyển từ đợt {cu['dot']} (tạm dừng ở {fmt_giay(cu['giay_phien'])}) sang đợt {dot}."
@@ -404,6 +459,8 @@ def chip(gr, demo, ctx):
     def on_tick():
         if ctx.closing:
             return gr.skip(), gr.skip(), gr.skip()
+        if getattr(ctx, "ten_cu_mac_dinh", None) or getattr(ctx, "ten_cu_bo", None):
+            chuyen_ten_mac_dinh(None, ctx)                 # lần chuyển đồng hồ sau Save name chưa xong (file bị khoá trên Windows): thử lại, im lặng
         p, v = phien_cua(ctx)
         if p and (v.get("co_phien") or v.get("cac_dot")):
             try:

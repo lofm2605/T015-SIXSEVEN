@@ -161,10 +161,14 @@ def reviewer_info_html(snap, ctx_reviewer, run_name, next_name):
     cur = (f"Lượt đang mở: <b>{_e(run_name)}</b>, đang ghi vào <code>triage_{_e(ctx_reviewer)}.csv</code> (tên <b>{_e(ctx_reviewer)}</b>). "
            if run_name else f"Chưa mở lượt nào (tên của trang: <b>{_e(ctx_reviewer)}</b>). ")
     out = [cur + f"Tên mặc định đã lưu: <b>{_e(saved) if saved else '(chưa lưu: dùng tên của trang)'}</b>."]
+    if snap.get("ten_bo"):
+        out.append(f"Tên đã lưu trước đây <b>{_e(snap['ten_bo'])}</b> không còn hợp lệ (tên chỉ gồm chữ không dấu, số và dấu -, không dùng _), nên đang dùng tên mặc định. "
+                   "Gõ lại tên (ví dụ thay _ bằng -) rồi bấm Save name.")
     if next_name != ctx_reviewer:
         out.append(f"Lượt đang mở vẫn ghi vào <code>triage_{_e(ctx_reviewer)}.csv</code>; từ lượt sau dùng <b>{_e(next_name)}</b>.")
-    out.append("Đổi tên KHÔNG áp dụng ngay cho lượt đang mở vì phần rà dở nằm ở file theo tên cũ. Tên mới có hiệu lực ở lượt kế tiếp "
-               "(Upload &amp; Open ở tab Nạp ảnh, hoặc Review batch ở tab Các đợt). Mở lại trang bằng dòng lệnh thì tên là tên trong lệnh.")
+    if run_name:                                    # chưa mở lượt nào thì không có "lượt đang mở" để nói
+        out.append("Đổi tên KHÔNG áp dụng ngay cho lượt đang mở vì phần rà dở nằm ở file theo tên cũ. Tên mới có hiệu lực ở lượt kế tiếp "
+                   "(Upload &amp; Open ở tab Nạp ảnh, hoặc Review batch ở tab Các đợt). Mở lại trang bằng dòng lệnh thì tên là tên trong lệnh.")
     return "".join(f'<div class="cd-note">{x}</div>' for x in out)
 
 
@@ -268,7 +272,7 @@ def smoke_result_html(rep, json_path=""):
 # ---------- tab ----------
 def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_model=None, after_reviewer=None):
     """Dựng NỘI DUNG tab Cài đặt (gọi trong `with gr.Tab(...)`). after_cvat(ev): gắn thêm .then(...) làm mới khung Đẩy lên CVAT và tab Các đợt
-    sau Save/Forget token. after_model(ev): gắn thêm .then(...) kiểm lại model/cấu hình ở tab Nạp ảnh sau khi Save đường dẫn model. after_reviewer(ev): gắn thêm .then(...) chạy bù đồng hồ (lần Nạp ảnh bị bỏ qua vì chưa có tên hợp lệ) sau Save name. Trả (hàm làm mới,
+    sau Save/Forget token. after_model(ev): gắn thêm .then(...) kiểm lại model/cấu hình ở tab Nạp ảnh sau khi Save đường dẫn model. after_reviewer(ev): gắn thêm .then(...) làm mới chip đồng hồ sau Save name. Trả (hàm làm mới,
     inputs, outputs, opts) để tab.select gọi."""
     S = cai_dat.get()
     pending = dot_anh.Pending()
@@ -492,10 +496,26 @@ def settings_tab(gr, demo, store, ctx, after_cvat=None, run_name=None, after_mod
         why = refuse_why()
         if why:
             return ret(view(over=note(rev_msg, why, "warn")))
+        ten = (name or "").strip() if isinstance(name, str) else ""
+        try:
+            import dong_ho                                  # nạp lười: chỉ thư viện chuẩn
+            co = dong_ho.DongHo(ctx.project_root or S.project_root).cac_nguoi()
+        except Exception:
+            co = []
+        trung = [p for p in co if p != ten and p.casefold() == ten.casefold()] if ten not in co else []
+        if trung:
+            return ret(view(over=note(rev_msg, f"Đã có người rà tên {trung[0]} (chỉ khác {ten} ở chữ hoa/thường): Windows coi là cùng một file đồng hồ và gói kết quả. "
+                                               f"Dùng đúng tên {trung[0]}.", "warn")))
+        bo = getattr(S, "ten_bo", "") or ""                 # tên cũ có dấu _ (bản trước) vừa bị bỏ: set_reviewer xoá nó, nên đọc trước
         r = S.set_reviewer(name, rev)
         if r["stale"]:
             return reload_all(r, rev_msg)
         if r["ok"] and getattr(ctx, "reviewer_auto", False) and getattr(ctx, "nap_only", False):
+            if bo and bo != r["name"]:
+                ctx.ten_cu_bo = bo                          # đồng hồ chưa lưu của tên cũ đó cũng chuyển sang tên mới (after_reviewer)
+            if r["name"] != ctx.reviewer:
+                ctx.ten_cu_mac_dinh = ctx.reviewer         # tên cũ (mặc định P1, hay tên gõ nhầm rồi sửa) bị thay: after_reviewer chuyển đồng hồ chưa lưu của nó sang tên mới
+                ctx.reviewer_mac_dinh = False
             ctx.reviewer = r["name"]                       # mở bằng menu không ghi tên và chưa có lượt nào: tên vừa lưu dùng ngay (đồng hồ, người nạp), không đợi lượt sau
         return ret(view(full=r["ok"], over=note(rev_msg, r["msg"], r["level"])))
 

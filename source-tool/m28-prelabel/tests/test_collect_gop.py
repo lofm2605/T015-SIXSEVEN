@@ -466,7 +466,7 @@ def test_collect_job_force_drops_require_completed_and_exit_3_is_loi(page):
 def test_collect_job_rejects_bad_person_task_run(page):
     job = na.CollectJob(popen=_fake_popen('pass'))
     for person in ('P1 ', 'a b', '../P1', 'x' * 33, '', None, 1):
-        with pytest.raises(na.RunError, match='chữ, số'):
+        with pytest.raises(na.RunError, match='chữ không dấu, số'):
             job.start('Khoi', 'runs', str(page), person, TASK)
     for task in ('m28-manual', 'demo-', 'demo-a/b', 'demo- x', '', None, 'demo-' + 'a' * 200):
         with pytest.raises(na.RunError):
@@ -597,3 +597,18 @@ def test_read_collect_result_pending(proj):
                                                                        type='annotation')], pending=[100]), ensure_ascii=False, separators=(',', ':'))
     r = na.read_collect_result([real], proj, TASK, 'P1')
     assert r['pending'] == [dict(id=100, state='new', stage='annotation', type='annotation', start=0, stop=2, n=3, kind='nhan')]
+
+
+def test_busy_marker_is_released_before_the_job_reports_done(page, monkeypatch):
+    """Trang thấy job xong (running=False) rồi bấm việc kế tiếp ngay: dấu "lượt đang bận" phải đã gỡ, không thì bị báo bận nhầm (test này từng chập chờn)."""
+    seen = []
+    real = dang_chay.release
+
+    def rel(run_dir, pid=None):
+        seen.append(job.state)
+        return real(run_dir, pid)
+    monkeypatch.setattr(dang_chay, 'release', rel)
+    job = na.CollectJob(popen=_fake_popen("print('x')"))
+    job.start('Khoi', 'runs', str(page), 'P5', TASK)
+    _wait(job)
+    assert seen and seen[-1] == 'dang_chay' and dang_chay.busy(os.path.join('runs', 'Khoi')) is None

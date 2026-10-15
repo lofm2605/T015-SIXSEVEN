@@ -100,7 +100,7 @@ def finish_model(run_dir, project_root, person, dh, *, environ=None, job_running
         m["reason"] = (f"Task này nằm ở {m['url'] or '(push.json không ghi địa chỉ CVAT)'} nhưng CVAT_URL đang là {env['url']}: "
                        "chỉ gộp được trên đúng server đã đẩy.")
     elif not dong_ho.nguoi_hop_le(person):
-        m["reason"] = (f"Người rà của trang là {person or '(chưa đặt)'}: tên phải gồm chữ, số, _ và -, tối đa 32 ký tự (đặt tên người rà ở tab Cài đặt).")
+        m["reason"] = (f"Người rà của trang là {person or '(chưa đặt)'}: tên chỉ chữ không dấu, số và dấu -, bắt đầu bằng chữ hoặc số, tối đa 32 ký tự (đặt tên người rà ở tab Cài đặt).")
     elif job_running or busy:
         m["reason"] = "Đang có việc chạy" + (f" cho đợt này ({busy[0]})" if busy else " (chuẩn bị, đẩy, xoá task hoặc gộp job)") + ": chờ xong rồi gộp job."
         m["tam_thoi"] = True                                            # lý do tạm thời: chờ là hết (Merge anyway giữ yêu cầu đang chờ, không bỏ)
@@ -214,9 +214,11 @@ def result_html(fx):
         body += f'<div class="m28-warn">{_e(fx["loi_luu"])}</div>'
     if fx.get("loi_ghi"):
         body += f'<div class="m28-warn">{_e(fx["loi_ghi"])}</div>'
+    co_goi = bool(fx.get("luu") or fx.get("xuat_lai"))                    # chỉ xuất file gộp (không có phiên đồng hồ, không gói): không mời mở thư mục gói
     body += ('<div class="gop-folders">'
-             '<button type="button" class="dot-btn dot-btn-push" data-act="openfolder" data-folder="ket_qua" title="outputs/ket_qua: gói kết quả gửi nhóm trưởng">Mở thư mục gói kết quả</button> '
-             '<button type="button" class="dot-btn" data-act="openfolder" data-folder="raw" title="raw: file nhãn gộp của task">Mở raw</button> '
+             + ('<button type="button" class="dot-btn dot-btn-push" data-act="openfolder" data-folder="ket_qua" title="outputs/ket_qua: gói kết quả gửi nhóm trưởng">'
+                'Mở thư mục gói kết quả</button> ' if co_goi else "")
+             + '<button type="button" class="dot-btn" data-act="openfolder" data-folder="raw" title="raw: file nhãn gộp của task">Mở raw</button> '
              '<button type="button" class="dot-btn" data-act="openfolder" data-folder="timing" title="outputs/timing: dòng bấm giờ">Mở timing</button></div>')
     return _box(body, "warn" if (fx.get("loi_luu") or fx.get("loi_ghi")) else "ok")
 

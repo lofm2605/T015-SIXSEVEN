@@ -525,7 +525,7 @@ def _parse_prefs_file(d):
             return None
         out[k] = v
     if out["reviewer"] and not REVIEWER_RE.fullmatch(out["reviewer"]):
-        return None
+        out["reviewer"] = ""             # tên lưu từ bản cũ không còn hợp lệ (ví dụ có "_"): chỉ bỏ tên, GIỮ đường dẫn ảnh và model (không coi cả file là hỏng)
     return out
 
 
@@ -545,6 +545,7 @@ class Settings:
         self.file_status = "none"        # none | ok | hong | khong_doc
         self.prefs = dict(reviewer="", images_dir="", model_path="")
         self.prefs_status = "none"
+        self.ten_bo = ""                 # tên người rà đã lưu từ bản cũ nhưng không còn hợp lệ (ví dụ có "_"): đã bỏ, tab Cài đặt nhắc đặt lại
         self.dir_error = ""
         self.dir = ""
         self._test = None                # dict(fp, result, when)
@@ -609,6 +610,8 @@ class Settings:
                     st = "hong"
                 else:
                     self.prefs = parsed
+                    cu = d.get("reviewer") if isinstance(d.get("reviewer"), str) else ""
+                    self.ten_bo = cu if cu and not parsed["reviewer"] else ""
             self.prefs_status = st
             env = cvat_io.read_env(self.environ)
             cvat_io.register_secret(env["token"])
@@ -674,7 +677,7 @@ class Settings:
             return dict(rev=self.rev, source=e["source"], source_label=SOURCE_LABEL[e["source"]], url=e["url"], org=e["org"],
                         has_token=bool(e["token"]), token_mask=mask(e["token"]) if e["token"] else "", test=test,
                         env=self.env_note(), file_status=self.file_status, file_path=self.path_cvat(), dir=self.display_dir(),
-                        dir_error=self.dir_error, remember=e["source"] == "file", prefs=dict(self.prefs), prefs_status=self.prefs_status,
+                        dir_error=self.dir_error, remember=e["source"] == "file", prefs=dict(self.prefs), prefs_status=self.prefs_status, ten_bo=self.ten_bo,
                         prefs_path=self.path_prefs(), file_exists=bool(self.path_cvat()) and os.path.exists(self.path_cvat()))
 
     def _stale(self, rev):
@@ -812,6 +815,7 @@ class Settings:
             except RunError as e:
                 return dict(ok=False, level="err", stale=False, msg=str(e))
             self.prefs["reviewer"] = n
+            self.ten_bo = ""
             ok, err = self._save_prefs()
             self._bump()
             return dict(ok=True, level="ok" if ok else "warn", stale=False, name=n,

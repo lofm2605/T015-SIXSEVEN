@@ -232,12 +232,20 @@ def open_folder(path, platform=None, popen=None, startfile=None):
         else:
             cmd = ["open", path] if plat == "darwin" else ["xdg-open", path]
             (popen or subprocess.Popen)(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        return True, f"Đã mở thư mục {path}."
+        return True, f"Đang mở thư mục {path} bằng trình quản lý file của máy."
     except (OSError, AttributeError) as e:
         return False, f"Không mở được thư mục tự động ({type(e).__name__}). Mở tay: {path}"
 
 
 # ---------- khung "Đẩy lên CVAT" trong tab Rà soát ----------
+def chan_khi_chua_dat_ten(ctx, viec):
+    """Trang mở không ghi tên và chưa lưu tên nào (tên mặc định P1): từ chối `viec`, vì tên đi vào file kết quả, đồng hồ và gói gửi nhóm trưởng."""
+    import cai_dat                                          # nạp lười (chỉ thư viện chuẩn)
+    if getattr(ctx, "reviewer_auto", False) and not cai_dat.get().default_reviewer():
+        raise RunError(f"Chưa đặt tên người rà (đang là tên mặc định {ctx.reviewer}): vào tab Cài đặt, gõ tên của bạn ở mục Người rà rồi bấm Save name, "
+                       f"sau đó {viec} lại. Tên đi vào file kết quả, đồng hồ và gói gửi nhóm trưởng.")
+
+
 def push_panel(gr, demo, store, ctx):
     """Dựng khung Đẩy lên CVAT TRONG ngữ cảnh hiện tại (cột phải, dưới nút Xong). Trả hàm hook(event) để chạy lại khung sau mỗi sự kiện rà,
     và (hàm làm mới, danh sách output) để tab.select gọi."""
@@ -301,6 +309,11 @@ def push_panel(gr, demo, store, ctx):
         if not m["enabled"]:
             gr.Warning(m["reason"] or "Chưa đẩy được.", title="Chưa đẩy được")
             return render(m["reason"]) + (gr.update(visible=False), "", "")
+        try:
+            chan_khi_chua_dat_ten(ctx, "bấm Push to CVAT")
+        except RunError as e:
+            gr.Warning(str(e), title="Chưa đặt tên")
+            return render(str(e)) + (gr.update(visible=False), "", "")
         it = pending.open(kind="push", run=run)
         return render() + (gr.update(visible=True), day_cvat.confirm_html(m), it["token"])
 
@@ -352,7 +365,6 @@ def dot_tab(gr, demo, store, ctx, deps):
     dh = deps.get("dh")
     pending = ctx.dot_pending
     active_dir = store.run_dir if store is not None else None
-    reviewer = ctx.reviewer
 
     with gr.Row():
         b_refresh = gr.Button("Refresh", elem_id="dot-refresh", size="sm")
@@ -423,17 +435,17 @@ def dot_tab(gr, demo, store, ctx, deps):
             except RunError:
                 s["view"], s["run"] = "list", None
             else:
-                info = dot_anh.run_info(run_dir, reviewer)
-                return dot_anh.grid_html(info, dot_anh.image_rows(run_dir, reviewer), s["page"], dot_anh.list_trash(run_dir),
+                info = dot_anh.run_info(run_dir, ctx.reviewer)
+                return dot_anh.grid_html(info, dot_anh.image_rows(run_dir, ctx.reviewer), s["page"], dot_anh.list_trash(run_dir),
                                          active=is_active(s["run"]))
-        infos = [dot_anh.run_info(os.path.join(ctx.runs_root, r), reviewer) for r in dot_anh.list_runs(ctx.runs_root)]
+        infos = [dot_anh.run_info(os.path.join(ctx.runs_root, r), ctx.reviewer) for r in dot_anh.list_runs(ctx.runs_root)]
         gio = dong_ho_ui.gio_cac_dot(ctx)                   # giờ RIÊNG của từng đợt (đồng hồ ở đầu trang tính mỗi đợt một phiên)
         for i in infos:
             i["gio"] = gio.get(i["name"], [])
         ready = {}
         for i in infos:
             if i["state"] == dot_anh.S_DONE and not (i["push"] or {}).get("trang_thai") == "xong":
-                ready[i["name"]] = day_cvat.push_model(os.path.join(ctx.runs_root, i["name"]), reviewer, ctx.project_root,
+                ready[i["name"]] = day_cvat.push_model(os.path.join(ctx.runs_root, i["name"]), ctx.reviewer, ctx.project_root,
                                                        job_running=any_running())["enabled"]
         return dot_anh.list_html(infos, run_name(active_dir) if active_dir else None, dot_anh.list_deleted_runs(ctx.runs_root), ready)
 
@@ -567,15 +579,13 @@ def dot_tab(gr, demo, store, ctx, deps):
             return render(s)
         if act == "openfolder":
             rel = FOLDERS.get(a["folder"])
-            if rel is None:
-                raise RunError("Thư mục không hợp lệ (bỏ qua).")
-            path = os.path.join(ctx.project_root, rel)
-            if not os.path.isdir(path):
-                raise RunError(f"Chưa có thư mục {rel.replace(os.sep, '/')} (chưa lưu gì vào đó).")
+            path = os.path.join(ctx.project_root, rel) if rel else ""
+            if rel is None or not os.path.isdir(path):
+                gr.Warning("Thư mục không hợp lệ (bỏ qua)." if rel is None else f"Chưa có thư mục {rel.replace(os.sep, '/')} (chưa lưu gì vào đó).", title="Mở thư mục")
+                return render(s, msg_html=gr.update())                   # không xoá thẻ kết quả gộp job
             ok, text = open_folder(os.path.abspath(path))
-            if not ok:
-                gr.Warning(text, title="Mở thư mục")
-            return render(s, text, "ok" if ok else "warn")
+            (gr.Info(text, title="Mở thư mục") if ok else gr.Warning(text, title="Mở thư mục"))
+            return render(s, msg_html=gr.update())                       # giữ nguyên thẻ kết quả gộp job ở #dot-msg (thẻ chỉ dựng một lần), báo bằng thông báo góc trang
         if act == "ra":
             return _switch(a, s)
         if act == "push":
@@ -607,8 +617,12 @@ def dot_tab(gr, demo, store, ctx, deps):
             return _ask_purge(a, s)
         return render(s)
 
+    def chan_chua_dat_ten(viec):
+        chan_khi_chua_dat_ten(ctx, viec)
+
     def _switch(a, s):
         run_dir = run_of(a)
+        chan_chua_dat_ten("bấm Review batch")
         if ctx.switch_to is not None:
             return render(s, "Đang chuyển sang đợt khác…", "info")
         if any_running():
@@ -635,11 +649,12 @@ def dot_tab(gr, demo, store, ctx, deps):
 
     def _ask_push(a, s):
         run_dir = run_of(a)
-        m = day_cvat.push_model(run_dir, reviewer, ctx.project_root, job_running=any_running())
+        chan_chua_dat_ten("bấm Push to CVAT")
+        m = day_cvat.push_model(run_dir, ctx.reviewer, ctx.project_root, job_running=any_running())
         if m["kind"] == "done":
             raise RunError("Đợt này đã đẩy lên CVAT rồi.")
         if is_active(a["run"]):
-            m = day_cvat.push_model(run_dir, reviewer, ctx.project_root, remaining=store.progress()["remaining"], job_running=any_running())
+            m = day_cvat.push_model(run_dir, ctx.reviewer, ctx.project_root, remaining=store.progress()["remaining"], job_running=any_running())
         if not m["enabled"]:
             raise RunError(m["reason"] or "Chưa đẩy được.")
         it = modal_for("push", run=a["run"])
@@ -647,6 +662,7 @@ def dot_tab(gr, demo, store, ctx, deps):
 
     def _ask_finish(a, s):
         run_dir = run_of(a)
+        chan_chua_dat_ten("bấm Merge jobs & Finish")
         fx = finish_poll(s)                                 # lần gộp trước đã dừng mà chưa tab nào xử lý (tab đã đóng...): xử lý và báo trước
         if fx is not None:
             return fx
@@ -672,7 +688,7 @@ def dot_tab(gr, demo, store, ctx, deps):
             raise RunError(f"Đợt {a['run']} đang có việc chạy ({busy[0]}): chờ xong rồi xoá.")
         if is_active(a["run"]) and store is not None and len(store.faces) <= 1 and a["name"] in store.by_name:
             raise RunError("Đợt đang rà chỉ còn một mặt: không xoá được (hàng đợi không được rỗng). Chuyển sang đợt khác rồi xoá cả đợt.")
-        rows = {r["name"]: r for r in dot_anh.image_rows(run_dir, reviewer)}
+        rows = {r["name"]: r for r in dot_anh.image_rows(run_dir, ctx.reviewer)}
         r = rows[a["name"]]
         ps = dot_anh.read_push(run_dir) or {}
         pushed = ps.get("trang_thai") in ("xong", "da_tao", "da_nhap")
@@ -690,7 +706,7 @@ def dot_tab(gr, demo, store, ctx, deps):
 
     def _restore(a, s):
         run_dir = run_of(a)
-        res = dot_anh.restore_image(run_dir, a["trash"], reviewer=reviewer)
+        res = dot_anh.restore_image(run_dir, a["trash"], reviewer=ctx.reviewer)
         if is_active(a["run"]) and store is not None:
             store.reload()
         note = f"Đã khôi phục ảnh {res['ten']}."
@@ -772,7 +788,7 @@ def dot_tab(gr, demo, store, ctx, deps):
             gop_guard(it["run"], {"delimg": "xoá ảnh của đợt", "delrun": "xoá đợt", "deltask": "xoá task trên CVAT"}[kind])
         if kind == "delimg":
             run_dir = run_of(it)
-            man = dot_anh.soft_delete_image(run_dir, it["name"], reviewer=reviewer, decision=it.get("decision", ""), pushed_task=it.get("pushed"))
+            man = dot_anh.soft_delete_image(run_dir, it["name"], reviewer=ctx.reviewer, decision=it.get("decision", ""), pushed_task=it.get("pushed"))
             if is_active(it["run"]) and store is not None:
                 store.exclude(it["name"])
             return render(s, f"Đã chuyển ảnh {man['ten']} vào thùng rác của đợt (khôi phục được).", "ok")
@@ -789,10 +805,10 @@ def dot_tab(gr, demo, store, ctx, deps):
         if kind == "push":
             run_dir = run_of(it)
             rem = store.progress()["remaining"] if is_active(it["run"]) and store is not None else None
-            m = day_cvat.push_model(run_dir, reviewer, ctx.project_root, remaining=rem, job_running=any_running())
+            m = day_cvat.push_model(run_dir, ctx.reviewer, ctx.project_root, remaining=rem, job_running=any_running())
             if not m["enabled"]:
                 raise RunError(m["reason"] or "Chưa đẩy được.")
-            ctx.push_job.start(it["run"], ctx.runs_root, ctx.project_root, reviewer, m["task"], images=m.get("images_dir"))
+            ctx.push_job.start(it["run"], ctx.runs_root, ctx.project_root, ctx.reviewer, m["task"], images=m.get("images_dir"))
             return render(s, f"Đang đẩy đợt {it['run']} lên CVAT (theo dõi ở khung phía trên).", "ok")
         if kind == "deltask":
             run_dir = run_of(it)

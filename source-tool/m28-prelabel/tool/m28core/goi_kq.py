@@ -18,6 +18,7 @@ import os
 import re
 import socket
 import zipfile
+import zlib
 
 FORMAT = "m28-ketqua"
 PHIEN_BAN_DINH_DANG = 1
@@ -28,7 +29,8 @@ MAX_BYTE = 64 * 1024 * 1024            # gói lớn hơn: không đọc
 MAX_MAT = 20000
 NGUONG_SUA_MAC_DINH = 2.0              # % IOD: điểm nháp lệch nhãn cuối hơn ngần này là "đã sửa"
 CONDITIONS = ("manual", "assisted")
-NGUOI_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")      # tên người rà bất kỳ (= dong_ho.NGUOI_RE)
+NGUOI_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,31}")      # tên người rà bất kỳ (= dong_ho.NGUOI_RE)
+NGUOI_CU_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")            # luật tên của bản trước (có dấu _): gói đã làm bằng bản đó vẫn đọc được (= dong_ho.NGUOI_CU_RE)
 PHIEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,80}")
 TEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 _ABS_PATH = re.compile(r"(?:^|[\s\"'(=:,;])(?:/(?:home|tmp|users|var|mnt|root|etc|opt|media|srv)/|[a-z]:[\\/]|\\\\[a-z0-9_.-]+\\)", re.I)
@@ -185,8 +187,8 @@ def kiem_cau_truc(nd, names=None):
         return ["nội dung không phải đối tượng JSON"]
     if not isinstance(nd.get("phien"), str) or not PHIEN_RE.fullmatch(nd["phien"]):
         p.append("thiếu hoặc sai mã phiên")
-    if not isinstance(nd.get("nguoi"), str) or not NGUOI_RE.fullmatch(nd["nguoi"]):
-        p.append("tên người không hợp lệ (chỉ chữ, số, _ và -, tối đa 32 ký tự)")
+    if not isinstance(nd.get("nguoi"), str) or not (NGUOI_RE.fullmatch(nd["nguoi"]) or NGUOI_CU_RE.fullmatch(nd["nguoi"])):   # tạo mới đã kiểm luật mới ở nơi tạo
+        p.append("tên người không hợp lệ (chỉ chữ không dấu, số và dấu -, bắt đầu bằng chữ hoặc số, tối đa 32 ký tự)")
     if nd.get("nhom") not in CONDITIONS:
         p.append("nhóm không phải manual hoặc assisted")
     for k in ("dot", "task", "bo_anh", "job"):
@@ -249,8 +251,8 @@ def doc_bytes(data, ten, names=None):
                 if info.file_size > MAX_BYTE:
                     raise GoiLoi(f"{ten}: {JSON_TRONG_ZIP} trong zip quá lớn: từ chối.")
                 data = z.read(info)
-        except zipfile.BadZipFile:
-            raise GoiLoi(f"{ten}: không phải file zip hợp lệ (tải về dở hoặc hỏng).")
+        except (zipfile.BadZipFile, zlib.error, EOFError, RuntimeError, NotImplementedError, ValueError):     # dữ liệu nén hỏng, zip có mật khẩu, kiểu nén lạ
+            raise GoiLoi(f"{ten}: không phải file zip hợp lệ (tải về dở, hỏng, có mật khẩu hoặc kiểu nén lạ).")
     vo = _doc_bytes(data, ten)
     if not isinstance(vo, dict) or vo.get("dinh_dang") != FORMAT:
         raise GoiLoi(f"{ten}: không phải gói kết quả M28 (thiếu dinh_dang={FORMAT}).")
@@ -297,6 +299,23 @@ def _liet_ke(nguon):
     return out
 
 
+def moi_hon(nd, cu):
+    """Gói `nd` có tao_luc MỚI HƠN gói `cu` không: so theo thời điểm thật (ISO có múi giờ); thiếu ở cả hai hay không đọc được thì so chuỗi;
+    chỉ một bên có tao_luc thì bên có là mới hơn."""
+    def moc(v):
+        try:
+            t = datetime.datetime.fromisoformat(str(v))
+            return t.timestamp() if t.tzinfo else None
+        except (TypeError, ValueError):
+            return None
+    a, b = moc(nd.get("tao_luc")), moc(cu.get("tao_luc"))
+    if a is not None and b is not None:
+        return a > b
+    if a is not None or b is not None:
+        return a is not None
+    return str(nd.get("tao_luc") or "") > str(cu.get("tao_luc") or "")
+
+
 def quet(nguon, names=None, doc=None):
     """Gộp các gói từ danh sách thư mục/file. `doc` (mặc định doc_goi) đọc một đường dẫn. Trả dict(tot=[(tên, nội dung)], hong=[(tên, lý do)], trung=[(tên, lý do)]).
     Trùng = cùng mã phiên (hai file của một phiên, hoặc chép hai lần): giữ bản có tao_luc mới hơn, tên chuẩn ketqua_… trước, .zip trước .json; lý do nói rõ. Hai gói khác `phien` nhưng
@@ -316,7 +335,7 @@ def quet(nguon, names=None, doc=None):
             by[k] = (ten, nd)
         elif sha256_noi_dung(cu[1]) == sha256_noi_dung(nd):
             trung.append((ten, f"trùng nội dung với {cu[0]} (cùng phiên {k}): chỉ tính một lần"))
-        elif str(nd.get("tao_luc") or "") > str(cu[1].get("tao_luc") or ""):
+        elif moi_hon(nd, cu[1]):                        # so theo thời điểm thật: hai máy khác múi giờ (WSL để UTC) vẫn đúng
             trung.append((cu[0], f"cùng phiên {k} với {ten} nhưng cũ hơn: dùng {ten}"))
             by[k] = (ten, nd)
         else:

@@ -496,11 +496,11 @@ class ChildJob:
         except (OSError, ValueError):
             pass
         rc = proc.wait()
+        dang_chay.release(run_dir)                      # gỡ dấu "lượt đang bận" TRƯỚC khi báo xong: trang thấy xong rồi bấm việc kế tiếp ngay thì không bị báo bận nhầm
         with self._lock:
             self.returncode = rc
             self.state = "xong" if rc == 0 else "da_huy" if self._cancelled else "loi"
             self._t1 = time.monotonic()
-        dang_chay.release(run_dir)
 
     def cancel(self):
         """terminate(), chờ 5 giây, rồi kill(). Trả True nếu có job đang chạy để huỷ."""
@@ -547,14 +547,14 @@ class PrepareJob(ChildJob):
 
 
 TASK_RE = re.compile(r"demo-[A-Za-z0-9_-]{1,100}")
-REVIEWER_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
+REVIEWER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,31}")      # tên người rà: không có "_" (là dấu ngăn trong tên file raw\\<task>_<người>_<DDMM>.xml), bắt đầu bằng chữ/số
 
 
 def check_reviewer(name):
     """Nơi DUY NHẤT định nghĩa quy tắc tên người rà (review_app.check_reviewer và tab Cài đặt gọi hàm này). Trả tên nếu hợp lệ, không thì RunError."""
     if not isinstance(name, str) or not REVIEWER_RE.fullmatch(name):
-        raise RunError(f"Tên người rà {name!r} không hợp lệ: chỉ dùng chữ không dấu, số, gạch dưới, gạch ngang "
-                       "(tối đa 32 ký tự), ví dụ P2. Tên này nằm trong tên file triage_<tên>.csv.")
+        raise RunError(f"Tên người rà {name!r} không hợp lệ: chỉ dùng chữ không dấu, số và gạch ngang, bắt đầu bằng chữ hoặc số "
+                       "(tối đa 32 ký tự, không dùng gạch dưới), ví dụ P2 hoặc Lan-2. Tên này nằm trong tên file triage_<tên>.csv và raw\\<task>_<tên>_<DDMM>.xml.")
     return name
 
 
@@ -647,7 +647,7 @@ class CollectJob(ChildJob):
                 raise RunError(f"Đang gộp job của đợt {self.run}: chờ xong hoặc bấm Cancel ở khung gộp job của tab Các đợt.")
             run_dir = _check_cvat_start(self, run, runs_root, task)
             if not isinstance(person, str) or not NGUOI_DO_RE.fullmatch(person):
-                raise RunError(f"Người {person!r} không hợp lệ: tên phải gồm chữ, số, _ và -, tối đa 32 ký tự (đặt người rà ở tab Cài đặt).")
+                raise RunError(f"Người {person!r} không hợp lệ: tên chỉ chữ không dấu, số và dấu -, bắt đầu bằng chữ hoặc số, tối đa 32 ký tự (đặt người rà ở tab Cài đặt).")
             self.person, self.task, self.force = person, task, bool(force)
             self._launch(run, run_dir, collect_cmd(task, person, tool_dir, python, force), project_root,
                          f"collect --task {task} --reviewer {person} --overwrite --no-per-job" + ("" if force else " --require-completed"))

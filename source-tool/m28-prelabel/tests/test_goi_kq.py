@@ -260,3 +260,18 @@ def test_nhom_config_sample_is_empty_and_errors_do_not_crash(tmp_path):
         open(p, 'w', encoding='utf-8').write(bad)
         c = nhom.doc(root)
         assert c['nhom'] == {} and why in ' '.join(c['loi']), (bad, c)
+
+
+def test_goi_ten_cu_co_gach_duoi_van_doc_duoc(tmp_path):
+    """Gói làm bằng bản trước với tên có dấu _ (Lan_2) không bị coi là gói hỏng: thống kê vẫn tính."""
+    nd = {'phien': 'Lan_2-20261015-090000-ab12', 'nguoi': 'Lan_2'}
+    probs = goi_kq.kiem_cau_truc(nd)
+    assert not any('tên người' in p for p in probs)
+    assert any('tên người' in p for p in goi_kq.kiem_cau_truc(dict(nd, nguoi='Lan 2')))
+
+
+def test_quet_chon_ban_moi_hon_theo_thoi_diem_that_khac_mui_gio():
+    """Hai bản cùng phiên, máy làm gói để UTC (WSL): 12:40+00:00 thật ra mới hơn 19:10+07:00 (= 12:10 UTC). quet phải giữ bản mới (như luu_goi_nap báo)."""
+    a = {'tao_luc': '2026-10-15T19:10:00+07:00'}
+    b = {'tao_luc': '2026-10-15T12:40:00+00:00'}
+    assert goi_kq.moi_hon(b, a) and not goi_kq.moi_hon(a, b)
