@@ -751,6 +751,55 @@ def overlay_for(face, run_dir):
             "Không xem được nháp: đừng chọn Nhận, chạy lại python tool\\m28.py prepare ... --force overlays.")
 
 
+def _rgb_hex(rgb):
+    """RGB tuple -> '#rrggbb' cho lớp chấm vector (SVG đè lên ảnh lớn)."""
+    return "#%02x%02x%02x" % tuple(int(round(c)) for c in rgb)
+
+
+def big_view(face, run_dir):
+    """(ảnh nền lớn, cảnh báo|None, dữ liệu điểm JSON|None).
+
+    Ô ảnh lớn hiển thị giống hệt CVAT: kích thước chấm và đường nối cố định theo pixel màn hình
+    (r = 2.5 px, stroke-width = 1.0 px trên màn hình, bán kính vẽ trong SVG = r / scale, đường nối rực theo màu nhóm).
+    Khi mặt có nháp + ảnh cắt sạch + toạ độ trong map50/mp50.json thì trả ảnh CẮT (chưa nướng chấm) làm nền và
+    JSON 50 điểm để JS vẽ lớp SVG y hệt cvat-canvas đè lên. Còn lại (no_face, thiếu ảnh cắt/toạ độ) thì rơi về
+    overlay_for và trả points=None.
+    """
+    crop_ok = bool(face.crop and os.path.isfile(face.crop) and _img_ok(face.crop))
+    if not (face.has_draft and crop_ok):
+        big, warn = overlay_for(face, run_dir)
+        return big, warn, None
+    mp = _mp50(run_dir)
+    orig = (mp or {}).get(face.name, {}).get("orig")
+    if not orig or len(list(orig.values())) != len(face.flags):
+        big, warn = overlay_for(face, run_dir)
+        return big, warn, None
+    names = list(orig.keys())
+    pts = list(orig.values())
+    flags = face.flags
+    occ = face.occ if (face.occ is not None and len(face.occ) == len(flags)) else [False] * len(flags)
+    try:
+        out = []
+        for i, (n, xy) in enumerate(zip(names, pts)):
+            low = bool(flags[i])
+            g = mau_nhom.group_of(n)
+            col = _rgb_hex(mau_nhom.dot_rgb(g, low))
+            out.append({"x": float(xy[0]), "y": float(xy[1]), "i": i + 1, "g": g,
+                        "color": col, "low": low, "occ": bool(occ[i])})
+    except (IndexError, TypeError, ValueError):
+        big, warn = overlay_for(face, run_dir)
+        return big, warn, None
+    return face.crop, None, out
+
+
+def _pts_embed(pts):
+    """Chấm vector: nhúng JSON toạ độ vào ô thông tin (ẩn) để JS đọc, không phải gửi riêng. Không có thì rỗng."""
+    if not pts:
+        return ""
+    return ('<textarea id="m28-pts" style="display:none" aria-hidden="true">'
+            + html.escape(json.dumps(pts, separators=(",", ":"))) + "</textarea>")
+
+
 def _build_thumb(src, out, status):
     from PIL import Image, ImageDraw, ImageOps
     im = Image.open(src).convert("RGB")
@@ -1025,16 +1074,16 @@ def header_html(store, ses):
             f'<i style="width:{pct}%"></i></div><div class="m28-chips">{chips}</div></div></div>')
 
 
-def info_html(store, face, status, warn):
+def info_html(store, face, status, warn, pts=None):
     lat = store.lat.get(face.name, ("", ""))
     pos = [f.name for f in store.faces].index(face.name) + 1
     rows = [("Tên file", f'<span class="face-name">{html.escape(face.file)}</span>'),
             ("Vị trí", f"{pos}/{len(store.faces)} trong hàng đợi"),
             ("Trạng thái", _chip(status, lat[1] if status else ""))]
     if face.has_draft:
-        pts = fmt_points(face.flags)
+        pts_fl = fmt_points(face.flags)
         rows.append(("Điểm nghi sai", f"<b>{face.n_flags}/{len(face.flags)}</b>"
-                     + (f' · điểm <span class="m28-pts">{html.escape(pts)}</span>' if pts else " · không có điểm nào")))
+                     + (f' · điểm <span class="m28-pts">{html.escape(pts_fl)}</span>' if pts_fl else " · không có điểm nào")))
         if face.occ is not None:
             pts_occ = fmt_points(face.occ)
             rows.append(("Điểm bị che (occluded)", f"<b>{face.n_occ}/{len(face.occ)}</b>"
@@ -1051,7 +1100,7 @@ def info_html(store, face, status, warn):
         warns += '<div class="m28-warn">Mặt này không có nháp: chỉ chọn Gán tay hoặc Bỏ ảnh (nút Nhận đã khoá). Gán tay mặt này lên CVAT là <b>ảnh trống</b>.</div>'
     if warn:
         warns += f'<div class="m28-warn">{html.escape(warn)}</div>'
-    return f'<table class="m28-info">{body}</table>{warns}'
+    return f'<table class="m28-info">{body}</table>{warns}{_pts_embed(pts)}'
 
 
 def _msg_html(msg, level):
@@ -1067,7 +1116,7 @@ def make_view(store, ses, msg="", level="info"):
     ses["page"], ses["names"] = page, [f.name for f in page_items]
     face = store.by_name[ses["cur"]]
     status = store.status(face.name)
-    big, warn = overlay_for(face, store.run_dir)
+    big, warn, pts = big_view(face, store.run_dir)
     p = store.progress()
     counts = {m: len(filter_faces(store.faces, store.lat, m)) for m, _ in FILTERS}
     cur_i = ses["names"].index(face.name) if face.name in ses["names"] else None
@@ -1084,7 +1133,7 @@ def make_view(store, ses, msg="", level="info"):
         page_html=(f'<div class="m28-page">Trang <b>{page + 1}</b>/{n_pages}</div>' if items else
                    f'<div class="m28-empty">{html.escape(EMPTY_VI.get(ses["mode"], EMPTY_VI["tat_ca"]))}</div>'),
         page_prev=page > 0 and not fin, page_next=page < n_pages - 1 and not fin,
-        big=big, info=info_html(store, face, status, warn),
+        big=big, info=info_html(store, face, status, warn, pts),
         nhan_ok=face.has_draft and not fin and incl, tay_ok=not fin and incl, bo_ok=not fin and incl,
         undo_ok=bool(store.undo_stack) and not fin,
         prev_ok=bool(items) and not fin and (pos is None or pos > 0),
@@ -1194,7 +1243,14 @@ CSS = """
 
 #big { position: relative; isolation: isolate; overflow: hidden !important; height: min(512px, 52vh, calc(100vw - 48px)) !important; padding: 0 !important; }
 #big .image-container, #big .image-frame, #big .upload-container { height: 100% !important; overflow: hidden !important; }
+#big .image-frame { position: relative !important; }
 #big img { width: 100% !important; height: 100% !important; object-fit: contain !important; }
+#big .m28-stage { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible;
+  transform-origin: 0 0 !important; transform: translate(var(--zx, 0px), var(--zy, 0px)) scale(var(--zz, 1)); }
+#big .m28-svg-overlay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+/* Kiểu dáng hiển thị y hệt cvat-canvas: cạnh nối và điểm landmark */
+#big .cvat_canvas_skeleton_edge { stroke-linecap: round; stroke-linejoin: round; }
+#big .cvat_canvas_shape_occluded { stroke-dasharray: 4 !important; }
 /* Phóng to ảnh lớn: CSS transform trên <img> (lăn chuột, kéo, nút +/-/1:1, nhấp đúp); ảnh gốc không đổi. */
 #big img { transform-origin: 0 0 !important; transform: translate(var(--zx, 0px), var(--zy, 0px)) scale(var(--zz, 1));
   cursor: zoom-in; user-select: none; -webkit-user-drag: none; }
@@ -1422,6 +1478,7 @@ ZOOM_JS = r"""
         if (sr.textContent !== t2 && (sr.textContent || Z.z !== 1)) { sr.textContent = t2; }      // mở trang / đổi ảnh ở 100%: không đọc gì
       }, 400);
     }
+    zRenderOverlay();
   };
   const zClamp = () => {
     const b = bigEl();
@@ -1441,6 +1498,12 @@ ZOOM_JS = r"""
     zApply();
   };
   const zReset = () => { Z.z = 1; Z.x = 0; Z.y = 0; zApply(); };
+  // Bảng cạnh nối skeleton của 50 điểm DMS theo chuẩn face50_label.json của CVAT
+  const M28_EDGES = [[0,1],[1,2],[2,3],[3,4],[5,6],[6,7],[7,8],[8,9],[10,11],[11,12],[12,13],
+    [14,15],[15,16],[16,17],[17,18],[18,19],[19,20],[20,21],[21,14],[22,23],[23,24],[24,25],[25,26],
+    [26,27],[27,28],[28,29],[29,22],[30,31],[31,32],[32,33],[33,34],[34,35],[35,36],[36,37],[37,38],
+    [38,39],[39,40],[40,41],[41,30],[42,43],[43,44],[44,45],[45,46],[46,47],[47,48],[48,49],[49,42]];
+
   const zEnsure = () => {
     const b = bigEl();
     if (!b) { return; }
@@ -1463,6 +1526,88 @@ ZOOM_JS = r"""
     }
     if (b.classList.contains('m28-hasimg') !== !!img) { b.classList.toggle('m28-hasimg', !!img); }
     zApply();
+    zRenderOverlay();
+  };
+  const zRenderOverlay = () => {
+    const b = bigEl();
+    if (!b) { return; }
+    const img = bigImg();
+    const parent = img ? img.parentElement : null;
+    let stage = parent ? parent.querySelector('.m28-stage') : null;
+    // Dọn stage cũ bị gắn sai chỗ (nếu có ở ngoài b)
+    const stray = b.querySelector(':scope > .m28-stage');
+    if (stray) { stray.remove(); }
+    const ptsArea = document.getElementById('m28-pts');
+    let pts = null;
+    if (ptsArea && ptsArea.value) {
+      try { pts = JSON.parse(ptsArea.value); } catch (e) { pts = null; }
+    }
+    if (!pts || !pts.length || !img || !parent) {
+      if (stage) { stage.remove(); }
+      return;
+    }
+    const nw = img.naturalWidth || 512, nh = img.naturalHeight || 512;
+    const cw = img.clientWidth, ch = img.clientHeight;
+    if (!cw || !ch) { return; }
+
+    // .m28-stage được đặt ngay trong parent của img (.image-frame):
+    // Cùng chung khung gốc (0,0) và kích thước 100% x 100% với img.
+    // Khi CSS transform translate(Z.x, Z.y) scale(Z.z) tác động lên cả img và .m28-stage,
+    // toạ độ của ảnh và các điểm landmark vector luôn khớp 1:1 tuyệt đối ở mọi mức zoom.
+    if (!stage) {
+      stage = document.createElement('div');
+      stage.className = 'm28-stage';
+      stage.innerHTML = '<svg class="m28-svg-overlay"></svg>';
+      parent.appendChild(stage);
+    }
+    const svg = stage.querySelector('svg');
+    svg.setAttribute('viewBox', `0 0 ${nw} ${nh}`);
+    svg.style.left = '0px';
+    svg.style.top = '0px';
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+
+    // Hệ số tỷ lệ từ toạ độ ảnh (512) sang pixel màn hình hiện tại
+    const baseScale = cw / nw;
+    const currentScale = baseScale * Z.z;
+
+    // Kích thước chuẩn y hệt CVAT (cvat-canvas):
+    // r = 2.5px màn hình, stroke = 1px màn hình. Khi scale thay đổi, bán kính trên viewBox = screenPx / currentScale
+    const pointR = 2.5 / currentScale;
+    const strokeW = 1.0 / currentScale;
+    const lowConfR = 4.0 / currentScale;
+    const lowConfRing = 2.0 / currentScale;
+
+    const curSrc = img.getAttribute('src') || '';
+    const stateKey = `${curSrc}__${ptsArea.value}__${currentScale.toFixed(4)}`;
+    if (svg.__m28StateKey !== stateKey) {
+      svg.__m28StateKey = stateKey;
+      let s = '<g class="cvat_canvas_skeleton_edges">';
+      for (const [i1, i2] of M28_EDGES) {
+        if (pts[i1] && pts[i2]) {
+          const p1 = pts[i1], p2 = pts[i2];
+          const col = p1.color || '#ffffff';
+          s += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${col}" stroke-width="${strokeW}" opacity="0.85" class="cvat_canvas_skeleton_edge"/>`;
+        }
+      }
+      s += '</g><g class="cvat_canvas_skeleton_points">';
+      for (const p of pts) {
+        const col = p.color || '#ffffff';
+        if (p.occ) {
+          // Điểm bị che (occluded) như CVAT: nét đứt hoặc vòng rỗng
+          s += `<circle cx="${p.x}" cy="${p.y}" r="${pointR * 1.4}" fill="none" stroke="${col}" stroke-width="${strokeW * 1.5}" class="cvat_canvas_shape_occluded"/>`;
+        } else if (p.low) {
+          // Điểm low_conf: vòng tròn trắng bao ngoài + tâm điểm màu nhóm
+          s += `<circle cx="${p.x}" cy="${p.y}" r="${lowConfR + lowConfRing}" fill="none" stroke="#ffffff" stroke-width="${strokeW * 1.5}"/>`
+             + `<circle cx="${p.x}" cy="${p.y}" r="${lowConfR}" fill="${col}" stroke="#141414" stroke-width="${strokeW * 0.75}"/>`;
+        } else {
+          // Điểm thường: chấm màu nhóm viền tối mảnh y hệt CVAT
+          s += `<circle cx="${p.x}" cy="${p.y}" r="${pointR}" fill="${col}" stroke="#141414" stroke-width="${strokeW * 0.75}"/>`;
+        }
+      }
+      s += '</g>';
+      svg.innerHTML = s;
+    }
   };
   function zWheel(e) {
     const b = bigEl();

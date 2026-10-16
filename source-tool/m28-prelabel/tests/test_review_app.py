@@ -1114,8 +1114,9 @@ def test_port_is_fixed_so_second_copy_fails_clearly(five, tmp_path):
 
 # ---------- chạy thật như m28 gọi ----------
 def run_app(cwd, *args):
+    env = dict(os.environ, PYTHONIOENCODING='utf-8')
     return subprocess.run([sys.executable, os.path.join(TOOL, 'review_app.py'), *args], cwd=str(cwd), capture_output=True,
-                          text=True, encoding='utf-8', timeout=60)
+                          text=True, encoding='utf-8', errors='replace', env=env, timeout=60)
 
 
 def test_cli_errors_exit_2_with_one_line(five, tmp_path):
@@ -1124,8 +1125,9 @@ def test_cli_errors_exit_2_with_one_line(five, tmp_path):
         r = run_app(tmp_path, *args)
         assert r.returncode == 2 and word in r.stderr and 'Traceback' not in r.stderr, (args, r.stderr)
         assert len(r.stderr.strip().splitlines()) == 1 and r.stdout == ''
+    env_colab = dict(os.environ, COLAB_GPU='1', PYTHONIOENCODING='utf-8')
     r = subprocess.run([sys.executable, os.path.join(TOOL, 'review_app.py'), 'runs/R1', 'P2'], cwd=str(tmp_path),
-                       capture_output=True, text=True, encoding='utf-8', timeout=60, env=dict(os.environ, COLAB_GPU='1'))
+                       capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60, env=env_colab)
     assert r.returncode == 2 and 'Colab' in r.stderr and 'Traceback' not in r.stderr
     assert not os.path.exists(os.path.join(five, '_tmp'))              # lỗi thì chưa mở server, chưa tạo gì
 
@@ -1517,6 +1519,56 @@ def test_page_keeps_an_old_overlay_of_a_run_with_old_point_names(tmp_path, monke
     os.utime(op, (1_000_000_000, 1_000_000_000))
     path, warn = ra.overlay_for(ra.load_queue(rd)[0], rd)
     assert path == op and warn is None
+
+
+# ---------- 11. ảnh lớn: lớp chấm vector (QĐ: chấm không phình/mất khi zoom, giống CVAT) ----------
+def test_big_view_returns_clean_crop_and_points_json(tmp_path, monkeypatch):
+    from m28core import mau_nhom
+    monkeypatch.chdir(tmp_path)
+    rd = grouped_run(tmp_path)
+    face = ra.load_queue(rd)[0]
+    big, warn, pts = ra.big_view(face, rd)
+    assert big == face.crop and warn is None and pts is not None            # nền = ảnh cắt SẠCH, chưa nướng chấm
+    assert len(pts) == N_PTS
+    want = {i: mau_nhom.hex_rgb(mau_nhom.GROUP_COLOR[mau_nhom.group_of(CFG_NAMES[i])]) for i in range(N_PTS)}
+    for i, p in enumerate(pts):
+        assert p['i'] == i + 1
+        assert (p['x'], p['y']) == tuple(GRP_PTS[i])
+        assert p['color'] == '#%02x%02x%02x' % want[i]
+        assert p['occ'] is False
+        assert p['low'] is (i < 3)                                          # 3 điểm đầu low_conf
+
+
+def test_big_view_falls_back_to_overlay_for_no_draft(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd = make_run(tmp_path, {'A': 0}, no_face=[('N1', 'khong_thay_mat', 'mediapipe')], crops=['N1'])
+    face = next(f for f in ra.load_queue(rd) if f.name == 'N1')
+    big, warn, pts = ra.big_view(face, rd)
+    assert pts is None and big == os.path.join(rd, 'crop', 'images', 'N1.png') and warn is None
+
+
+def test_big_view_falls_back_when_missing_orig(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd, _ = fake_run_with_images(tmp_path, with_mp50=False)                 # có ảnh cắt, có nháp, nhưng không có mp50.json
+    face = ra.load_queue(rd)[0]
+    big, warn, pts = ra.big_view(face, rd)
+    assert pts is None and warn is not None                                 # rơi về overlay_for (placeholder + cảnh báo)
+
+
+def test_pts_embed_and_escape(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert ra._pts_embed(None) == '' and ra._pts_embed([]) == ''
+    h = ra._pts_embed([{'x': 1.5, 'y': 2.0, 'i': 1, 'color': '#aabbcc', 'low': False, 'occ': False}])
+    assert 'm28-pts' in h and '&quot;x&quot;:1.5' in h and '<script' not in h     # JSON đã escape, nhúng trong textarea ẩn
+
+
+def test_make_view_embeds_points_when_draft_present(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rd = grouped_run(tmp_path)
+    s = ra.Store(rd, 'P2')
+    v = ra.make_view(s, ra.new_session(s))
+    assert 'm28-pts' in v['info'] and v['big'] == s.by_name['A'].crop        # ảnh lớn = ảnh cắt sạch + JSON chấm
+
 
 
 def test_legend_lists_the_seven_group_colors_and_the_low_conf_marker():
