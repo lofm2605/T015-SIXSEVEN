@@ -719,6 +719,27 @@ def finish_button(i):
             + (' disabled title="Đang có việc chạy cho đợt này"' if busy else "") + '>Merge jobs & Finish</button>')
 
 
+def dot_stepper_html(i):
+    """Mini tracker 4 bước của đợt trong danh sách Các đợt."""
+    s1 = "done" if i.get("ready") else ("active" if i.get("state") == S_PREPARING else "pending")
+    chua = i.get("chua_ra", 0)
+    tot = i.get("total", 0)
+    da_xong_ra = (chua == 0 and tot > 0 and i.get("state") in (S_DONE, S_PUSHED, S_PARTIAL, S_COLLECTING)) or bool(i.get("gop"))
+    s2 = "done" if da_xong_ra else ("active" if i.get("state") == S_REVIEWING else "pending")
+    ps = i.get("push") or {}
+    pushed = ps.get("trang_thai") == "xong"
+    s3 = "done" if pushed else ("active" if i.get("state") == S_PUSHING or (da_xong_ra and not pushed) else "pending")
+    gop_done = bool(i.get("gop"))
+    s4 = "done" if gop_done else ("active" if i.get("state") == S_COLLECTING or (pushed and not gop_done) else "pending")
+
+    return (f'<div class="dot-track">'
+            f'<span class="dot-step {s1}">1. Nạp</span><span class="dot-arr">→</span>'
+            f'<span class="dot-step {s2}">2. Rà soát</span><span class="dot-arr">→</span>'
+            f'<span class="dot-step {s3}">3. CVAT</span><span class="dot-arr">→</span>'
+            f'<span class="dot-step {s4}">4. Gộp</span>'
+            f'</div>')
+
+
 def card_html(i, *, active=False, push_ready=None):
     """Thẻ một đợt. push_ready: None (không cho đẩy) hoặc True/False (nút Đẩy có bật không) — chỉ đợt Đã Xong chưa đẩy.
     Đợt đã đẩy xong có nút Merge jobs & Finish (finish_button) và, sau khi gộp, dòng 'Đã gộp job' (gop_html)."""
@@ -749,7 +770,7 @@ def card_html(i, *, active=False, push_ready=None):
     return (f'<div class="dot-card" data-state="{i["state"]}"><div class="dot-card-head">'
             f'<button type="button" class="dot-name" data-act="open" data-run="{n}" aria-label="View images of batch {n}">{n}</button>{opened}'
             f'<span class="dot-state st-{_state_cls(i["state"])}">{_e(i["state_text"])}</span></div>'
-            f'<div class="dot-meta">{meta}</div>{note}<div class="dot-counts">{_counts_html(i)}{_gio_html(i)}</div>{gop_html(i.get("gop"))}{ex}'
+            f'<div class="dot-meta">{meta}</div>{dot_stepper_html(i)}{note}<div class="dot-counts">{_counts_html(i)}{_gio_html(i)}</div>{gop_html(i.get("gop"))}{ex}'
             f'<div class="dot-actions">{ra}{push}{finish_button(i)}<button type="button" class="dot-btn" data-act="open" data-run="{n}">View images</button></div></div>')
 
 

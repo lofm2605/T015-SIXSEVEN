@@ -287,11 +287,14 @@ def result_html(ps, run):
     sa = ps.get("so_anh") if isinstance(ps.get("so_anh"), dict) else {}
     gan = (f'<tr><th>Mặt Gán tay</th><td><b>{sa.get("gan_tay", "?")}</b> ({sa["gan_tay_co_nhap"]} có nháp · {sa.get("gan_tay_trong", "?")} ảnh trống)</td></tr>'
            if "gan_tay_co_nhap" in sa else "")
+    cta = ('<div class="push-actions" style="margin: 8px 0 4px;"><button type="button" class="pipeline-cta pipeline-cta-primary" '
+           'data-tab="Các đợt">Go to Batches (Merge jobs &amp; Finish) →</button></div>')
     return (f'<div class="nap-box nap-ok push-done" role="status"><b>Đã đẩy lên CVAT.</b>'
             + (f'<div class="push-open">{open_btn}</div>' if open_btn else "") +
             f'<table class="m28-info"><tr><th>Task</th><td><b>{_e(ps.get("task", "?"))}</b> (id {_e(ps.get("task_id", "?"))})</td></tr>'
             f'<tr><th>Mở trong CVAT</th><td>{link}</td></tr>'
             f'<tr><th>Số job</th><td><b>{len(jobs)}</b> ({n_nhan} Nhận, {n_tay} Gán tay)</td></tr>{gan}</table>{kiem}{warn}'
+            f'{cta}'
             f'<div class="nap-note push-next">{_e(FINISH_HINT)}</div></div>')
 
 

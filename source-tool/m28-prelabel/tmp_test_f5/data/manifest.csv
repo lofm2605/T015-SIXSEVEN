@@ -1,0 +1,2 @@
+file,set,block,seq,source,camera,subject,gender,glasses,state,video,frame,t_s,image,face_idx,x0,y0,x1,y1,left,top,k,pose,expression,illumination,makeup,occlusion,blur,yaw,pitch,roll,jaw_open,luma,contrast,bright_frac,lap_var,gaze_label,gaze_ang,pad_frac,seed
+F_001.png,F,,,yawdd,dash,yd_M001,,none,normal,,,,,,,,,,0,0,1,0,0,0,0,0,0,3.5,,,0.1,120,,,400,,,,

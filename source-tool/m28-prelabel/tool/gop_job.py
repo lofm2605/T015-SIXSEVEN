@@ -219,7 +219,9 @@ def result_html(fx):
              + ('<button type="button" class="dot-btn dot-btn-push" data-act="openfolder" data-folder="ket_qua" title="outputs/ket_qua: gói kết quả gửi nhóm trưởng">'
                 'Mở thư mục gói kết quả</button> ' if co_goi else "")
              + '<button type="button" class="dot-btn" data-act="openfolder" data-folder="raw" title="raw: file nhãn gộp của task">Mở raw</button> '
-             '<button type="button" class="dot-btn" data-act="openfolder" data-folder="timing" title="outputs/timing: dòng bấm giờ">Mở timing</button></div>')
+             '<button type="button" class="dot-btn" data-act="openfolder" data-folder="timing" title="outputs/timing: dòng bấm giờ">Mở timing</button> '
+             '<button type="button" class="dot-btn dot-btn-ra" data-tab="Thống kê" title="Xem báo cáo chất lượng &amp; NME ở tab Thống kê">View Stats →</button>'
+             '</div>')
     return _box(body, "warn" if (fx.get("loi_luu") or fx.get("loi_ghi")) else "ok")
 
 

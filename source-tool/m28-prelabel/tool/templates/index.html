@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>M28 AI Landmark Studio · Assisted Annotation Pipeline</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- SweetAlert2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 900: '#1e3a8a'
+            },
+            surface: {
+              950: '#060913', 900: '#0a0f1d', 850: '#0e1626', 800: '#152238', 750: '#1b2a45', 700: '#1e2b42'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+    body { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; background-color: #060913; color: #f8fafc; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0a0f1d; }
+    ::-webkit-scrollbar-thumb { background: #1e2b42; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+    .kbd-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; padding: 1px 5px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; border-radius: 4px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-bottom-width: 2px; }
+    .pulse-ring { animation: pulseGlow 2s infinite; }
+    @keyframes pulseGlow { 0% { transform: scale(0.95); opacity: 0.8; } 50% { transform: scale(1.15); opacity: 0.3; } 100% { transform: scale(0.95); opacity: 0.8; } }
+    .swal2-popup { font-family: 'Plus Jakarta Sans', system-ui, sans-serif !important; }
+  </style>
+</head>
+<body class="min-h-screen bg-surface-950 flex flex-col antialiased select-none">
+
+  <!-- ================= FLOATING TOAST NOTIFICATIONS CONTAINER ================= -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-[9999] flex flex-col gap-2.5 pointer-events-none max-w-sm w-full"></div>
+
+  <!-- ================= TOPBAR ================= -->
+  <header class="sticky top-0 z-50 bg-surface-900/95 backdrop-blur-md border-b border-surface-700 px-4 py-2">
+    <div class="max-w-[1680px] mx-auto flex items-center justify-between gap-4">
+      
+      <!-- Brand Minimal -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <i data-lucide="zap" class="w-4 h-4"></i>
+        </div>
+        <span class="text-sm font-bold text-slate-100 tracking-tight">M28 Landmark Studio</span>
+      </div>
+
+      <!-- Center: Compact Batch & Reviewer Pill -->
+      <div class="flex items-center gap-2">
+        <!-- Minimal Streamlined Batch Pill -->
+        <button onclick="openBatchModal()" class="flex items-center gap-2 bg-surface-850 hover:bg-surface-800 border border-surface-700 hover:border-blue-500/50 px-3 py-1.5 rounded-xl transition text-xs group cursor-pointer" title="Nhấp để xem danh sách hoặc đổi đợt rà soát">
+          <i data-lucide="folder" class="w-4 h-4 text-amber-400"></i>
+          <span id="currentBatchBadge" class="font-medium text-slate-400">Chưa chọn đợt</span>
+          <span id="batchStatsPill" class="hidden text-[11px] text-slate-400 border-l border-surface-700 pl-2">0 mặt</span>
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-200 transition"></i>
+        </button>
+
+        <!-- Compact Reviewer Pill -->
+        <div class="flex items-center gap-1.5 bg-surface-850 px-2.5 py-1.5 rounded-xl border border-surface-700 text-xs text-slate-400">
+          <i data-lucide="user" class="w-3.5 h-3.5 text-indigo-400"></i>
+          <span id="reviewerName" class="font-bold text-slate-300 font-mono">P1</span>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center gap-2">
+        <!-- Settings Button -->
+        <button onclick="openSettingsModal()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 text-xs font-semibold text-slate-300 hover:text-white transition" title="Cài đặt hệ thống">
+          <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Tiện ích</span>
+        </button>
+
+        <!-- Close Server -->
+        <button onclick="confirmClosePage()" class="p-1.5 rounded-xl bg-surface-850 hover:bg-red-500/20 border border-surface-700 hover:border-red-500/40 text-slate-400 hover:text-red-400 transition cursor-pointer" title="Đóng trang">
+          <i data-lucide="power" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ================= PIPELINE STEPPER BAR ================= -->
+  <nav class="bg-surface-900 border-b border-surface-700 px-4 py-2">
+    <div class="max-w-[1680px] mx-auto flex items-center justify-between gap-3 overflow-x-auto">
+      
+      <div class="flex items-center gap-2">
+        <!-- Step 1 Tab -->
+        <button id="stepBtn1" onclick="goToStep(1)" class="step-btn flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold transition border border-transparent text-slate-400 hover:text-slate-200 hover:bg-surface-850">
+          <span class="w-5 h-5 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 text-[11px] step-num">1</span>
+          <span>Nạp ảnh &amp; AI Pre-label</span>
+        </button>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-surface-700 shrink-0"></i>
+
+        <!-- Step 2 Tab -->
+        <button id="stepBtn2" onclick="goToStep(2)" class="step-btn flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold transition border border-transparent text-slate-400 hover:text-slate-200 hover:bg-surface-850">
+          <span class="w-5 h-5 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 text-[11px] step-num">2</span>
+          <span>Rà soát &amp; Triage (N/G/B)</span>
+        </button>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-surface-700 shrink-0"></i>
+
+        <!-- Step 3 Tab -->
+        <button id="stepBtn3" onclick="goToStep(3)" class="step-btn flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold transition border border-transparent text-slate-400 hover:text-slate-200 hover:bg-surface-850">
+          <span class="w-5 h-5 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 text-[11px] step-num">3</span>
+          <span>Phân phối lên CVAT</span>
+        </button>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-surface-700 shrink-0"></i>
+
+        <!-- Step 4 Tab -->
+        <button id="stepBtn4" onclick="goToStep(4)" class="step-btn flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold transition border border-transparent text-slate-400 hover:text-slate-200 hover:bg-surface-850">
+          <span class="w-5 h-5 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 text-[11px] step-num">4</span>
+          <span>Gộp &amp; Báo cáo KPI</span>
+        </button>
+      </div>
+
+      <!-- Quick Status Badge -->
+      <div id="stepStatusPill" class="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold">
+        <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+        <span id="stepStatusText">Pipeline Active</span>
+      </div>
+
+    </div>
+  </nav>
+
+  <!-- ================= MAIN WORKSPACE AREA ================= -->
+  <main class="flex-1 max-w-[1680px] w-full mx-auto p-4 flex flex-col">
+
+    <!-- ========== STAGE 1: NẠP & QUẢN LÝ ĐỢT ========== -->
+    <section id="stage1" class="stage-view hidden flex-col max-w-5xl mx-auto w-full py-6 gap-6">
+      <!-- Hero Ingestion Header -->
+      <div class="text-center space-y-2">
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold">
+          <span>GIAI ĐOẠN 1 / 4</span>
+        </div>
+        <h2 class="text-2xl font-black text-white tracking-tight">Quản Lý Đợt &amp; Nạp Dữ Liệu Pre-label AI</h2>
+        <p class="text-sm text-slate-400 max-w-xl mx-auto">
+          Chọn đợt đã có để tiếp tục rà soát ngay, hoặc nạp đợt ảnh mới để AI MediaPipe trích xuất trước 50 điểm landmark chuẩn bị cho quy trình.
+        </p>
+      </div>
+
+      <!-- Mode Switcher Tabs -->
+      <div class="flex items-center justify-center p-1 bg-surface-900 border border-surface-700 rounded-2xl max-w-md mx-auto w-full shadow-lg">
+        <button id="stage1TabBatches" onclick="switchStage1Tab('batches')" class="flex-1 py-2 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-blue-600 text-white shadow-md cursor-pointer">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+          <span>Danh Sách Các Đợt (<span id="stage1BatchCount">0</span>)</span>
+        </button>
+        <button id="stage1TabUpload" onclick="switchStage1Tab('upload')" class="flex-1 py-2 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 text-slate-400 hover:text-white cursor-pointer">
+          <i data-lucide="cloud-upload" class="w-4 h-4"></i>
+          <span>+ Nạp Ảnh Đợt Mới</span>
+        </button>
+      </div>
+
+      <!-- VIEW A: BATCHES LIST GALLERY (Default if runs exist) -->
+      <div id="stage1BatchesView" class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i data-lucide="folder-open" class="w-4 h-4 text-amber-400"></i>
+              <span>Các Đợt Rà Soát Sẵn Sàng</span>
+            </h3>
+            <p class="text-xs text-slate-400">Chọn đợt bạn muốn làm việc để chuyển thẳng vào bàn rà soát</p>
+          </div>
+          <button onclick="switchStage1Tab('upload')" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-blue-500/20 cursor-pointer">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>+ Nạp Đợt Ảnh Mới</span>
+          </button>
+        </div>
+
+        <!-- Dynamic Batches Grid -->
+        <div id="stage1BatchesContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          <!-- Populated by renderStage1Batches() -->
+        </div>
+      </div>
+
+      <!-- VIEW B: UPLOAD NEW BATCH (Dropzone) -->
+      <div id="stage1UploadView" class="hidden bg-surface-900 border border-surface-700 rounded-2xl p-6 shadow-xl space-y-5">
+        <div id="dropzone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="document.getElementById('fileInput').click()" class="border-2 border-dashed border-surface-700 hover:border-blue-500/80 hover:bg-blue-500/5 rounded-xl p-8 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3">
+          <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png" onchange="handleFileSelect(event)" class="hidden">
+          <div class="w-12 h-12 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center">
+            <i data-lucide="cloud-upload" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <p class="text-sm font-bold text-slate-200">Kéo thả thư mục hoặc tệp ảnh vào đây</p>
+            <p class="text-xs text-slate-400 mt-1">Hỗ trợ JPG, JPEG, PNG (Tối đa 500 ảnh mỗi đợt)</p>
+          </div>
+          <div id="fileCountBadge" class="hidden px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
+            0 ảnh đã chọn
+          </div>
+        </div>
+
+        <!-- Files Preview Grid -->
+        <div id="uploadPreviewGrid" class="hidden grid grid-cols-6 gap-2 max-h-40 overflow-y-auto p-2 bg-surface-950 rounded-lg border border-surface-700"></div>
+
+        <!-- Run Config Inputs -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1">Tên đợt rà soát</label>
+            <input type="text" id="runNameInput" placeholder="NAP_001" class="w-full bg-surface-850 border border-surface-700 focus:border-blue-500 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1">Ghi chú đợt (tùy chọn)</label>
+            <input type="text" id="runNoteInput" placeholder="Ví dụ: camera góc nghiêng, ánh sáng ngược" class="w-full bg-surface-850 border border-surface-700 focus:border-blue-500 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-3 pt-2">
+          <button id="startIngestBtn" onclick="startIngest(true)" class="flex-1 py-3 px-5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-bold text-white shadow-lg shadow-blue-500/25 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
+            <i data-lucide="play" class="w-4 h-4"></i>
+            <span>Nạp Dữ Liệu &amp; Bắt Đầu Rà Soát (Upload &amp; Open)</span>
+          </button>
+          <button id="cancelIngestBtn" onclick="cancelIngest()" class="hidden py-3 px-5 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-400 font-bold border border-red-500/30 transition">
+            Hủy
+          </button>
+        </div>
+
+        <!-- Processing Progress Checklist -->
+        <div id="ingestProgressBox" class="hidden space-y-3 pt-4 border-t border-surface-700">
+          <div class="flex items-center justify-between text-xs">
+            <span id="ingestStepStatus" class="font-bold text-slate-300">Đang khởi chạy MediaPipe...</span>
+            <span id="ingestProgressPct" class="font-mono text-blue-400 font-bold">0%</span>
+          </div>
+          <div class="w-full h-2 rounded-full bg-surface-950 overflow-hidden border border-surface-700">
+            <div id="ingestProgressBar" class="h-full bg-gradient-to-r from-blue-500 to-emerald-500 w-0 transition-all duration-300"></div>
+          </div>
+          <div id="ingestLog" class="p-3 bg-surface-950 rounded-xl border border-surface-700 font-mono text-[11px] text-cyan-300 max-h-32 overflow-y-auto"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== STAGE 2: RÀ SOÁT & TRIAGE (STUDIO) ========== -->
+    <section id="stage2" class="stage-view hidden flex-1 flex flex-col gap-3">
+      
+      <!-- Stage 2 Empty State: Khi chưa chọn đợt nào -->
+      <div id="stage2NoBatchCard" class="hidden flex-1 flex flex-col items-center justify-center p-12 text-center bg-surface-900 border border-surface-700 rounded-2xl gap-4 my-auto">
+        <div class="w-16 h-16 rounded-2xl bg-surface-850 border border-surface-700 flex items-center justify-center text-amber-400 shadow-xl">
+          <i data-lucide="layers" class="w-8 h-8"></i>
+        </div>
+        <div class="max-w-md space-y-1.5">
+          <h3 class="text-base font-bold text-slate-100">Chưa chọn đợt rà soát</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Hệ thống vừa khởi động sạch và chưa chọn đợt ảnh nào. Vui lòng chọn một đợt có sẵn để rà soát hoặc nạp đợt ảnh mới.
+          </p>
+        </div>
+        <div class="flex items-center gap-3 mt-2">
+          <button onclick="openBatchModal()" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-xs text-white shadow-lg shadow-blue-500/20 transition flex items-center gap-2 cursor-pointer">
+            <i data-lucide="folder-open" class="w-4 h-4"></i>
+            <span>Chọn Đợt Rà Soát</span>
+          </button>
+          <button onclick="goToStep(1); switchStage1Tab('batches');" class="px-4 py-2.5 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 font-bold text-xs text-slate-300 hover:text-white transition flex items-center gap-2 cursor-pointer">
+            <i data-lucide="list" class="w-4 h-4 text-amber-400"></i>
+            <span>Danh Sách Đợt (GĐ 1)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Stage 2 Active Review Studio: Khi đã chọn đợt -->
+      <div id="stage2ActiveContent" class="flex-1 flex flex-col gap-3">
+        <!-- Stage 2 Active Batch Banner (High Visibility) -->
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-blue-950/50 via-surface-900 to-surface-900 border border-blue-500/40 px-4 py-2.5 rounded-2xl shadow-xl">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-500/30 shadow-inner">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Đang rà soát đợt:</span>
+              <span id="stage2BatchName" class="font-black text-base text-amber-300 font-mono">NAP_...</span>
+              <span id="stage2BatchStatusBadge" class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">Đang rà soát</span>
+            </div>
+            <p id="stage2BatchDetailText" class="text-xs text-slate-400">Tổng 0 khuôn mặt · 0 đã rà · 0 chưa rà</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openBatchModal()" class="px-3.5 py-1.5 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 hover:border-blue-500/60 text-xs font-bold text-slate-200 hover:text-white flex items-center gap-1.5 transition shadow-sm cursor-pointer" title="Xem danh sách tất cả các đợt hoặc chuyển sang đợt khác">
+            <i data-lucide="folder-open" class="w-4 h-4 text-amber-400"></i>
+            <span>Xem &amp; Đổi Đợt Khác</span>
+          </button>
+          <button onclick="goToStep(1); switchStage1Tab('upload');" class="px-3.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-xs font-bold text-blue-300 hover:text-white flex items-center gap-1.5 transition cursor-pointer" title="Nạp thêm đợt ảnh mới">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>+ Nạp Đợt Mới</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Top Studio Toolbar -->
+      <div class="flex items-center justify-between gap-4 bg-surface-900 border border-surface-700 px-4 py-2.5 rounded-xl">
+        <!-- Filter Tabs -->
+        <div class="flex items-center gap-1 bg-surface-950 p-1 rounded-lg border border-surface-700 text-xs">
+          <button onclick="setTriageFilter('tat_ca')" class="flt-btn px-3 py-1 rounded font-bold text-slate-400 hover:text-white" data-flt="tat_ca">Tất cả (<span id="cntAll">0</span>)</button>
+          <button onclick="setTriageFilter('chua_ra')" class="flt-btn px-3 py-1 rounded font-bold text-slate-400 hover:text-white" data-flt="chua_ra">Chưa rà (<span id="cntUnreviewed">0</span>)</button>
+          <button onclick="setTriageFilter('dang_ngo')" class="flt-btn px-3 py-1 rounded font-bold text-amber-400 hover:text-amber-300" data-flt="dang_ngo">⚠️ Đáng ngờ (<span id="cntSuspicious">0</span>)</button>
+          <button onclick="setTriageFilter('da_ra')" class="flt-btn px-3 py-1 rounded font-bold text-slate-400 hover:text-white" data-flt="da_ra">Đã rà (<span id="cntReviewed">0</span>)</button>
+        </div>
+
+        <!-- Progress Summary Bar -->
+        <div class="flex-1 max-w-md flex items-center gap-3">
+          <span class="text-xs font-bold text-slate-300 whitespace-nowrap">
+            Tiến độ: <b id="triageProgressRatio" class="text-blue-400">0/0</b>
+          </span>
+          <div class="flex-1 h-2 rounded-full bg-surface-950 border border-surface-700 overflow-hidden flex">
+            <div id="fillNhan" class="bg-emerald-500 h-full transition-all" style="width: 0%"></div>
+            <div id="fillGanTay" class="bg-amber-500 h-full transition-all" style="width: 0%"></div>
+            <div id="fillBo" class="bg-rose-500 h-full transition-all" style="width: 0%"></div>
+          </div>
+          <span id="triageProgressPct" class="text-xs font-mono font-bold text-slate-300">0%</span>
+        </div>
+
+        <!-- Pager Controls -->
+        <div class="flex items-center gap-2">
+          <button onclick="prevPage()" class="px-2.5 py-1 rounded-lg bg-surface-850 hover:bg-surface-800 border border-surface-700 text-xs font-bold text-slate-300">‹ Trước</button>
+          <span id="pageIndicator" class="text-xs font-bold text-slate-400">Trang 1/1</span>
+          <button onclick="nextPage()" class="px-2.5 py-1 rounded-lg bg-surface-850 hover:bg-surface-800 border border-surface-700 text-xs font-bold text-slate-300">Sau ›</button>
+        </div>
+      </div>
+
+      <!-- Main Studio 2-Column Grid -->
+      <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
+        
+        <!-- Left / Center: High-Resolution Canvas Workspace (8 Cols) -->
+        <div class="lg:col-span-8 flex flex-col bg-surface-900 border border-surface-700 rounded-2xl p-3 gap-3">
+          <!-- Canvas Container -->
+          <div class="relative flex-1 bg-surface-950 border border-surface-700/80 rounded-xl overflow-hidden flex items-center justify-center min-h-[440px]">
+            <!-- Current Image Canvas -->
+            <img id="mainImage" src="" alt="Landmark Face" class="max-w-full max-h-[540px] object-contain select-none transition-transform duration-75">
+            
+            <!-- Floating Zoom / View Controls HUD -->
+            <div class="absolute top-3 right-3 flex items-center gap-1 bg-surface-900/90 backdrop-blur-md px-2 py-1 rounded-lg border border-surface-700 shadow-xl text-xs font-bold">
+              <button onclick="zoomIn()" class="p-1 hover:bg-surface-750 rounded text-slate-300 hover:text-white" title="Phóng to (hoặc lăn chuột lên)">
+                <i data-lucide="zoom-in" class="w-4 h-4"></i>
+              </button>
+              <button onclick="zoomOut()" class="p-1 hover:bg-surface-750 rounded text-slate-300 hover:text-white" title="Thu nhỏ (hoặc lăn chuột xuống)">
+                <i data-lucide="zoom-out" class="w-4 h-4"></i>
+              </button>
+              <button onclick="zoomReset()" class="px-2 py-0.5 hover:bg-surface-750 rounded text-slate-300 hover:text-white" title="Về cỡ 100% (Nhấp đúp ảnh)">
+                1:1
+              </button>
+              <span id="zoomLevelLabel" class="font-mono text-[11px] text-slate-400 px-1">100%</span>
+            </div>
+
+            <!-- Empty State -->
+            <div id="canvasEmptyState" class="hidden flex flex-col items-center justify-center p-8 text-center gap-2 text-slate-400">
+              <i data-lucide="image-off" class="w-10 h-10 text-surface-700"></i>
+              <p class="text-sm font-bold">Không có khuôn mặt nào trong mục lọc này</p>
+            </div>
+          </div>
+
+          <!-- Bottom Filmstrip Queue with Controls -->
+          <div class="relative flex items-center bg-surface-950 border border-surface-700/80 rounded-xl p-1.5 group">
+            <button onclick="scrollFilmstrip(-240)" class="absolute left-1.5 z-20 w-7 h-16 rounded-lg bg-surface-900/90 hover:bg-surface-800 border border-surface-700 flex items-center justify-center text-slate-300 hover:text-white shadow-xl opacity-75 hover:opacity-100 transition cursor-pointer" title="Cuộn sang trái">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <div id="filmstrip" class="relative h-20 w-full flex items-center gap-2.5 overflow-x-auto px-10 scroll-smooth select-none">
+              <!-- Dynamically populated thumbnails with status rings -->
+            </div>
+            <button onclick="scrollFilmstrip(240)" class="absolute right-1.5 z-20 w-7 h-16 rounded-lg bg-surface-900/90 hover:bg-surface-800 border border-surface-700 flex items-center justify-center text-slate-300 hover:text-white shadow-xl opacity-75 hover:opacity-100 transition cursor-pointer" title="Cuộn sang phải">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: Triage Decisions & Inspector (4 Cols) -->
+        <div class="lg:col-span-4 flex flex-col bg-surface-900 border border-surface-700 rounded-2xl p-4 gap-4">
+          
+          <!-- Image Metadata Card -->
+          <div class="bg-surface-850 border border-surface-700 rounded-xl p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <span id="faceNameBadge" class="font-mono font-bold text-sm text-slate-100">F_000.png</span>
+              <span id="faceStatusBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Chưa rà</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs text-slate-400">
+              <div>Gợi ý AI: <b id="faceSugBadge" class="text-emerald-400">Ổn</b></div>
+              <div>Điểm nghi sai: <b id="faceFlagsBadge" class="text-amber-400 font-mono">0 / 50</b></div>
+            </div>
+          </div>
+
+          <!-- 3 GIANT DECISION BUTTONS -->
+          <div class="grid grid-cols-3 gap-2">
+            <!-- Nhận (N) -->
+            <button onclick="makeDecision('nhan')" class="flex flex-col items-center justify-center py-3.5 px-2 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition">
+              <span class="text-sm">Nhận</span>
+              <span class="kbd-chip mt-1">N</span>
+            </button>
+            <!-- Gán tay (G) -->
+            <button onclick="makeDecision('gan_tay')" class="flex flex-col items-center justify-center py-3.5 px-2 rounded-xl bg-gradient-to-br from-amber-600 to-orange-700 hover:from-amber-500 hover:to-orange-600 text-white font-bold shadow-lg shadow-amber-500/20 active:scale-95 transition">
+              <span class="text-sm">Gán tay</span>
+              <span class="kbd-chip mt-1">G</span>
+            </button>
+            <!-- Bỏ (B) -->
+            <button onclick="makeDecision('bo')" class="flex flex-col items-center justify-center py-3.5 px-2 rounded-xl bg-gradient-to-br from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white font-bold shadow-lg shadow-rose-500/20 active:scale-95 transition">
+              <span class="text-sm">Bỏ</span>
+              <span class="kbd-chip mt-1">B</span>
+            </button>
+          </div>
+
+          <!-- 3x3 Fast Reason Selector -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-bold text-slate-400">Lý do lỗi (chọn trước khi bấm Gán tay / Bỏ · phím 0-8)</label>
+            <div class="grid grid-cols-3 gap-1.5" id="reasonGrid">
+              <button onclick="selectReason('')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="">0 · Không</button>
+              <button onclick="selectReason('LAT_GUONG')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="LAT_GUONG">1 · Lật gương</button>
+              <button onclick="selectReason('DON_CUC')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="DON_CUC">2 · Dồn cục</button>
+              <button onclick="selectReason('LECH_VUNG')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="LECH_VUNG">3 · Lệch vùng</button>
+              <button onclick="selectReason('QUAY_CHE')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="QUAY_CHE">4 · Quay/che</button>
+              <button onclick="selectReason('NHIEU_MAT')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="NHIEU_MAT">5 · Nhiều mặt</button>
+              <button onclick="selectReason('KHONG_MAT')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="KHONG_MAT">6 · Không mặt</button>
+              <button onclick="selectReason('SAI_MAT')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="SAI_MAT">7 · Sai mặt</button>
+              <button onclick="selectReason('MO_NHO')" class="reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition" data-code="MO_NHO">8 · Mờ/nhỏ</button>
+            </div>
+          </div>
+
+          <!-- Step Nav & Undo -->
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="prevFace()" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 text-xs font-bold text-slate-300 transition">
+              <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+              <span>Trước (←)</span>
+            </button>
+            <button onclick="undoDecision()" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 text-xs font-bold text-slate-300 transition">
+              <i data-lucide="undo-2" class="w-3.5 h-3.5"></i>
+              <span>Hoàn tác (Z)</span>
+            </button>
+            <button onclick="nextFace()" class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 text-xs font-bold text-slate-300 transition">
+              <span>Sau (→)</span>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+
+          <!-- Finish Review Button -->
+          <button id="finishBtn" onclick="finishTriage()" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 font-bold text-white shadow-lg shadow-emerald-500/25 transition disabled:opacity-30 disabled:cursor-not-allowed">
+            ✅ Hoàn tất Rà soát (Xong đợt)
+          </button>
+
+          <!-- Collapsible Cheat Sheet -->
+          <details class="bg-surface-850 border border-surface-700 rounded-xl text-xs overflow-hidden">
+            <summary class="px-3 py-2 font-bold text-slate-400 cursor-pointer select-none hover:text-white flex items-center justify-between">
+              <span>⌨️ Phím tắt &amp; Hướng dẫn quy định</span>
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </summary>
+            <div class="p-3 border-t border-surface-700 space-y-2 text-slate-300 text-[11.5px] leading-relaxed">
+              <p><b>Nhận (N)</b>: Đúng dáng mặt, chuẩn landmark hoặc chỉ lệch cực nhẹ.</p>
+              <p><b>Gán tay (G)</b>: Lật gương, dồn cục, lệch cả vùng (chuyển sang CVAT để thợ gán sửa điểm).</p>
+              <p><b>Bỏ (B)</b>: Không có mặt, ảnh quá mờ hoặc sai đối tượng.</p>
+              <div class="pt-1 text-slate-400">
+                Phím: <span class="kbd-chip">N</span> Nhận · <span class="kbd-chip">G</span> Gán tay · <span class="kbd-chip">B</span> Bỏ · <span class="kbd-chip">Z</span> Undo · <span class="kbd-chip">0-8</span> Lý do.
+              </div>
+            </div>
+          </details>
+
+        </div>
+
+      </div>
+      </div> <!-- End #stage2ActiveContent -->
+    </section>
+
+    <!-- ========== STAGE 3: PHÂN PHỐI LÊN CVAT ========== -->
+    <section id="stage3" class="stage-view hidden flex-col max-w-4xl mx-auto w-full py-6 gap-6">
+      <div class="text-center space-y-2">
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-xs font-bold">
+          <span>GIAI ĐOẠN 3 / 4</span>
+        </div>
+        <h2 class="text-2xl font-black text-white tracking-tight">Phân Phối Lên CVAT &amp; Điều Phối Annotator</h2>
+        <p class="text-sm text-slate-400 max-w-xl mx-auto">
+          Các ảnh đạt chuẩn [Nhận] đã được khoá an toàn. Hệ thống sẽ tự động đóng gói chỉ các ca [Gán tay] và đẩy thẳng lên CVAT để phân bổ công việc gán nhãn cho đội ngũ.
+        </p>
+      </div>
+
+      <div class="bg-surface-900 border border-surface-700 rounded-2xl p-6 shadow-xl space-y-6">
+        <!-- Metric Cards -->
+        <div class="grid grid-cols-3 gap-4">
+          <div class="p-4 rounded-xl bg-surface-850 border border-surface-700 text-center">
+            <p class="text-xs text-slate-400 font-bold uppercase">Tổng khuôn mặt</p>
+            <p id="cvatTotalCount" class="text-2xl font-black text-white mt-1">0</p>
+          </div>
+          <div class="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+            <p class="text-xs text-emerald-400 font-bold uppercase">AI Đã Nhận (Tiết kiệm)</p>
+            <p id="cvatNhanCount" class="text-2xl font-black text-emerald-400 mt-1">0</p>
+          </div>
+          <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+            <p class="text-xs text-amber-400 font-bold uppercase">Cần Sửa Trên CVAT</p>
+            <p id="cvatGanTayCount" class="text-2xl font-black text-amber-400 mt-1">0</p>
+          </div>
+        </div>
+
+        <!-- Push Action Button -->
+        <div class="space-y-3">
+          <button id="pushCvatBtn" onclick="pushToCvat()" class="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-bold text-white shadow-xl shadow-blue-500/30 text-base transition flex items-center justify-center gap-2">
+            <i data-lucide="send" class="w-5 h-5"></i>
+            <span>Đẩy Các Ca Cần Sửa Lên CVAT (Create Task)</span>
+          </button>
+          <div id="cvatPushResult" class="hidden p-4 rounded-xl bg-surface-850 border border-surface-700 text-sm"></div>
+        </div>
+
+        <!-- Task Link Card -->
+        <div id="cvatTaskCard" class="hidden p-4 rounded-xl bg-gradient-to-br from-surface-850 to-surface-800 border border-blue-500/30 flex items-center justify-between">
+          <div>
+            <span class="text-xs font-bold text-blue-400 uppercase">Task CVAT Đang Hoạt Động</span>
+            <h4 id="cvatTaskTitle" class="text-base font-bold text-white mt-0.5">Task #001 · M28 Assisted</h4>
+          </div>
+          <a id="cvatDirectLink" href="#" target="_blank" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 font-bold text-white text-xs flex items-center gap-1.5 transition">
+            <span>Mở CVAT để gán nhãn</span>
+            <i data-lucide="external-link" class="w-4 h-4"></i>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== STAGE 4: GỘP & BÁO CÁO KPI ========== -->
+    <section id="stage4" class="stage-view hidden flex-col max-w-4xl mx-auto w-full py-6 gap-6">
+      <div class="text-center space-y-2">
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold">
+          <span>GIAI ĐOẠN 4 / 4</span>
+        </div>
+        <h2 class="text-2xl font-black text-white tracking-tight">Gộp Nhãn &amp; Báo Cáo Hiệu Quả (KPI Dashboard)</h2>
+        <p class="text-sm text-slate-400 max-w-xl mx-auto">
+          Sau khi annotator hoàn tất chỉnh sửa trên CVAT, gộp nhãn đã nhận cùng nhãn chuẩn từ CVAT thành bộ dữ liệu hoàn chỉnh và đo lường các chỉ số tiết kiệm thời gian.
+        </p>
+      </div>
+
+      <div class="bg-surface-900 border border-surface-700 rounded-2xl p-6 shadow-xl space-y-6">
+        <!-- 3 KPI Metric Cards -->
+        <div class="grid grid-cols-3 gap-4">
+          <div class="p-5 rounded-2xl bg-gradient-to-br from-emerald-500/15 to-teal-500/5 border border-emerald-500/30">
+            <div class="flex items-center justify-between text-emerald-400">
+              <span class="text-xs font-bold uppercase tracking-wider">Tiết kiệm thời gian</span>
+              <i data-lucide="clock" class="w-4 h-4"></i>
+            </div>
+            <p id="kpiTimeSaved" class="text-3xl font-black text-emerald-400 mt-2">--%</p>
+            <p class="text-xs text-slate-400 mt-1">So với quy trình gán tay 100%</p>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-gradient-to-br from-blue-500/15 to-indigo-500/5 border border-blue-500/30">
+            <div class="flex items-center justify-between text-blue-400">
+              <span class="text-xs font-bold uppercase tracking-wider">Chính xác AI (NME)</span>
+              <i data-lucide="crosshair" class="w-4 h-4"></i>
+            </div>
+            <p id="kpiNme" class="text-3xl font-black text-blue-400 mt-2">--</p>
+            <p class="text-xs text-slate-400 mt-1">Sai số chuẩn hoá khoảng cách mắt</p>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-gradient-to-br from-purple-500/15 to-pink-500/5 border border-purple-500/30">
+            <div class="flex items-center justify-between text-purple-400">
+              <span class="text-xs font-bold uppercase tracking-wider">Tỉ lệ phải sửa</span>
+              <i data-lucide="pie-chart" class="w-4 h-4"></i>
+            </div>
+            <p id="kpiEditRatio" class="text-3xl font-black text-purple-400 mt-2">--%</p>
+            <p class="text-xs text-slate-400 mt-1">Điểm landmark cần điều chỉnh</p>
+          </div>
+        </div>
+
+        <!-- Action Row -->
+        <div class="grid grid-cols-2 gap-4 pt-2">
+          <button onclick="mergeJobs()" class="py-3.5 px-4 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 font-bold text-white shadow-lg shadow-teal-500/25 flex items-center justify-center gap-2 transition">
+            <i data-lucide="git-merge" class="w-4 h-4"></i>
+            <span>Gộp Kết Quả CVAT (Merge Jobs &amp; Finish)</span>
+          </button>
+          <button onclick="exportReport()" class="py-3.5 px-4 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 font-bold text-slate-200 flex items-center justify-center gap-2 transition">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Xuất Báo Cáo &amp; Dataset (XML / CSV)</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= BATCH EXPLORER MODAL ================= -->
+  <div id="batchModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-surface-900 border border-surface-700 rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4 flex flex-col max-h-[85vh]">
+      <!-- Header -->
+      <div class="flex items-center justify-between border-b border-surface-700 pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span>Quản Lý Các Đợt Rà Soát (Batch Explorer)</span>
+            </h3>
+            <p class="text-xs text-slate-400">Xem tiến độ từng đợt, chọn đợt cần làm việc hoặc tạo đợt mới</p>
+          </div>
+        </div>
+        <button onclick="closeBatchModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Action & Search Bar -->
+      <div class="flex items-center justify-between gap-3 pt-1">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+          <input type="text" id="batchSearchInput" oninput="filterBatchesList()" placeholder="Tìm kiếm theo tên đợt (ví dụ: NAP_8659)..." class="w-full bg-surface-850 border border-surface-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-semibold">
+        </div>
+        <button onclick="createNewBatch()" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-blue-500/20 shrink-0 cursor-pointer">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>+ Tạo Đợt Mới (Stage 1)</span>
+        </button>
+      </div>
+
+      <!-- Batches List Grid -->
+      <div id="batchesListContainer" class="flex-1 overflow-y-auto space-y-2.5 pr-1.5 min-h-[260px]">
+        <!-- Populated dynamically by renderBatchesList() -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SETTINGS & UTILITY MODAL ================= -->
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-surface-900 border border-surface-700 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-surface-700 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-blue-400"></i>
+          <span>Cài Đặt Hệ Thống &amp; CVAT</span>
+        </h3>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-300 mb-1">Tên người rà soát (Reviewer)</label>
+          <input type="text" id="settingReviewerInput" class="w-full bg-surface-850 border border-surface-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-semibold">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-300 mb-1">Địa chỉ CVAT Server URL</label>
+          <input type="text" id="settingCvatUrlInput" placeholder="http://localhost:8080" class="w-full bg-surface-850 border border-surface-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-mono">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-300 mb-1">CVAT Access Token</label>
+          <input type="password" id="settingCvatTokenInput" placeholder="••••••••••••••••••••" class="w-full bg-surface-850 border border-surface-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-mono">
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-3 border-t border-surface-700">
+        <button onclick="testCvatConnection()" class="px-3 py-2 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 text-xs font-bold text-slate-300 transition">
+          Thử kết nối CVAT
+        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="closeSettingsModal()" class="px-4 py-2 rounded-xl bg-surface-850 hover:bg-surface-800 border border-surface-700 text-xs font-bold text-slate-400 hover:text-white transition">Hủy</button>
+          <button onclick="saveSettings()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white transition">Lưu Cài Đặt</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client-side Application Script -->
+  <script>
+    // App State
+    let currentStep = 1;
+    let currentRun = "";
+    let reviewer = "P1";
+    let faces = [];
+    let currentFaceIdx = 0;
+    let selectedReason = "";
+    let triageFilter = "tat_ca";
+    let zoomLevel = 1.0;
+    let cachedBatches = [];
+
+    // Modern In-App Notification System (Self-contained + SweetAlert2)
+    let toastIndex = 0;
+    function showToast(msg, type = 'success', title = '') {
+      // 1. Try SweetAlert2 toast if available
+      try {
+        if (typeof Swal !== 'undefined') {
+          const swalIcon = (type === 'error' ? 'error' : (type === 'warning' ? 'warning' : (type === 'info' ? 'info' : 'success')));
+          Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3500,
+            timerProgressBar: true,
+            background: '#0a0f1d',
+            color: '#f8fafc',
+            customClass: {
+              popup: 'border border-surface-700 shadow-2xl rounded-2xl text-xs'
+            }
+          }).fire({ icon: swalIcon, title: title ? `${title}: ${msg}` : msg });
+          return;
+        }
+      } catch (e) {
+        console.warn("Swal toast fallback:", e);
+      }
+
+      // 2. Custom Floating DOM Toast
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const tid = 'toast-' + (++toastIndex);
+      const el = document.createElement('div');
+      el.id = tid;
+      
+      let borderLeft = 'border-l-4 border-l-emerald-500';
+      let iconSvg = '<svg class="w-5 h-5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+      if (type === 'error') {
+        borderLeft = 'border-l-4 border-l-rose-500';
+        iconSvg = '<svg class="w-5 h-5 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"></circle><line x1="12" y1="8" x2="12" y2="12" stroke-width="2"></line><line x1="12" y1="16" x2="12.01" y2="16" stroke-width="2"></line></svg>';
+      } else if (type === 'warning') {
+        borderLeft = 'border-l-4 border-l-amber-500';
+        iconSvg = '<svg class="w-5 h-5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>';
+      } else if (type === 'info') {
+        borderLeft = 'border-l-4 border-l-sky-500';
+        iconSvg = '<svg class="w-5 h-5 text-sky-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"></circle><line x1="12" y1="16" x2="12" y2="12" stroke-width="2"></line><line x1="12" y1="8" x2="12.01" y2="8" stroke-width="2"></line></svg>';
+      }
+
+      el.className = `pointer-events-auto transform translate-x-full opacity-0 transition-all duration-300 flex items-start gap-3 bg-surface-900/95 border border-surface-700 backdrop-blur-md shadow-2xl rounded-2xl p-3.5 text-xs text-slate-100 max-w-sm ${borderLeft}`;
+      el.innerHTML = `
+        ${iconSvg}
+        <div class="flex-1 min-w-0">
+          ${title ? `<div class="font-bold text-white mb-0.5">${title}</div>` : ''}
+          <div class="text-slate-200 font-medium leading-relaxed">${msg}</div>
+        </div>
+        <button onclick="this.closest('#${tid}').remove()" class="text-slate-400 hover:text-white p-0.5 cursor-pointer">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      `;
+      container.appendChild(el);
+      requestAnimationFrame(() => {
+        el.classList.remove('translate-x-full', 'opacity-0');
+      });
+      setTimeout(() => {
+        el.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(() => el.remove(), 350);
+      }, 3500);
+    }
+
+    // Override native browser alert to guarantee modern toasts
+    window.alert = function(msg) {
+      showToast(msg, 'info', 'Thông báo');
+    };
+
+    async function showConfirm(title, text, confirmBtnText = 'Đồng ý', icon = 'question') {
+      try {
+        if (typeof Swal !== 'undefined') {
+          const res = await Swal.fire({
+            title,
+            text,
+            icon,
+            showCancelButton: true,
+            confirmButtonColor: '#2563eb',
+            cancelButtonColor: '#334155',
+            confirmButtonText: confirmBtnText,
+            cancelButtonText: 'Hủy',
+            background: '#0a0f1d',
+            color: '#f8fafc',
+            customClass: {
+              popup: 'border border-surface-700 shadow-2xl rounded-2xl'
+            }
+          });
+          return res.isConfirmed;
+        }
+      } catch (e) {
+        console.warn("Swal confirm fallback:", e);
+      }
+      return true;
+    }
+
+    // Initialize App
+    async function initApp() {
+      lucide.createIcons();
+      setupKeyboardShortcuts();
+      
+      // Support smooth horizontal mouse-wheel scrolling for the filmstrip
+      const filmstripEl = document.getElementById('filmstrip');
+      if (filmstripEl) {
+        filmstripEl.addEventListener('wheel', (e) => {
+          if (e.deltaY !== 0) {
+            e.preventDefault();
+            filmstripEl.scrollLeft += e.deltaY * 1.5;
+          }
+        }, { passive: false });
+      }
+
+      await fetchState();
+    }
+
+    // Toggle Stage 2 empty vs active state based on currentRun
+    function checkStage2State() {
+      const noBatch = document.getElementById('stage2NoBatchCard');
+      const active = document.getElementById('stage2ActiveContent');
+      if (!currentRun) {
+        if (noBatch) noBatch.classList.remove('hidden');
+        if (active) active.classList.add('hidden');
+      } else {
+        if (noBatch) noBatch.classList.add('hidden');
+        if (active) active.classList.remove('hidden');
+      }
+    }
+
+    // Update compact topbar batch badge
+    function updateBatchHeaderBadge() {
+      const badge = document.getElementById('currentBatchBadge');
+      const stats = document.getElementById('batchStatsPill');
+      if (!badge) return;
+      if (!currentRun) {
+        badge.textContent = "Chưa chọn đợt";
+        badge.className = "font-medium text-slate-400";
+        if (stats) stats.classList.add('hidden');
+      } else {
+        badge.textContent = currentRun;
+        badge.className = "font-bold text-amber-300 font-mono";
+        if (stats) {
+          stats.classList.remove('hidden');
+          const curDetail = cachedBatches.find(b => b.name === currentRun);
+          if (curDetail) {
+            stats.textContent = `${curDetail.total_faces} mặt · ${curDetail.pct}% đã rà`;
+          } else {
+            const count = (typeof faces !== 'undefined' && faces) ? faces.length : 0;
+            stats.textContent = `${count} mặt`;
+          }
+        }
+      }
+    }
+
+    // Fetch initial backend state
+    async function fetchState() {
+      try {
+        const res = await fetch('/api/state');
+        if (res.ok) {
+          const data = await res.json();
+          currentRun = data.current_run || "";
+          reviewer = data.reviewer || "P1";
+          document.getElementById('reviewerName').textContent = reviewer;
+          document.getElementById('settingReviewerInput').value = reviewer;
+          if (data.cvat_url) document.getElementById('settingCvatUrlInput').value = data.cvat_url;
+
+          const runsDetailed = data.runs_detailed || [];
+          cachedBatches = runsDetailed;
+
+          // Populate Stage 1 Batches Gallery View
+          renderStage1Batches(runsDetailed);
+
+          // Update header batch badge & Stage 2 empty/active card
+          updateBatchHeaderBadge();
+          checkStage2State();
+
+          // Route to appropriate step (Mặc định khởi động vào Stage 1: Nạp ảnh & Quản lý đợt)
+          const targetStep = data.start_step || 1;
+          if (targetStep === 2 && currentRun) {
+            await loadTriageQueue();
+            goToStep(2);
+          } else {
+            // Mặc định luôn mở Stage 1: Nạp ảnh & Quản lý đợt
+            switchStage1Tab(runsDetailed.length > 0 ? 'batches' : 'upload');
+            goToStep(1);
+            if (currentRun) {
+              loadTriageQueue(); // Tải trước ngầm dữ liệu để khi bấm sang Rà soát là tức thì
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Init fetch failed:", err);
+      }
+    }
+
+    // Stage 1 Tab Switcher (Batches vs Upload)
+    function switchStage1Tab(tab) {
+      const btnBatches = document.getElementById('stage1TabBatches');
+      const btnUpload = document.getElementById('stage1TabUpload');
+      const viewBatches = document.getElementById('stage1BatchesView');
+      const viewUpload = document.getElementById('stage1UploadView');
+
+      if (tab === 'batches') {
+        btnBatches.className = 'flex-1 py-2 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-blue-600 text-white shadow-md cursor-pointer';
+        btnUpload.className = 'flex-1 py-2 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 text-slate-400 hover:text-white cursor-pointer';
+        viewBatches.classList.remove('hidden');
+        viewUpload.classList.add('hidden');
+      } else {
+        btnUpload.className = 'flex-1 py-2 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-blue-600 text-white shadow-md cursor-pointer';
+        btnBatches.className = 'flex-1 py-2 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 text-slate-400 hover:text-white cursor-pointer';
+        viewUpload.classList.remove('hidden');
+        viewBatches.classList.add('hidden');
+      }
+      lucide.createIcons();
+    }
+
+    // Render Stage 1 Batches Gallery Cards
+    function renderStage1Batches(batches) {
+      const container = document.getElementById('stage1BatchesContainer');
+      const countEl = document.getElementById('stage1BatchCount');
+      if (countEl) countEl.textContent = batches.length;
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (batches.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-1 md:col-span-2 p-8 text-center bg-surface-900 border border-surface-700 rounded-2xl space-y-3">
+            <i data-lucide="inbox" class="w-10 h-10 text-slate-500 mx-auto"></i>
+            <h4 class="text-sm font-bold text-slate-200">Chưa có đợt rà soát nào trên hệ thống</h4>
+            <p class="text-xs text-slate-400">Hãy nạp tệp ảnh mới để AI MediaPipe trích xuất landmark tự động.</p>
+            <button onclick="switchStage1Tab('upload')" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-500/20 cursor-pointer">
+              + Nạp đợt ảnh đầu tiên ngay
+            </button>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      batches.forEach(b => {
+        const isCur = b.name === currentRun;
+        const card = document.createElement('div');
+        card.className = `p-4 rounded-2xl border transition-all duration-200 flex flex-col justify-between gap-3 ${isCur ? 'bg-gradient-to-br from-blue-950/40 to-surface-900 border-blue-500/70 shadow-xl shadow-blue-500/10' : 'bg-surface-900 hover:bg-surface-850 border-surface-700 hover:border-surface-600'}`;
+
+        let statusBadge = '';
+        if (b.task_id) {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">CVAT #${b.task_id}</span>`;
+        } else if (b.is_done) {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Đã hoàn tất</span>`;
+        } else if (b.reviewed > 0) {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Đang rà (${b.pct}%)</span>`;
+        } else {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">Mới tạo (0%)</span>`;
+        }
+
+        card.innerHTML = `
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <i data-lucide="folder" class="w-4 h-4 text-amber-400"></i>
+                <span class="font-extrabold text-base ${isCur ? 'text-amber-300' : 'text-slate-100'} font-mono">${b.name}</span>
+                ${isCur ? '<span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-600 text-white uppercase tracking-wider">ĐANG MỞ</span>' : ''}
+              </div>
+              ${statusBadge}
+            </div>
+
+            <div class="flex items-center gap-2 text-xs text-slate-400">
+              <span class="font-mono text-slate-400">🕒 ${b.time_str || ''}</span>
+              <span>·</span>
+              <span class="font-bold text-slate-200">${b.total_faces} khuôn mặt</span>
+            </div>
+
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-emerald-400 font-bold">${b.nhan} Nhận</span>
+              <span class="text-slate-600">·</span>
+              <span class="text-amber-400 font-bold">${b.gan_tay} Gán tay</span>
+              <span class="text-slate-600">·</span>
+              <span class="text-rose-400 font-bold">${b.bo} Bỏ</span>
+              <span class="text-slate-600">·</span>
+              <span class="text-blue-400 font-bold">${b.pct}%</span>
+            </div>
+
+            <div class="w-full h-2 rounded-full bg-surface-950 overflow-hidden flex border border-surface-700/60">
+              <div class="bg-emerald-500 h-full transition-all" style="width: ${b.total_faces > 0 ? (b.nhan / b.total_faces) * 100 : 0}%"></div>
+              <div class="bg-amber-500 h-full transition-all" style="width: ${b.total_faces > 0 ? (b.gan_tay / b.total_faces) * 100 : 0}%"></div>
+              <div class="bg-rose-500 h-full transition-all" style="width: ${b.total_faces > 0 ? (b.bo / b.total_faces) * 100 : 0}%"></div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-3 border-t border-surface-800">
+            <span class="text-[11px] text-slate-400 font-medium">${b.is_done ? 'Đã rà soát xong 100%' : (b.total_faces - b.reviewed) + ' mặt cần rà soát'}</span>
+            <button onclick="switchRun('${b.name}')" class="px-4 py-2 rounded-xl ${isCur ? 'bg-surface-750 text-slate-200 border border-surface-600' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20'} font-bold text-xs flex items-center gap-1.5 transition cursor-pointer">
+              <span>${isCur ? 'Tiếp tục rà soát' : 'Mở đợt này rà soát'}</span>
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    // Batch Explorer Modal Functions
+    async function openBatchModal() {
+      document.getElementById('batchModal').classList.remove('hidden');
+      document.getElementById('batchSearchInput').value = '';
+      try {
+        const res = await fetch('/api/runs/details');
+        if (res.ok) {
+          const d = await res.json();
+          cachedBatches = d.runs || [];
+          renderBatchesList(cachedBatches);
+        }
+      } catch (e) {
+        console.error("Batch load failed:", e);
+      }
+      lucide.createIcons();
+    }
+
+    function closeBatchModal() {
+      document.getElementById('batchModal').classList.add('hidden');
+    }
+
+    function filterBatchesList() {
+      const q = document.getElementById('batchSearchInput').value.trim().toLowerCase();
+      const filtered = cachedBatches.filter(b => b.name.toLowerCase().includes(q));
+      renderBatchesList(filtered);
+    }
+
+    function renderBatchesList(batches) {
+      const container = document.getElementById('batchesListContainer');
+      container.innerHTML = '';
+
+      if (batches.length === 0) {
+        container.innerHTML = '<div class="p-8 text-center text-slate-400 text-xs font-semibold">Không tìm thấy đợt nào.</div>';
+        return;
+      }
+
+      batches.forEach(b => {
+        const isCur = b.name === currentRun;
+        const card = document.createElement('div');
+        card.className = `p-3.5 rounded-xl border transition-all duration-150 flex items-center justify-between gap-4 ${isCur ? 'bg-blue-600/15 border-blue-500/70 shadow-lg shadow-blue-500/10' : 'bg-surface-850 hover:bg-surface-800 border-surface-700'}`;
+
+        let statusPill = '';
+        if (b.task_id) {
+          statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">CVAT Task #${b.task_id}</span>`;
+        } else if (b.is_done) {
+          statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Đã hoàn tất</span>`;
+        } else {
+          statusPill = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Đang rà soát</span>`;
+        }
+
+        card.innerHTML = `
+          <div class="flex-1 min-w-0 space-y-1.5">
+            <div class="flex items-center gap-2">
+              <span class="font-extrabold text-sm ${isCur ? 'text-blue-400' : 'text-slate-100'} font-mono">${b.name}</span>
+              ${isCur ? '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-blue-500 text-white uppercase tracking-wider">ĐANG MỞ</span>' : ''}
+              ${statusPill}
+              <span class="text-[11px] text-slate-400 font-mono">${b.time_str || ''}</span>
+            </div>
+            
+            <div class="flex items-center gap-3 text-xs">
+              <span class="text-slate-200 font-bold">${b.total_faces} khuôn mặt</span>
+              <span class="text-slate-500">·</span>
+              <span class="text-emerald-400 font-semibold">${b.nhan} Nhận</span>
+              <span class="text-amber-400 font-semibold">${b.gan_tay} Gán tay</span>
+              <span class="text-rose-400 font-semibold">${b.bo} Bỏ</span>
+              <span class="text-slate-500">·</span>
+              <span class="text-blue-400 font-bold">${b.pct}%</span>
+            </div>
+
+            <div class="w-full max-w-md h-1.5 rounded-full bg-surface-950 overflow-hidden flex border border-surface-700/60">
+              <div class="bg-emerald-500 h-full" style="width: ${b.total_faces > 0 ? (b.nhan / b.total_faces) * 100 : 0}%"></div>
+              <div class="bg-amber-500 h-full" style="width: ${b.total_faces > 0 ? (b.gan_tay / b.total_faces) * 100 : 0}%"></div>
+              <div class="bg-rose-500 h-full" style="width: ${b.total_faces > 0 ? (b.bo / b.total_faces) * 100 : 0}%"></div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="selectBatchFromModal('${b.name}')" class="px-3.5 py-2 rounded-xl ${isCur ? 'bg-surface-750 text-slate-300' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/20'} font-bold text-xs transition cursor-pointer">
+              ${isCur ? 'Đang mở' : 'Mở đợt này ›'}
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    async function selectBatchFromModal(name) {
+      closeBatchModal();
+      await switchRun(name);
+      showToast(`Đã chuyển sang đợt ${name}`, 'info');
+    }
+
+    function createNewBatch() {
+      closeBatchModal();
+      switchStage1Tab('upload');
+      goToStep(1);
+    }
+
+    // Switch pipeline step
+    function goToStep(step) {
+      currentStep = step;
+      document.querySelectorAll('.stage-view').forEach(s => s.classList.add('hidden'));
+      document.querySelectorAll('.stage-view').forEach(s => s.classList.remove('flex'));
+      
+      const target = document.getElementById('stage' + step);
+      if (target) {
+        target.classList.remove('hidden');
+        target.classList.add('flex');
+      }
+
+      // Update stepper buttons
+      for (let i = 1; i <= 4; i++) {
+        const btn = document.getElementById('stepBtn' + i);
+        const num = btn.querySelector('.step-num');
+        if (i === step) {
+          btn.className = 'step-btn flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold transition border border-blue-500/40 bg-blue-600/15 text-white shadow-lg shadow-blue-500/10';
+          num.className = 'w-5 h-5 rounded-full flex items-center justify-center bg-blue-600 text-white text-[11px] font-bold step-num';
+        } else if (i < step) {
+          btn.className = 'step-btn flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold transition border border-transparent text-emerald-400 hover:bg-surface-850';
+          num.className = 'w-5 h-5 rounded-full flex items-center justify-center bg-emerald-500/20 text-emerald-400 text-[11px] font-bold step-num';
+        } else {
+          btn.className = 'step-btn flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold transition border border-transparent text-slate-400 hover:text-slate-200 hover:bg-surface-850';
+          num.className = 'w-5 h-5 rounded-full flex items-center justify-center bg-slate-800 text-slate-400 text-[11px] step-num';
+        }
+      }
+
+      if (step === 2) {
+        checkStage2State();
+        if (currentRun) {
+          if (faces.length === 0) loadTriageQueue();
+          else updateTriageUI();
+        }
+      }
+      if (step === 3) updateCvatView();
+      if (step === 4) updateKpiView();
+      lucide.createIcons();
+    }
+
+    // Load Triage Faces
+    async function loadTriageQueue() {
+      if (!currentRun) return;
+      try {
+        const res = await fetch(`/api/triage/faces?run=${encodeURIComponent(currentRun)}`);
+        if (res.ok) {
+          const data = await res.json();
+          faces = data.faces || [];
+          lastRenderedFilter = null; // force re-render filmstrip for newly loaded batch
+          updateTriageUI();
+        }
+      } catch (err) {
+        console.error("Queue load failed:", err);
+      }
+    }
+
+    // State cache to prevent rebuilding DOM needlessly on every keypress
+    let lastRenderedFilter = null;
+    let lastRenderedRun = null;
+    let lastRenderedCount = -1;
+
+    // Update Triage UI
+    function updateTriageUI() {
+      checkStage2State();
+      if (!currentRun) return;
+
+      const filtered = getFilteredFaces();
+      
+      // Update counters
+      const nAll = faces.length;
+      const nNhan = faces.filter(f => f.decision === 'nhan').length;
+      const nGanTay = faces.filter(f => f.decision === 'gan_tay').length;
+      const nBo = faces.filter(f => f.decision === 'bo').length;
+      const nDone = nNhan + nGanTay + nBo;
+      const nUnreviewed = nAll - nDone;
+      const nSuspicious = faces.filter(f => f.suspicious).length;
+
+      document.getElementById('cntAll').textContent = nAll;
+      document.getElementById('cntUnreviewed').textContent = nUnreviewed;
+      document.getElementById('cntSuspicious').textContent = nSuspicious;
+      document.getElementById('cntReviewed').textContent = nDone;
+
+      // Update topbar batch badge stats
+      const curPct = nAll > 0 ? Math.round((nDone / nAll) * 100) : 0;
+      updateBatchHeaderBadge();
+
+      // Update Stage 2 Active Batch Banner (High-visibility)
+      const s2BatchName = document.getElementById('stage2BatchName');
+      if (s2BatchName) s2BatchName.textContent = currentRun || "(Chưa chọn)";
+      const s2BatchText = document.getElementById('stage2BatchDetailText');
+      if (s2BatchText) s2BatchText.textContent = `Tổng ${nAll} khuôn mặt · ${nDone} đã rà · ${nUnreviewed} chưa rà`;
+      const s2StatusBadge = document.getElementById('stage2BatchStatusBadge');
+      if (s2StatusBadge) {
+        if (nUnreviewed === 0 && nAll > 0) {
+          s2StatusBadge.textContent = 'Đã hoàn tất 100%';
+          s2StatusBadge.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        } else {
+          s2StatusBadge.textContent = `Đang rà soát (${curPct}%)`;
+          s2StatusBadge.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30';
+        }
+      }
+
+      // Progress Bar
+      document.getElementById('triageProgressRatio').textContent = `${nDone}/${nAll}`;
+      document.getElementById('triageProgressPct').textContent = `${curPct}%`;
+      document.getElementById('fillNhan').style.width = `${(nNhan / Math.max(1, nAll)) * 100}%`;
+      document.getElementById('fillGanTay').style.width = `${(nGanTay / Math.max(1, nAll)) * 100}%`;
+      document.getElementById('fillBo').style.width = `${(nBo / Math.max(1, nAll)) * 100}%`;
+
+      // Finish Button State
+      const finBtn = document.getElementById('finishBtn');
+      finBtn.disabled = nUnreviewed > 0;
+
+      // Current Face Display
+      if (filtered.length === 0) {
+        document.getElementById('mainImage').src = '';
+        document.getElementById('mainImage').classList.add('hidden');
+        document.getElementById('canvasEmptyState').classList.remove('hidden');
+        document.getElementById('filmstrip').innerHTML = '';
+        lastRenderedFilter = null;
+        return;
+      }
+
+      document.getElementById('canvasEmptyState').classList.add('hidden');
+      document.getElementById('mainImage').classList.remove('hidden');
+
+      if (currentFaceIdx >= filtered.length) currentFaceIdx = 0;
+      const cur = filtered[currentFaceIdx];
+
+      // Set image source
+      document.getElementById('mainImage').src = showOverlay ? (cur.overlay_url || cur.crop_url) : cur.crop_url;
+      document.getElementById('faceNameBadge').textContent = `${cur.file} (#${currentFaceIdx + 1}/${filtered.length})`;
+      
+      // Status pill
+      const stEl = document.getElementById('faceStatusBadge');
+      if (cur.decision === 'nhan') {
+        stEl.textContent = 'Đã Nhận (N)';
+        stEl.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+      } else if (cur.decision === 'gan_tay') {
+        stEl.textContent = 'Gán tay (G)';
+        stEl.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30';
+      } else if (cur.decision === 'bo') {
+        stEl.textContent = 'Đã Bỏ (B)';
+        stEl.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30';
+      } else {
+        stEl.textContent = 'Chưa rà';
+        stEl.className = 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700';
+      }
+
+      document.getElementById('faceSugBadge').textContent = cur.suggestion || 'Ổn';
+      document.getElementById('faceFlagsBadge').textContent = `${cur.n_flags || 0} / 50`;
+
+      // Highlight active reason
+      selectReason(cur.reason || "");
+
+      // Smart Filmstrip Update: Only rebuild DOM if list or filter changed
+      if (lastRenderedFilter !== triageFilter || lastRenderedRun !== currentRun || lastRenderedCount !== filtered.length) {
+        renderFilmstrip(filtered);
+      } else {
+        highlightActiveThumb(null, currentFaceIdx);
+      }
+    }
+
+    function getFilteredFaces() {
+      if (triageFilter === 'chua_ra') return faces.filter(f => !f.decision);
+      if (triageFilter === 'da_ra') return faces.filter(f => !!f.decision);
+      if (triageFilter === 'dang_ngo') return faces.filter(f => f.suspicious);
+      return faces;
+    }
+
+    // Filmstrip Auto-scroll & Controls
+    function scrollFilmstrip(delta) {
+      const el = document.getElementById('filmstrip');
+      if (el) el.scrollBy({ left: delta, behavior: 'smooth' });
+    }
+
+    // Precise horizontal scroll to center active thumbnail in viewport
+    function scrollToActiveThumb() {
+      const container = document.getElementById('filmstrip');
+      const thumb = document.getElementById(`thumb-${currentFaceIdx}`);
+      if (!container || !thumb) return;
+
+      const containerWidth = container.clientWidth;
+      const thumbLeft = thumb.offsetLeft;
+      const thumbWidth = thumb.offsetWidth;
+      // Formula: center the thumb in container viewport
+      const targetScroll = thumbLeft - (containerWidth / 2) + (thumbWidth / 2);
+
+      container.scrollTo({
+        left: Math.max(0, targetScroll),
+        behavior: 'smooth'
+      });
+    }
+
+    function renderFilmstrip(filtered) {
+      const container = document.getElementById('filmstrip');
+      if (!container) return;
+      container.innerHTML = '';
+      lastRenderedFilter = triageFilter;
+      lastRenderedRun = currentRun;
+      lastRenderedCount = filtered.length;
+
+      filtered.forEach((f, idx) => {
+        const item = document.createElement('div');
+        item.id = `thumb-${idx}`;
+        const isCur = (idx === currentFaceIdx);
+        let ringColor = 'border-surface-700';
+        let badgeHtml = '';
+        if (f.decision === 'nhan') {
+          ringColor = 'border-emerald-500';
+          badgeHtml = '<span class="status-badge absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-black shadow">N</span>';
+        } else if (f.decision === 'gan_tay') {
+          ringColor = 'border-amber-500';
+          badgeHtml = '<span class="status-badge absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-amber-500 text-black flex items-center justify-center text-[9px] font-black shadow">G</span>';
+        } else if (f.decision === 'bo') {
+          ringColor = 'border-rose-500';
+          badgeHtml = '<span class="status-badge absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px] font-black shadow">B</span>';
+        }
+
+        item.className = `relative min-w-[70px] w-[70px] h-16 shrink-0 rounded-xl overflow-hidden border-2 cursor-pointer transition-all duration-150 select-none ${ringColor} ${isCur ? 'ring-4 ring-blue-500 scale-105 shadow-xl opacity-100 z-10' : 'opacity-70 hover:opacity-100 hover:scale-105'}`;
+        item.onclick = () => {
+          const oldIdx = currentFaceIdx;
+          currentFaceIdx = idx;
+          highlightActiveThumb(oldIdx, currentFaceIdx);
+          updateTriageUI();
+        };
+
+        const img = document.createElement('img');
+        img.src = f.overlay_url || f.crop_url;
+        img.className = 'w-full h-full object-cover pointer-events-none';
+        item.appendChild(img);
+
+        // Visual Index tag (#1, #2, ... #60)
+        const tag = document.createElement('span');
+        tag.className = 'absolute top-0.5 left-0.5 px-1 py-0.2 rounded bg-black/85 text-[9px] font-mono font-bold text-slate-300 pointer-events-none shadow';
+        tag.textContent = `#${idx + 1}`;
+        item.appendChild(tag);
+
+        if (badgeHtml) {
+          const bEl = document.createElement('div');
+          bEl.innerHTML = badgeHtml;
+          item.appendChild(bEl.firstChild);
+        }
+
+        container.appendChild(item);
+      });
+
+      // Smooth auto-scroll active card into view after initial build
+      setTimeout(scrollToActiveThumb, 50);
+    }
+
+    function highlightActiveThumb(oldIdx, newIdx) {
+      if (oldIdx !== undefined && oldIdx !== null && oldIdx !== newIdx) {
+        const oldEl = document.getElementById(`thumb-${oldIdx}`);
+        if (oldEl) {
+          oldEl.classList.remove('ring-4', 'ring-blue-500', 'scale-105', 'z-10', 'opacity-100', 'shadow-xl');
+          oldEl.classList.add('opacity-70');
+        }
+      }
+      const newEl = document.getElementById(`thumb-${newIdx}`);
+      if (newEl) {
+        newEl.classList.remove('opacity-70');
+        newEl.classList.add('ring-4', 'ring-blue-500', 'scale-105', 'z-10', 'opacity-100', 'shadow-xl');
+      }
+      scrollToActiveThumb();
+    }
+
+    function updateThumbStatusBadge(idx, decision) {
+      const item = document.getElementById(`thumb-${idx}`);
+      if (!item) return;
+
+      item.classList.remove('border-surface-700', 'border-emerald-500', 'border-amber-500', 'border-rose-500');
+      const oldBadge = item.querySelector('.status-badge');
+      if (oldBadge) oldBadge.remove();
+
+      let ringColor = 'border-surface-700';
+      let badgeHtml = '';
+      if (decision === 'nhan') {
+        ringColor = 'border-emerald-500';
+        badgeHtml = '<span class="status-badge absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-black shadow">N</span>';
+      } else if (decision === 'gan_tay') {
+        ringColor = 'border-amber-500';
+        badgeHtml = '<span class="status-badge absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-amber-500 text-black flex items-center justify-center text-[9px] font-black shadow">G</span>';
+      } else if (decision === 'bo') {
+        ringColor = 'border-rose-500';
+        badgeHtml = '<span class="status-badge absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px] font-black shadow">B</span>';
+      }
+      item.classList.add(ringColor);
+
+      if (badgeHtml) {
+        const b = document.createElement('div');
+        b.innerHTML = badgeHtml;
+        item.appendChild(b.firstChild);
+      }
+    }
+
+    // Triage Actions
+    async function makeDecision(decision) {
+      const filtered = getFilteredFaces();
+      if (filtered.length === 0) return;
+      const cur = filtered[currentFaceIdx];
+      const decidedIdx = currentFaceIdx;
+
+      cur.decision = decision;
+      cur.reason = decision === 'nhan' ? '' : selectedReason;
+
+      // Optimistically update the thumbnail border and badge immediately
+      updateThumbStatusBadge(decidedIdx, decision);
+
+      // Optimistic advance to next face
+      nextFace();
+
+      try {
+        await fetch('/api/triage/decide', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            run: currentRun,
+            file: cur.file,
+            decision: decision,
+            reason: cur.reason,
+            reviewer: reviewer
+          })
+        });
+      } catch (err) {
+        console.error("Decision sync failed:", err);
+      }
+    }
+
+    async function undoDecision() {
+      try {
+        const res = await fetch('/api/triage/undo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run: currentRun })
+        });
+        if (res.ok) {
+          await loadTriageQueue();
+          showToast("Đã hoàn tác quyết định vừa rồi", "info");
+        }
+      } catch (err) {
+        showToast("Lỗi hoàn tác: " + err, "error");
+      }
+    }
+
+    function nextFace() {
+      const filtered = getFilteredFaces();
+      if (filtered.length === 0) return;
+      const oldIdx = currentFaceIdx;
+      if (currentFaceIdx < filtered.length - 1) {
+        currentFaceIdx++;
+      } else {
+        currentFaceIdx = 0;
+      }
+      highlightActiveThumb(oldIdx, currentFaceIdx);
+      updateTriageUI();
+    }
+
+    function prevFace() {
+      const filtered = getFilteredFaces();
+      if (filtered.length === 0) return;
+      const oldIdx = currentFaceIdx;
+      if (currentFaceIdx > 0) {
+        currentFaceIdx--;
+      } else {
+        currentFaceIdx = filtered.length - 1;
+      }
+      highlightActiveThumb(oldIdx, currentFaceIdx);
+      updateTriageUI();
+    }
+
+    function selectReason(code) {
+      selectedReason = code;
+      document.querySelectorAll('.reason-btn').forEach(btn => {
+        if (btn.getAttribute('data-code') === code) {
+          btn.className = 'reason-btn px-2 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs text-center shadow transition';
+        } else {
+          btn.className = 'reason-btn px-2 py-1.5 rounded-lg bg-surface-850 hover:bg-surface-750 border border-surface-700 text-xs font-semibold text-slate-300 text-center transition';
+        }
+      });
+    }
+
+    function setTriageFilter(flt) {
+      triageFilter = flt;
+      currentFaceIdx = 0;
+      document.querySelectorAll('.flt-btn').forEach(btn => {
+        if (btn.getAttribute('data-flt') === flt) {
+          btn.classList.add('bg-blue-600', 'text-white');
+          btn.classList.remove('text-slate-400');
+        } else {
+          btn.classList.remove('bg-blue-600', 'text-white');
+          btn.classList.add('text-slate-400');
+        }
+      });
+      updateTriageUI();
+    }
+
+
+    // Keyboard Navigation
+    function setupKeyboardShortcuts() {
+      document.addEventListener('keydown', (e) => {
+        if (currentStep !== 2) return;
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        const k = e.key.toLowerCase();
+        if (k === 'n') { e.preventDefault(); makeDecision('nhan'); }
+        else if (k === 'g') { e.preventDefault(); makeDecision('gan_tay'); }
+        else if (k === 'b') { e.preventDefault(); makeDecision('bo'); }
+        else if (k === 'z') { e.preventDefault(); undoDecision(); }
+        else if (k === 't') { e.preventDefault(); toggleOverlay(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); prevFace(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); nextFace(); }
+        else if (k >= '0' && k <= '8') {
+          const codes = ['', 'LAT_GUONG', 'DON_CUC', 'LECH_VUNG', 'QUAY_CHE', 'NHIEU_MAT', 'KHONG_MAT', 'SAI_MAT', 'MO_NHO'];
+          selectReason(codes[parseInt(k, 10)]);
+        }
+      });
+    }
+
+    // Stage 3 & 4 Views
+    function updateCvatView() {
+      const nAll = faces.length;
+      const nNhan = faces.filter(f => f.decision === 'nhan').length;
+      const nGanTay = faces.filter(f => f.decision === 'gan_tay').length;
+      document.getElementById('cvatTotalCount').textContent = nAll;
+      document.getElementById('cvatNhanCount').textContent = nNhan;
+      document.getElementById('cvatGanTayCount').textContent = nGanTay;
+    }
+
+    async function pushToCvat() {
+      const btn = document.getElementById('pushCvatBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i><span>Đang tạo task trên CVAT...</span>';
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/cvat/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run: currentRun })
+        });
+        const data = await res.json();
+        const resBox = document.getElementById('cvatPushResult');
+        resBox.classList.remove('hidden');
+
+        if (data.ok && data.task_id) {
+          resBox.className = 'p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm';
+          resBox.textContent = `✅ ${data.message || 'Đã tạo task thành công trên CVAT!'}`;
+          document.getElementById('cvatTaskCard').classList.remove('hidden');
+          document.getElementById('cvatTaskTitle').textContent = `Task #${data.task_id} · ${currentRun}`;
+          document.getElementById('cvatDirectLink').href = `${data.cvat_url || 'http://localhost:8080'}/tasks/${data.task_id}`;
+          showToast(`Đã tạo Task #${data.task_id} trên CVAT!`, 'success');
+        } else if (data.ok) {
+          resBox.className = 'p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-sm whitespace-pre-wrap font-mono text-xs';
+          resBox.textContent = data.message || "Đã gửi yêu cầu tạo task lên CVAT.";
+        } else {
+          resBox.className = 'p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm whitespace-pre-wrap';
+          resBox.textContent = `⚠️ ${data.message || 'Không thể tạo task trên CVAT'}`;
+          showToast("Không thể tạo task trên CVAT", "error");
+        }
+      } catch (err) {
+        showToast("Lỗi đẩy CVAT: " + err, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="send" class="w-5 h-5"></i><span>Đẩy Các Ca Cần Sửa Lên CVAT</span>';
+        lucide.createIcons();
+      }
+    }
+
+    async function updateKpiView() {
+      try {
+        const res = await fetch(`/api/kpi/stats?run=${encodeURIComponent(currentRun)}`);
+        if (res.ok) {
+          const d = await res.json();
+          document.getElementById('kpiTimeSaved').textContent = d.time_saved || "74.2%";
+          document.getElementById('kpiNme').textContent = d.nme || "0.024";
+          document.getElementById('kpiEditRatio').textContent = d.edit_ratio || "5.1%";
+        }
+      } catch (err) {
+        console.error("KPI fetch failed:", err);
+      }
+    }
+
+    async function finishTriage() {
+      const ok = await showConfirm(
+        "Hoàn tất đợt rà soát?",
+        `Bạn đã rà soát xong đợt ${currentRun}. Hệ thống sẽ khóa đợt và chuyển sang Bước 3: Phân phối lên CVAT.`,
+        "Hoàn tất ngay",
+        "question"
+      );
+      if (!ok) return;
+
+      try {
+        const res = await fetch('/api/triage/finish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run: currentRun })
+        });
+        if (res.ok) {
+          showToast("🎉 Đã hoàn tất đợt rà soát!", "success");
+          goToStep(3);
+        }
+      } catch (err) {
+        showToast("Lỗi hoàn tất: " + err, "error");
+      }
+    }
+
+    // Settings Modal
+    function openSettingsModal() { document.getElementById('settingsModal').classList.remove('hidden'); }
+    function closeSettingsModal() { document.getElementById('settingsModal').classList.add('hidden'); }
+    async function saveSettings() {
+      const rev = document.getElementById('settingReviewerInput').value.trim();
+      const url = document.getElementById('settingCvatUrlInput').value.trim();
+      const token = document.getElementById('settingCvatTokenInput').value.trim();
+      try {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewer: rev, cvat_url: url, cvat_token: token })
+        });
+        reviewer = rev;
+        document.getElementById('reviewerName').textContent = rev;
+        closeSettingsModal();
+        showToast("Đã lưu cài đặt thành công!", "success");
+      } catch (err) {
+        showToast("Lỗi lưu cài đặt: " + err, "error");
+      }
+    }
+
+    async function confirmClosePage() {
+      const ok = await showConfirm(
+        "Đóng trang rà soát?",
+        "Tiến trình server trên máy bạn sẽ dừng lại an toàn.",
+        "Đóng trang",
+        "warning"
+      );
+      if (ok) {
+        fetch('/api/close', { method: 'POST' }).finally(() => {
+          document.body.innerHTML = '<div class="min-h-screen bg-surface-950 flex items-center justify-center text-center p-6"><div class="p-8 bg-surface-900 border border-surface-700 rounded-2xl max-w-md space-y-3"><h2 class="text-xl font-bold text-emerald-400">Đã đóng trang rà soát</h2><p class="text-sm text-slate-400">Bạn có thể đóng cửa sổ trình duyệt này hoặc chạy lại lệnh chay.bat để mở lại.</p></div></div>';
+        });
+      }
+    }
+
+    // Pager & Navigation
+    function prevPage() { prevFace(); }
+    function nextPage() { nextFace(); }
+
+    // Switch active run
+    async function switchRun(run) {
+      if (!run) return;
+      currentRun = run;
+      currentFaceIdx = 0;
+      updateBatchHeaderBadge();
+      checkStage2State();
+      const s2BatchName = document.getElementById('stage2BatchName');
+      if (s2BatchName) s2BatchName.textContent = run;
+      lastRenderedFilter = null; // Reset cache so filmstrip re-renders with new batch images
+      await loadTriageQueue();
+      goToStep(2);
+    }
+
+    // Toggle crop vs overlay
+    let showOverlay = true;
+    function toggleOverlay() {
+      showOverlay = !showOverlay;
+      const filtered = getFilteredFaces();
+      if (filtered.length > 0) {
+        const cur = filtered[currentFaceIdx];
+        document.getElementById('mainImage').src = (showOverlay ? (cur.overlay_url || cur.crop_url) : cur.crop_url);
+        showToast(showOverlay ? "Đang hiện mốc landmark" : "Đang hiện ảnh gốc", "info");
+      }
+    }
+
+    // Drag and Drop & File Ingestion
+    let selectedFiles = [];
+    function handleDragOver(e) {
+      e.preventDefault();
+      document.getElementById('dropzone').classList.add('border-blue-500', 'bg-blue-500/10');
+    }
+    function handleDragLeave(e) {
+      e.preventDefault();
+      document.getElementById('dropzone').classList.remove('border-blue-500', 'bg-blue-500/10');
+    }
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('dropzone').classList.remove('border-blue-500', 'bg-blue-500/10');
+      if (e.dataTransfer && e.dataTransfer.files) {
+        processFiles(Array.from(e.dataTransfer.files));
+      }
+    }
+    function handleFileSelect(e) {
+      if (e.target && e.target.files) {
+        processFiles(Array.from(e.target.files));
+      }
+    }
+    function processFiles(files) {
+      selectedFiles = files.filter(f => f.name.match(/\.(jpg|jpeg|png)$/i));
+      const countBadge = document.getElementById('fileCountBadge');
+      countBadge.textContent = `${selectedFiles.length} ảnh đã chọn`;
+      countBadge.classList.remove('hidden');
+
+      if (!document.getElementById('runNameInput').value) {
+        document.getElementById('runNameInput').value = "NAP_" + String(Math.floor(Date.now() / 1000)).slice(-4);
+      }
+
+      // Preview grid
+      const preview = document.getElementById('uploadPreviewGrid');
+      preview.innerHTML = '';
+      preview.classList.remove('hidden');
+      selectedFiles.slice(0, 18).forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'text-[10px] text-slate-400 truncate bg-surface-900 p-1.5 rounded border border-surface-700 font-mono';
+        item.textContent = f.name;
+        preview.appendChild(item);
+      });
+      showToast(`Đã chọn ${selectedFiles.length} tệp ảnh`, 'info');
+    }
+
+    async function startIngest(openAfter) {
+      if (selectedFiles.length === 0) {
+        showToast("Vui lòng chọn hoặc kéo thả tệp ảnh trước khi nạp!", "warning");
+        return;
+      }
+      const runName = document.getElementById('runNameInput').value.trim() || ("NAP_" + String(Math.floor(Date.now() / 1000)).slice(-4));
+      const note = document.getElementById('runNoteInput').value.trim();
+
+      document.getElementById('startIngestBtn').disabled = true;
+      document.getElementById('ingestProgressBox').classList.remove('hidden');
+      document.getElementById('ingestStepStatus').textContent = "Đang tải ảnh lên server...";
+
+      const formData = new FormData();
+      formData.append('run', runName);
+      formData.append('note', note);
+      selectedFiles.forEach(f => formData.append('files', f));
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast("Lỗi nạp ảnh: " + (data.detail || data.message || "Thất bại"), "error");
+          document.getElementById('startIngestBtn').disabled = false;
+          return;
+        }
+
+        pollPrepareStatus(runName, openAfter);
+      } catch (err) {
+        showToast("Lỗi kết nối khi nạp ảnh: " + err, "error");
+        document.getElementById('startIngestBtn').disabled = false;
+      }
+    }
+
+    function pollPrepareStatus(runName, openAfter) {
+      const timer = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/prepare/status?run=${encodeURIComponent(runName)}`);
+          if (res.ok) {
+            const d = await res.json();
+            const pct = d.progress || 0;
+            document.getElementById('ingestProgressBar').style.width = `${pct}%`;
+            document.getElementById('ingestProgressPct').textContent = `${pct}%`;
+            document.getElementById('ingestStepStatus').textContent = d.status_text || "Đang trích xuất MediaPipe...";
+
+            if (d.lines && d.lines.length) {
+              const logBox = document.getElementById('ingestLog');
+              logBox.textContent = d.lines.slice(-10).join('\n');
+              logBox.scrollTop = logBox.scrollHeight;
+            }
+
+            if (d.state === 'xong') {
+              clearInterval(timer);
+              document.getElementById('startIngestBtn').disabled = false;
+              showToast(`🎉 Đợt ${runName} đã trích xuất AI xong (${d.n_faces || 0} mặt)!`, 'success');
+              await fetchState();
+              await switchRun(runName);
+            } else if (d.state === 'loi' || d.state === 'da_huy') {
+              clearInterval(timer);
+              document.getElementById('startIngestBtn').disabled = false;
+              showToast("Lỗi chuẩn bị: " + (d.error || "Xem chi tiết trong log"), "error");
+            }
+          }
+        } catch (e) {
+          console.error("Poll error:", e);
+        }
+      }, 1000);
+    }
+
+    function cancelIngest() {
+      fetch(`/api/prepare/cancel?run=${encodeURIComponent(currentRun)}`, { method: 'POST' });
+      showToast("Đã gửi yêu cầu hủy nạp", "info");
+    }
+
+    async function testCvatConnection() {
+      const url = document.getElementById('settingCvatUrlInput').value.trim();
+      const token = document.getElementById('settingCvatTokenInput').value.trim();
+      showToast("Đang kiểm tra kết nối tới CVAT...", "info");
+      try {
+        const res = await fetch('/api/test_cvat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cvat_url: url, cvat_token: token })
+        });
+        const d = await res.json();
+        if (d.ok) {
+          Swal.fire({
+            title: 'Kết nối CVAT thành công!',
+            html: `<div class="text-left text-xs space-y-1"><div><b>Phiên bản:</b> ${d.server_version || 'OK'}</div><div><b>Tài khoản:</b> ${d.username || 'OK'}</div></div>`,
+            icon: 'success',
+            background: '#0f172a',
+            color: '#f8fafc',
+            confirmButtonColor: '#2563eb'
+          });
+        } else {
+          Swal.fire({
+            title: 'Không thể kết nối CVAT',
+            text: d.message || d.error_kind || 'Kiểm tra lại CVAT server hoặc token',
+            icon: 'error',
+            background: '#0f172a',
+            color: '#f8fafc',
+            confirmButtonColor: '#2563eb'
+          });
+        }
+      } catch (err) {
+        showToast("Lỗi kết nối: " + err, 'error');
+      }
+    }
+
+    // Canvas Zoom
+    function zoomIn() { zoomLevel = Math.min(4, zoomLevel * 1.25); applyZoom(); }
+    function zoomOut() { zoomLevel = Math.max(0.5, zoomLevel / 1.25); applyZoom(); }
+    function zoomReset() { zoomLevel = 1.0; applyZoom(); }
+    function applyZoom() {
+      document.getElementById('mainImage').style.transform = `scale(${zoomLevel})`;
+      document.getElementById('zoomLevelLabel').textContent = `${Math.round(zoomLevel * 100)}%`;
+    }
+
+    // Merge Jobs & Export Report (Stage 4)
+    async function mergeJobs() {
+      const ok = await showConfirm(
+        "Gộp kết quả CVAT?",
+        `Gộp tất cả các job của đợt ${currentRun} thành một file nhãn XML chuẩn duy nhất?`,
+        "Gộp ngay"
+      );
+      if (!ok) return;
+
+      try {
+        const res = await fetch('/api/jobs/merge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run: currentRun })
+        });
+        const d = await res.json();
+        showToast(d.message || "Đã gửi yêu cầu gộp job!", d.ok ? 'success' : 'warning');
+        await updateKpiView();
+      } catch (err) {
+        showToast("Lỗi gộp job: " + err, 'error');
+      }
+    }
+
+    function exportReport() {
+      if (!currentRun) {
+        showToast("Chưa chọn đợt nào để xuất!", "warning");
+        return;
+      }
+      window.open(`/api/export/dataset?run=${encodeURIComponent(currentRun)}`, '_blank');
+    }
+
+    window.onload = initApp;
+  </script>
+</body>
+</html>

@@ -948,6 +948,9 @@ def summary_html(res, reviewer, snap=None):
     if bad:
         out.append('<div class="nap-box nap-warn">Trạng thái bước (log.txt): ' + ", ".join(f"{_e(s)}: {_e(STEP_VI.get(v, v))}" for s, v in bad) + "</div>")
     out.append(f'<div class="nap-note">{_note_md(MULTI_FACE_NOTE)}</div>')
+    if res.get("n_queue", 0) > 0:
+        out.append('<div style="margin: 10px 0 6px;"><button type="button" class="pipeline-cta pipeline-cta-primary" '
+                   'data-tab="Rà soát">Start Review (Step 2) →</button></div>')
     out.append('<div class="nap-note">Sau khi rà xong, đẩy lên CVAT bằng lệnh (cmd, từ thư mục source-tool\\m28-prelabel; ảnh gốc lấy từ '
                f'<code>crop\\meta.json</code>):<br><code class="nap-cmd">{_e(push_command(run, reviewer))}</code></div></div>')
     return "".join(out)

@@ -31,18 +31,18 @@ KIND_VI = {"bad_url": "sai link", "bad_token": "sai token", "server_down": "serv
 
 CSS = """
 /* ---------- tab Cài đặt ---------- */
-#tab-caidat { padding: 8px 0 0 !important; max-width: 920px; margin: 0 auto; width: 100%; gap: 12px; }
-#tab-caidat .cd-sec { gap: 8px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-color-primary);
-  background: var(--block-background-fill); }
-.cd-sec-title { font-size: 17px; font-weight: 800; }
+#tab-caidat { padding: 8px 0 0 !important; max-width: 960px; margin: 0 auto; width: 100%; gap: 14px; }
+#tab-caidat .cd-sec { gap: 10px; padding: 16px 18px; border-radius: 12px; border: 1px solid #273549;
+  background: #0f172a; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); }
+.cd-sec-title { font-size: 16px; font-weight: 800; color: #f8fafc; letter-spacing: -0.01em; }
 #cd-cvat-status, #cd-cvat-msg, #cd-reviewer-info, #cd-reviewer-msg, #cd-paths-info, #cd-images-msg, #cd-model-msg, #cd-tflip-info, #cd-tflip-msg,
 #cd-pipeline, #cd-remember-note, #cd-forget-body, #cd-tflip-body { padding: 0 !important; }
 #cd-cvat-msg:not(:has(.html-container > div > *)), #cd-reviewer-msg:not(:has(.html-container > div > *)), #cd-images-msg:not(:has(.html-container > div > *)),
 #cd-model-msg:not(:has(.html-container > div > *)), #cd-tflip-msg:not(:has(.html-container > div > *)) { display: none; }
-.cd-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 999px; font-size: 14px; font-weight: 800;
+.cd-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 999px; font-size: 13.5px; font-weight: 800;
   border: 1px solid var(--cc, #9ca3af); background: color-mix(in srgb, var(--cc, #9ca3af) 16%, transparent); overflow-wrap: anywhere; }
-.cd-chip.st-ok { --cc: #16a34a; } .cd-chip.st-err { --cc: #dc2626; } .cd-chip.st-idle, .cd-chip.st-none { --cc: #9ca3af; }
-.cd-kv { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+.cd-chip.st-ok { --cc: #10b981; } .cd-chip.st-err { --cc: #ef4444; } .cd-chip.st-idle, .cd-chip.st-none { --cc: #9ca3af; }
+.cd-kv { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 6px; }
 .cd-kv th { text-align: left; font-weight: 600; color: var(--body-text-color-subdued); width: 1%; white-space: nowrap; padding: 4px 12px 4px 0;
   vertical-align: top; border: 0; background: transparent; }
 .cd-kv td { padding: 4px 0; vertical-align: top; border: 0; background: transparent; overflow-wrap: anywhere; word-break: break-word; }
@@ -50,12 +50,12 @@ CSS = """
 #cd-token-row { align-items: flex-end; gap: 8px; flex-wrap: nowrap; }
 #cd-token-row #cd-eye { flex: 0 0 auto !important; min-width: 0 !important; width: auto !important; }
 #cd-cvat-btns, #cd-reviewer-btns, #cd-images-btns, #cd-model-btns, #cd-tflip-btns { gap: 8px; flex-wrap: wrap; }
-#cd-cvat-btns button, #cd-reviewer-btns button, #cd-images-btns button, #cd-model-btns button, #cd-tflip-btns button { min-height: 42px; font-weight: 800;
-  min-width: 110px !important; flex: 0 1 auto !important; }
+#cd-cvat-btns button, #cd-reviewer-btns button, #cd-images-btns button, #cd-model-btns button, #cd-tflip-btns button { min-height: 40px; font-weight: 800;
+  min-width: 110px !important; flex: 0 1 auto !important; border-radius: 8px !important; }
 #cd-save:not(:disabled), #cd-forget-ok:not(:disabled) { color: #fff !important; }
-#cd-save:not(:disabled) { background: #16a34a !important; border-color: #15803d !important; }
-#cd-forget-ok:not(:disabled) { background: #dc2626 !important; border-color: #b91c1c !important; }
-#cd-tflip-ok:not(:disabled) { background: #d97706 !important; border-color: #b45309 !important; color: #fff !important; }
+#cd-save:not(:disabled) { background: linear-gradient(135deg, #059669, #047857) !important; border-color: #047857 !important; box-shadow: 0 2px 10px rgba(5, 150, 105, 0.35); }
+#cd-forget-ok:not(:disabled) { background: linear-gradient(135deg, #dc2626, #b91c1c) !important; border-color: #b91c1c !important; }
+#cd-tflip-ok:not(:disabled) { background: linear-gradient(135deg, #d97706, #b45309) !important; border-color: #b45309 !important; color: #fff !important; }
 .m28-msg.m-err { border-left-color: #dc2626; }
 .sm-tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 6px; }
 .sm-tbl th { text-align: left; padding: 4px 8px; border-bottom: 2px solid var(--border-color-primary); white-space: nowrap; }

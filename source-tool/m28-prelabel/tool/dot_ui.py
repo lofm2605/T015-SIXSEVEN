@@ -72,31 +72,35 @@ CSS = """
 @media (max-width: 600px) { .m28-modal-btns button { flex: 1 1 100% !important; } }
 /* ---------- tab Các đợt ---------- */
 #tab-dot { padding: 8px 0 0 !important; max-width: 1240px; margin: 0 auto; width: 100%; gap: 10px; }
-.dot-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-.dot-card { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; background: var(--block-background-fill);
-  border: 1px solid var(--border-color-primary); }
-.dot-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.dot-name { all: unset; cursor: pointer; font-size: 20px; font-weight: 800; color: var(--body-text-color); text-decoration: underline;
+.dot-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.dot-card { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 14px; background: var(--block-background-fill);
+  border: 1px solid var(--border-color-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.03); transition: transform .15s ease, box-shadow .15s ease; }
+.dot-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+.dot-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.dot-name { all: unset; cursor: pointer; font-size: 21px; font-weight: 800; color: var(--body-text-color); text-decoration: underline;
   text-decoration-color: var(--border-color-primary); text-underline-offset: 3px; }
-.dot-name:hover, .dot-name:focus-visible { text-decoration-color: #2563eb; outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 4px; }
-.dot-state { margin-left: auto; font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--cc, #9ca3af);
-  background: color-mix(in srgb, var(--cc, #9ca3af) 17%, transparent); overflow-wrap: anywhere; }
+.dot-name:hover, .dot-name:focus-visible { text-decoration-color: #2563eb; color: #2563eb; outline: 2px solid #2563eb; outline-offset: 2px; border-radius: 4px; }
+.dot-state { margin-left: auto; font-size: 13px; font-weight: 700; padding: 3px 12px; border-radius: 999px; border: 1px solid var(--cc, #9ca3af);
+  background: color-mix(in srgb, var(--cc, #9ca3af) 16%, transparent); overflow-wrap: anywhere; }
 .dot-state.st-ok { --cc: #16a34a; } .dot-state.st-warn { --cc: #d97706; } .dot-state.st-info { --cc: #2563eb; }
-.dot-active { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #2563eb; color: #fff; }
+.dot-active { font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 999px; background: #2563eb; color: #fff; }
 .dot-meta, .dot-extra, .dot-muted { font-size: 13px; color: var(--body-text-color-subdued); }
-.dot-note { font-size: 14px; padding: 6px 8px; border-left: 4px solid #9ca3af; background: var(--background-fill-secondary); overflow-wrap: anywhere;
-  white-space: pre-wrap; }
+.dot-note { font-size: 13.5px; padding: 8px 12px; border-left: 4px solid #2563eb; background: var(--background-fill-secondary); overflow-wrap: anywhere;
+  white-space: pre-wrap; border-radius: 0 8px 8px 0; }
 .dot-counts { display: flex; flex-wrap: wrap; gap: 6px; }
-.dot-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.dot-btn { cursor: pointer; padding: 7px 14px; min-height: 36px; font-size: 14px; font-weight: 700; border-radius: 8px; color: var(--body-text-color);
-  background: var(--background-fill-secondary); border: 1px solid var(--border-color-primary); }
-.dot-btn:hover:not(:disabled) { filter: brightness(.95); }
+.dot-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.dot-btn { cursor: pointer; padding: 8px 16px; min-height: 38px; font-size: 14px; font-weight: 700; border-radius: 9px; color: var(--body-text-color);
+  background: var(--background-fill-secondary); border: 1px solid var(--border-color-primary); transition: all .15s ease; }
+.dot-btn:hover:not(:disabled) { filter: brightness(1.05); transform: translateY(-1px); }
 .dot-btn:disabled { opacity: .45; cursor: not-allowed; }
-.dot-btn-ra:not(:disabled) { background: #16a34a; border-color: #15803d; color: #fff; }
-.dot-btn-push:not(:disabled) { background: #2563eb; border-color: #1d4ed8; color: #fff; }
-.dot-btn-finish:not(:disabled) { background: #0f766e; border-color: #115e59; color: #fff; }
-.dot-gop { font-size: 13px; padding: 4px 8px; border-radius: 8px; border: 1px solid #0f766e; overflow-wrap: anywhere;
-  background: color-mix(in srgb, #0f766e 10%, transparent); }
+.dot-btn-ra:not(:disabled) { background: linear-gradient(135deg, #16a34a, #15803d) !important; border-color: #15803d !important; color: #fff !important;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.35) !important; }
+.dot-btn-push:not(:disabled) { background: linear-gradient(135deg, #2563eb, #1d4ed8) !important; border-color: #1d4ed8 !important; color: #fff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35) !important; }
+.dot-btn-finish:not(:disabled) { background: linear-gradient(135deg, #0f766e, #115e59) !important; border-color: #115e59 !important; color: #fff !important;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.35) !important; }
+.dot-gop { font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 1px solid #0f766e; overflow-wrap: anywhere;
+  background: color-mix(in srgb, #0f766e 12%, transparent); }
 .gop-done .dh-ok { margin-top: 8px; }
 .gop-folders { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
 .gop-warn { color: #d97706; }
@@ -131,6 +135,17 @@ CSS = """
 #dot-gop-cancel { max-width: 160px; min-height: 40px; font-weight: 800; }
 #dot-job:not(:has(.html-container > div > *)), #dot-msg:not(:has(.html-container > div > *)), #push-msg:not(:has(.html-container > div > *)), #push-prog:not(:has(.html-container > div > *)),
 #push-result:not(:has(.html-container > div > *)), #push-panel:not(:has(.html-container > div > *)) { display: none; }
+.dot-track { display: flex; align-items: center; gap: 4px; font-size: 11.5px; margin: 4px 0 2px; flex-wrap: wrap; }
+.dot-step { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 999px; font-weight: 700; }
+.dot-step.done { background: color-mix(in srgb, #16a34a 20%, transparent); color: #16a34a; border: 1px solid #16a34a; }
+.dot-step.active { background: color-mix(in srgb, #2563eb 20%, transparent); color: #2563eb; border: 1px solid #2563eb; font-weight: 800; }
+.dot-step.pending { background: var(--background-fill-secondary); color: var(--body-text-color-subdued); border: 1px solid var(--border-color-primary); opacity: 0.7; }
+.dot-arr { color: var(--body-text-color-subdued); font-size: 10px; }
+.pipeline-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 16px; border-radius: 8px;
+  font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none !important; border: 1px solid var(--border-color-primary);
+  background: var(--button-secondary-background-fill); color: var(--body-text-color); transition: all .15s ease; }
+.pipeline-cta:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.pipeline-cta-primary { background: #2563eb !important; border-color: #1d4ed8 !important; color: #fff !important; }
 @media (max-width: 600px) { .dot-cards { grid-template-columns: 1fr; } .dot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dot-state { margin-left: 0; } }
 """
@@ -145,7 +160,18 @@ JS_BODY = r"""
       el.dispatchEvent(new Event('input', { bubbles: true }));
     };
     document.addEventListener('click', (e) => {
-      const el = e.target && e.target.closest ? e.target.closest('#dot-root [data-act], .gop-done [data-act]') : null;
+      const tabEl = e.target && e.target.closest ? e.target.closest('[data-tab]') : null;
+      if (tabEl && !tabEl.disabled) {
+        const target = tabEl.dataset.tab;
+        const btns = Array.from(document.querySelectorAll('#tabs button, .tab-nav button, .tabs > div > button'));
+        const btn = btns.find(b => b.textContent && b.textContent.trim().startsWith(target));
+        if (btn) {
+          e.preventDefault();
+          btn.click();
+          return;
+        }
+      }
+      const el = e.target && e.target.closest ? e.target.closest('#dot-root [data-act], .gop-done [data-act], .push-done [data-act]') : null;
       if (!el || el.disabled) { return; }
       e.preventDefault();
       const d = el.dataset;
